@@ -1,107 +1,438 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<title>AI 로그 정리기</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>로그 다듬기</title>
 <style>
-:root{
-  --bg:#0f1115;
-  --card:#1a1d24;
-  --accent:#6c8cff;
-  --text:#e8eaf0;
-  --sub:#aab0c0;
-}
-body{
-  margin:0;
-  background:var(--bg);
-  color:var(--text);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-}
-.wrapper{
-  max-width:1200px;
-  margin:40px auto;
-  padding:0 20px;
-}
-h1{
-  font-weight:600;
-  margin-bottom:20px;
-}
-.card{
-  background:var(--card);
-  border-radius:14px;
-  padding:20px;
-  box-shadow:0 8px 30px rgba(0,0,0,0.3);
-}
-.controls{
-  display:flex;
-  flex-wrap:wrap;
-  gap:15px;
-  margin-bottom:20px;
-}
-label{
-  font-size:14px;
-  color:var(--sub);
-}
-select,input[type="checkbox"]{
-  margin-right:6px;
-}
-textarea{
-  width:100%;
-  height:400px;
-  background:#111318;
-  border:1px solid #2a2f3a;
-  border-radius:10px;
-  padding:12px;
-  color:var(--text);
-  font-size:14px;
-  resize:none;
-}
-.grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:20px;
-}
-button{
-  background:var(--accent);
-  color:white;
-  border:none;
-  padding:8px 14px;
-  border-radius:8px;
-  cursor:pointer;
-  font-size:14px;
-}
-button:hover{
-  opacity:0.9;
-}
-.footer{
-  margin-top:15px;
-  text-align:right;
-}
-@media(max-width:900px){
-  .grid{
-    grid-template-columns:1fr;
+  :root{
+    --bg: #fbfbf9;
+    --paper: #ffffff;
+    --ink: #17181c;
+    --sub: #5a5f6b;
+    --line: #e7e7e2;
+    --shadow: 0 18px 45px rgba(10,12,18,.08);
+    --accent: #3b5bfd;
+    --accent2:#ff6b6b;
+    --radius: 18px;
   }
-}
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background: radial-gradient(900px 450px at 20% 0%, rgba(59,91,253,.08), transparent 60%),
+                radial-gradient(900px 450px at 80% 0%, rgba(255,107,107,.07), transparent 55%),
+                var(--bg);
+    color:var(--ink);
+    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", Arial, sans-serif;
+    letter-spacing: -0.2px;
+  }
+  .wrap{
+    max-width: 1200px;
+    margin: 34px auto 60px;
+    padding: 0 18px;
+  }
+  .header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    gap:12px;
+    margin-bottom: 18px;
+  }
+  .title{
+    display:flex; align-items:center; gap:10px;
+  }
+  .badge{
+    width: 38px; height: 38px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(59,91,253,.16), rgba(255,107,107,.14));
+    display:grid; place-items:center;
+    border: 1px solid rgba(59,91,253,.18);
+  }
+  h1{
+    margin:0;
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .hint{
+    margin-top: 4px;
+    color: var(--sub);
+    font-size: 13px;
+  }
+  .card{
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow:hidden;
+  }
+  .toolbar{
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+    display:flex;
+    flex-wrap:wrap;
+    gap: 10px 14px;
+    align-items:center;
+    justify-content: space-between;
+  }
+  .left, .right{
+    display:flex;
+    flex-wrap:wrap;
+    gap: 10px 14px;
+    align-items:center;
+  }
+  .control{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    color: var(--sub);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .control input[type="checkbox"]{
+    width: 16px; height: 16px;
+    accent-color: var(--accent);
+  }
+  select{
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 12px;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--ink);
+    outline: none;
+  }
+  .btn{
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    padding: 9px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    cursor:pointer;
+    transition: transform .06s ease, box-shadow .2s ease, border-color .2s ease;
+  }
+  .btn:hover{ border-color: #d7d7d0; box-shadow: 0 8px 18px rgba(10,12,18,.06); }
+  .btn:active{ transform: translateY(1px); }
+  .btn.primary{
+    border-color: rgba(59,91,253,.25);
+    background: rgba(59,91,253,.08);
+  }
+  .btn.primary:hover{ border-color: rgba(59,91,253,.45); }
+  .btn.danger{
+    border-color: rgba(255,107,107,.30);
+    background: rgba(255,107,107,.09);
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    padding: 14px;
+  }
+  .pane{
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow:hidden;
+    background: #fff;
+  }
+  .paneHeader{
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--sub);
+    display:flex;
+    justify-content: space-between;
+    align-items:center;
+  }
+  textarea{
+    width: 100%;
+    height: 460px;
+    border: 0;
+    outline: none;
+    padding: 12px 12px 14px;
+    resize: none;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--ink);
+    background: linear-gradient(#fff, #fff) padding-box,
+                linear-gradient(180deg, rgba(59,91,253,.07), transparent 30%) border-box;
+  }
+  textarea[readonly]{
+    background: #fcfcfb;
+  }
+  .meta{
+    padding: 10px 16px 16px;
+    color: var(--sub);
+    font-size: 12px;
+    display:flex;
+    flex-wrap:wrap;
+    gap: 10px 16px;
+    justify-content: space-between;
+    align-items:center;
+  }
+  .kpi{
+    display:flex;
+    gap: 12px;
+    align-items:center;
+  }
+  .pill{
+    border: 1px solid var(--line);
+    background: #fff;
+    padding: 6px 10px;
+    border-radius: 999px;
+  }
+
+  @media (max-width: 980px){
+    .grid{ grid-template-columns: 1fr; }
+    textarea{ height: 380px; }
+  }
 </style>
 </head>
 <body>
-<div class="wrapper">
-<h1>🩸 AI 로그 정리기</h1>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="title">
+          <div class="badge">✍️</div>
+          <div>
+            <h1>로그 다듬기</h1>
+            <div class="hint">붙여넣으면 자동으로 정리해 줘요: 지문(*) 처리 · 대사 따옴표 · details 제거 · 빈 줄 정리</div>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="statusText">자동 변환: 켜짐</div>
+    </div>
 
-<div class="card">
+    <div class="card">
+      <div class="toolbar">
+        <div class="left">
+          <label class="control">
+            <input type="checkbox" id="removeDetails">
+            &lt;details&gt; 블록 제거
+          </label>
 
-<div class="controls">
-  <label><input type="checkbox" id="removeDetails"> &lt;details&gt; 제거</label>
-  <label><input type="checkbox" id="removeEmptyLines"> 문단 빈 줄 제거</label>
+          <label class="control">
+            <input type="checkbox" id="removeEmptyLines">
+            문단 사이 빈 줄 제거
+          </label>
 
-  <label>
-    따옴표:
-    <select id="quoteStyle">
-      <option value="none">넣지 않음</option>
-      <option value="straight">" "</option>
-      <option value="doubleCurly">“ ”</option>
-      <option value="singleCurly">‘ ’</option>
+          <label class="control">
+            <input type="checkbox" id="skipAlreadyQuoted" checked>
+            이미 따옴표면 유지
+          </label>
+
+          <label class="control">
+            따옴표
+            <select id="quoteStyle">
+              <option value="none">넣지 않음</option>
+              <option value="straight">" "</option>
+              <option value="doubleCurly" selected>“ ”</option>
+              <option value="singleCurly">‘ ’</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="right">
+          <button class="btn primary" id="copyBtn">결과 복사</button>
+
+          <label class="control">
+            <input type="checkbox" id="enableDownload">
+            다운로드 버튼
+          </label>
+          <button class="btn" id="downloadBtn" style="display:none;">TXT 다운로드</button>
+
+          <button class="btn danger" id="clearBtn">초기화</button>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="pane">
+          <div class="paneHeader">
+            <span>입력</span>
+            <span class="hint" id="inCount">0자</span>
+          </div>
+          <textarea id="inputText" placeholder="여기에 로그를 붙여 넣으세요."></textarea>
+        </div>
+
+        <div class="pane">
+          <div class="paneHeader">
+            <span>출력</span>
+            <span class="hint" id="outCount">0자</span>
+          </div>
+          <textarea id="outputText" placeholder="변환 결과가 여기에 표시됩니다." readonly></textarea>
+        </div>
+      </div>
+
+      <div class="meta">
+        <div class="kpi">
+          <span class="pill" id="paraInfo">문단: 0</span>
+          <span class="pill" id="detailsInfo">&lt;details&gt; 제거: 0</span>
+        </div>
+        <div class="hint">규칙: 문단 전체가 *로 감싸져 있으면 별 제거(지문) · 그 외 문단은 옵션에 따라 따옴표 처리</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  const input = $("inputText");
+  const output = $("outputText");
+
+  const removeDetails = $("removeDetails");
+  const removeEmptyLines = $("removeEmptyLines");
+  const skipAlreadyQuoted = $("skipAlreadyQuoted");
+  const quoteStyle = $("quoteStyle");
+  const enableDownload = $("enableDownload");
+  const downloadBtn = $("downloadBtn");
+
+  const inCount = $("inCount");
+  const outCount = $("outCount");
+  const paraInfo = $("paraInfo");
+  const detailsInfo = $("detailsInfo");
+
+  // 이벤트: 실시간 변환
+  const retransform = () => transformText();
+  input.addEventListener("input", retransform);
+  [removeDetails, removeEmptyLines, skipAlreadyQuoted, quoteStyle].forEach(el => el.addEventListener("change", retransform));
+
+  enableDownload.addEventListener("change", () => {
+    downloadBtn.style.display = enableDownload.checked ? "inline-block" : "none";
+  });
+
+  $("clearBtn").addEventListener("click", () => {
+    input.value = "";
+    output.value = "";
+    updateCounts(0, 0, 0, 0);
+    input.focus();
+  });
+
+  $("copyBtn").addEventListener("click", async () => {
+    try{
+      await navigator.clipboard.writeText(output.value);
+      toast("복사했어요.");
+    }catch(e){
+      // fallback
+      output.select();
+      document.execCommand("copy");
+      toast("복사했어요.");
+    }
+  });
+
+  downloadBtn.addEventListener("click", () => {
+    const content = output.value || "";
+    const blob = new Blob([content], {type: "text/plain;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "cleaned_log.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  function getQuotes(style){
+    if(style === "straight") return ['"', '"'];
+    if(style === "doubleCurly") return ['“', '”'];
+    if(style === "singleCurly") return ['‘', '’'];
+    return ["", ""];
+  }
+
+  function isAlreadyQuoted(t){
+    const pairs = [
+      ['"', '"'],
+      ['“', '”'],
+      ['‘', '’'],
+    ];
+    return pairs.some(([o,c]) => t.startsWith(o) && t.endsWith(c) && t.length >= 2);
+  }
+
+  function transformText(){
+    let text = input.value || "";
+    inCount.textContent = `${text.length}자`;
+
+    // <details> 제거 옵션
+    let removedDetailsCount = 0;
+    if(removeDetails.checked){
+      // count occurrences (roughly)
+      const matches = text.match(/<details\b[\s\S]*?<\/details>/gi);
+      removedDetailsCount = matches ? matches.length : 0;
+      text = text.replace(/<details\b[\s\S]*?<\/details>/gi, "");
+    }
+
+    // 문단 분리 (빈 줄 기준)
+    const rawParagraphs = text.split(/\n\s*\n+/);
+    const paragraphs = rawParagraphs.map(p => p.replace(/\r/g, ""));
+
+    const [openQ, closeQ] = getQuotes(quoteStyle.value);
+
+    let outParas = paragraphs.map(p => {
+      let t = p.trim();
+      if(!t) return "";
+
+      // 문단 전체가 *로 감싸진 경우: 별 제거
+      if(t.startsWith("*") && t.endsWith("*") && t.length >= 2){
+        return t.slice(1, -1).trim();
+      }
+
+      // 따옴표 안 넣기
+      if(quoteStyle.value === "none"){
+        return t;
+      }
+
+      // 이미 따옴표라면 유지 (옵션)
+      if(skipAlreadyQuoted.checked && isAlreadyQuoted(t)){
+        return t;
+      }
+
+      return openQ + t + closeQ;
+    }).filter(Boolean);
+
+    paraInfo.textContent = `문단: ${outParas.length}`;
+    detailsInfo.textContent = `<details> 제거: ${removedDetailsCount}`;
+
+    // 합치기
+    const joiner = removeEmptyLines.checked ? "\n" : "\n\n";
+    const finalText = outParas.join(joiner).trim();
+
+    output.value = finalText;
+    outCount.textContent = `${finalText.length}자`;
+  }
+
+  // 작은 토스트
+  let toastTimer = null;
+  function toast(msg){
+    let el = document.getElementById("toast");
+    if(!el){
+      el = document.createElement("div");
+      el.id = "toast";
+      el.style.position = "fixed";
+      el.style.left = "50%";
+      el.style.bottom = "24px";
+      el.style.transform = "translateX(-50%)";
+      el.style.padding = "10px 14px";
+      el.style.borderRadius = "999px";
+      el.style.background = "rgba(23,24,28,.92)";
+      el.style.color = "white";
+      el.style.fontSize = "13px";
+      el.style.boxShadow = "0 10px 30px rgba(0,0,0,.18)";
+      el.style.zIndex = "9999";
+      el.style.opacity = "0";
+      el.style.transition = "opacity .18s ease";
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.opacity = "1";
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.style.opacity = "0"; }, 1200);
+  }
+
+  // 첫 렌더
+  transformText();
+</script>
+</body>
+</html>
     </select>
   </label>
 
