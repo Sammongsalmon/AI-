@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>AI 로그 정리기</title>
+<style>
+body {
+    font-family: system-ui, sans-serif;
+    margin: 30px;
+}
+.container {
+    display: flex;
+    gap: 20px;
+}
+textarea {
+    width: 48%;
+    height: 500px;
+    padding: 10px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+.controls {
+    margin-bottom: 15px;
+}
+button {
+    padding: 6px 12px;
+    margin-right: 8px;
+}
+select {
+    padding: 4px;
+}
+</style>
+</head>
+<body>
+
+<h2>AI 채팅 로그 정리기</h2>
+
+<div class="controls">
+    <label><input type="checkbox" id="removeDetails"> &lt;details&gt; 블록 제거</label>
+    <label><input type="checkbox" id="removeEmptyLines"> 문단 사이 빈 줄 제거</label>
+    <br><br>
+    따옴표 스타일:
+    <select id="quoteStyle">
+        <option value="straight">" "</option>
+        <option value="doubleCurly">“ ”</option>
+        <option value="singleCurly">‘ ’</option>
+    </select>
+    <button onclick="transformText()">변환</button>
+    <button onclick="copyResult()">결과 복사</button>
+</div>
+
+<div class="container">
+    <textarea id="inputText" placeholder="여기에 로그를 붙여 넣으세요"></textarea>
+    <textarea id="outputText" placeholder="변환 결과" readonly></textarea>
+</div>
+
+<script>
+function transformText() {
+    let text = document.getElementById("inputText").value;
+
+    // 1. <details> 블록 제거 옵션
+    if (document.getElementById("removeDetails").checked) {
+        text = text.replace(/<details[\s\S]*?<\/details>/gi, '');
+    }
+
+    // 문단 분리 (빈 줄 기준)
+    let paragraphs = text.split(/\n\s*\n+/);
+
+    let quoteStyle = document.getElementById("quoteStyle").value;
+
+    let openQuote = '"';
+    let closeQuote = '"';
+
+    if (quoteStyle === "doubleCurly") {
+        openQuote = '“';
+        closeQuote = '”';
+    } else if (quoteStyle === "singleCurly") {
+        openQuote = '‘';
+        closeQuote = '’';
+    }
+
+    let result = paragraphs.map(p => {
+        let trimmed = p.trim();
+        if (!trimmed) return "";
+
+        // 2. *지문* 처리 (문단 전체가 별로 감싸진 경우만)
+        if (trimmed.startsWith("*") && trimmed.endsWith("*")) {
+            return trimmed.slice(1, -1).trim();
+        }
+
+        // 3. 이미 따옴표 있는 경우는 그대로 유지
+        if (
+            (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+            (trimmed.startsWith('“') && trimmed.endsWith('”')) ||
+            (trimmed.startsWith('‘') && trimmed.endsWith('’'))
+        ) {
+            return trimmed;
+        }
+
+        // 4. 대사 처리
+        return openQuote + trimmed + closeQuote;
+    });
+
+    // 5. 문단 합치기
+    let finalText;
+    if (document.getElementById("removeEmptyLines").checked) {
+        finalText = result.join("\n");
+    } else {
+        finalText = result.join("\n\n");
+    }
+
+    document.getElementById("outputText").value = finalText.trim();
+}
+
+function copyResult() {
+    let output = document.getElementById("outputText");
+    output.select();
+    document.execCommand("copy");
+    alert("복사되었습니다.");
+}
+</script>
+
+</body>
+</html>
