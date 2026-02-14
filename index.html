@@ -129,14 +129,8 @@ document.getElementById("quoteStyle").addEventListener("change", transformText);
 document.getElementById("removeDetails").addEventListener("change", transformText);
 document.getElementById("removeEmptyLines").addEventListener("change", transformText);
 
-function parseParagraphsWithStarBlocks(text){
-  // 목표:
-  // - * ... * 는 무조건 "지문 문단 1개"로 분리 (안에 줄바꿈/빈줄 있어도 OK)
-  // - *...**...* 처럼 붙어 있어도 각각 분리
-  // - *...*\n*...* 처럼 엔터 한 번만 있어도 각각 분리
-  // - *로 시작했는데 끝 * 없이 파일 끝나도 지문으로 취급 (문단 1개)
-  // - 나머지(대사/일반)는 빈 줄 기준으로 문단 분리
-
+// 핵심: *...* 블록을 "지문 문단"으로 항상 분리 + 나머지는 빈 줄 기준 문단
+function parseChunks(text){
   const s = (text || "").replace(/\r/g, "");
   const out = [];
 
@@ -145,52 +139,41 @@ function parseParagraphsWithStarBlocks(text){
 
   const flushNormal = () => {
     if (!normalBuf) return;
-    // 일반 텍스트는 "빈 줄" 기준으로 문단 분리
-    const parts = normalBuf.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
-    out.push(...parts);
+    const parts = normalBuf
+      .split(/\n\s*\n+/)
+      .map(p => p.trim())
+      .filter(Boolean);
+
+    for (const p of parts) out.push({ kind: "normal", text: p });
     normalBuf = "";
   };
 
   while (i < s.length){
-    const ch = s[i];
-
-    if (ch !== "*"){
-      normalBuf += ch;
+    if (s[i] !== "*"){
+      normalBuf += s[i];
       i++;
       continue;
     }
 
-    // 여기부터 별표 블록 시작
-    flushNormal(); // 별표 블록 앞의 일반 텍스트 문단 확정
+    // 별표 지문 시작
+    flushNormal();
+    i++; // consume starting *
 
-    i++; // 시작 '*' 소비
-    let starContent = "";
-
-    // 다음 '*'가 나올 때까지(또는 끝까지) 내용을 모은다
+    let content = "";
     while (i < s.length && s[i] !== "*"){
-      starContent += s[i];
+      content += s[i];
       i++;
     }
 
-    if (i < s.length && s[i] === "*"){
-      // 정상적으로 닫힘: 닫는 '*' 소비
-      i++;
-      out.push(starContent.trim());
-    } else {
-      // 끝 '*' 없이 파일 종료: 그래도 지문 문단으로 취급
-      out.push(starContent.trim());
-      break;
-    }
+    // 닫는 *가 있으면 소비, 없으면 파일 끝(그래도 지문)
+    if (i < s.length && s[i] === "*") i++;
 
-    // 별표 블록 직후에 붙어있는 개행/공백이 있어도
-    // "다음 별표 블록"과 섞이지 않도록,
-    // 일반 버퍼로 넣지 않고 그냥 건너뛴다(문단 경계로 취급).
+    out.push({ kind: "scene", text: content.trim() });
+
+    // 지문 뒤 공백/개행은 문단 경계로 취급 (붙은 **, 엔터 1번 등도 처리)
     while (i < s.length && (s[i] === " " || s[i] === "\t" || s[i] === "\n")){
-      // 단, 일반 텍스트가 바로 이어지는 경우를 위해
-      // 개행은 정상 흐름에서 normalBuf로 들어가도 되지만,
-      // 여기서는 문단 경계를 유지하는 게 목적이라 일단 스킵.
+      // 다음이 '*'면 바로 다음 지문으로 이어질 수 있게 끊기
       i++;
-      // 다음이 '*'면 즉시 다음 별표 블록으로 이어짐(붙거나 엔터 1번이어도 OK)
       if (i < s.length && s[i] === "*") break;
     }
   }
@@ -199,98 +182,56 @@ function parseParagraphsWithStarBlocks(text){
   return out;
 }
 
+function getQuotes(style){
+  if(style === "straight") return ['"', '"'];
+  if(style === "doubleCurly") return ['“', '”'];
+  if(style === "singleCurly") return ['‘', '’'];
+  return ["", ""];
+}
 
-  for (let i = 0; i < lines.length; i++){
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    const isBlankLine = trimmed === "";
-
-    // 별표 블록 시작 조건:
-    // - 현재 문단(buf)이 비어 있고
-    // - 줄이 '*'로 시작하면 (앞 공백 허용)
-    if (!inStarBlock && buf.length === 0 && trimmed.startsWith("*")){
-      inStarBlock = true;
-    }
-
-    if (!inStarBlock){
-      // 일반 상태: 빈 줄이면 문단 끊기
-      if (isBlankLine){
-        flush();
-        continue;
-      }
-      buf.push(line);
-    } else {
-      // 별표 블록 안: 빈 줄도 그대로 유지 (문단 끊지 않음)
-      buf.push(line);
-
-      // 별표 블록 종료 조건: 현재 줄이 '*'로 끝나면
-      if (trimmed.endsWith("*") && trimmed.length >= 2){
-        inStarBlock = false;
-      }
-    }
-  }
-
-  flush();
-  return paras;
+function isAlreadyQuoted(t){
+  const pairs = [['"', '"'], ['“','”'], ['‘','’']];
+  return pairs.some(([o,c]) => t.startsWith(o) && t.endsWith(c) && t.length >= 2);
 }
 
 function transformText(){
-  let text = input.value;
+  let text = input.value || "";
 
   if(document.getElementById("removeDetails").checked){
-
-    // 1. <details> ... </details> 블록 통째 제거
+    // 1) <details> ... </details> 통째 제거
     text = text.replace(/<details\b[\s\S]*?<\/details>/gi,"");
-
-    // 2. 단독 <details> 또는 </details> 제거
+    // 2) 단독 <details> / </details> 줄 제거
     text = text.replace(/^\s*<\/?details.*?>\s*$/gim,"");
-
-    // 3. <summary> ... </summary> 제거
+    // 3) <summary> ... </summary> 제거
     text = text.replace(/<summary.*?>.*?<\/summary>/gi,"");
   }
 
-  let paragraphs = parseParagraphsWithStarBlocks(text);
+  const chunks = parseChunks(text);
 
+  const quoteStyle = document.getElementById("quoteStyle").value;
+  const [openQ, closeQ] = getQuotes(quoteStyle);
 
-  let quoteStyle = document.getElementById("quoteStyle").value;
-  let openQuote="", closeQuote="";
-
-  if(quoteStyle==="straight"){openQuote='"';closeQuote='"';}
-  else if(quoteStyle==="doubleCurly"){openQuote='“';closeQuote='”';}
-  else if(quoteStyle==="singleCurly"){openQuote='‘';closeQuote='’';}
-
-  let result = paragraphs.map(p=>{
-    let t = p.trim();
+  const result = chunks.map(({kind, text: raw}) => {
+    const t = (raw || "").trim();
     if(!t) return "";
 
-    // *지문* 처리
-    // 지문 처리: 1) *...*  2) *로 시작했는데 끝 * 없이 끝난 경우
-if (t.startsWith("*")) {
-  // *...* 형태면 양끝 별 제거
-  if (t.endsWith("*") && t.length >= 2) return t.slice(1, -1).trim();
-  // *로 시작만 하고 끝별 없이 끝나면 앞의 *만 제거 (지문으로 취급)
-  return t.slice(1).trim();
+    // ✅ 지문은 따옴표 금지 (별표는 파서에서 이미 제거됨)
+    if(kind === "scene") return t;
+
+    // 따옴표 옵션이 none이면 그대로
+    if(quoteStyle === "none") return t;
+
+    // 이미 따옴표면 유지
+    if(isAlreadyQuoted(t)) return t;
+
+    return openQ + t + closeQ;
+  }).filter(Boolean);
+
+  const joiner = document.getElementById("removeEmptyLines").checked ? "\n" : "\n\n";
+  output.value = result.join(joiner).trim();
 }
 
-
-    if(quoteStyle==="none") return t;
-
-    if(
-      (t.startsWith('"') && t.endsWith('"')) ||
-      (t.startsWith('“') && t.endsWith('”')) ||
-      (t.startsWith('‘') && t.endsWith('’'))
-    ){
-      return t;
-    }
-
-    return openQuote + t + closeQuote;
-  });
-
-  let joiner = document.getElementById("removeEmptyLines").checked ? "\n" : "\n\n";
-  output.value = result.filter(Boolean).join(joiner).trim();
-}
-
+// 아래 3개 함수는 버튼이 있을 때만 쓰면 됨
 function copyResult(){
   navigator.clipboard.writeText(output.value);
   alert("복사되었습니다.");
@@ -310,6 +251,7 @@ function clearAll(){
   input.value="";
   output.value="";
 }
+
 </script>
 </body>
 </html>
