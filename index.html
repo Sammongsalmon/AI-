@@ -129,6 +129,57 @@ document.getElementById("quoteStyle").addEventListener("change", transformText);
 document.getElementById("removeDetails").addEventListener("change", transformText);
 document.getElementById("removeEmptyLines").addEventListener("change", transformText);
 
+function splitParagraphsKeepingStarBlocks(text){
+  // 줄 단위로 보면서:
+  // - 일반 상태: 빈 줄(공백만 있는 줄) 만나면 문단 끊기
+  // - 별표 지문 블록(* ... *): 끝 별(*) 나오기 전까지는 빈 줄이 있어도 문단을 끊지 않기
+  const lines = (text || "").replace(/\r/g, "").split("\n");
+
+  let paras = [];
+  let buf = [];
+  let inStarBlock = false;
+
+  const flush = () => {
+    const p = buf.join("\n").trimEnd();
+    if (p.trim().length > 0) paras.push(p);
+    buf = [];
+  };
+
+  for (let i = 0; i < lines.length; i++){
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    const isBlankLine = trimmed === "";
+
+    // 별표 블록 시작 조건:
+    // - 현재 문단(buf)이 비어 있고
+    // - 줄이 '*'로 시작하면 (앞 공백 허용)
+    if (!inStarBlock && buf.length === 0 && trimmed.startsWith("*")){
+      inStarBlock = true;
+    }
+
+    if (!inStarBlock){
+      // 일반 상태: 빈 줄이면 문단 끊기
+      if (isBlankLine){
+        flush();
+        continue;
+      }
+      buf.push(line);
+    } else {
+      // 별표 블록 안: 빈 줄도 그대로 유지 (문단 끊지 않음)
+      buf.push(line);
+
+      // 별표 블록 종료 조건: 현재 줄이 '*'로 끝나면
+      if (trimmed.endsWith("*") && trimmed.length >= 2){
+        inStarBlock = false;
+      }
+    }
+  }
+
+  flush();
+  return paras;
+}
+
 function transformText(){
   let text = input.value;
 
@@ -144,7 +195,8 @@ function transformText(){
     text = text.replace(/<summary.*?>.*?<\/summary>/gi,"");
   }
 
-  let paragraphs = text.split(/\n\s*\n+/);
+  let paragraphs = splitParagraphsKeepingStarBlocks(text);
+
 
   let quoteStyle = document.getElementById("quoteStyle").value;
   let openQuote="", closeQuote="";
