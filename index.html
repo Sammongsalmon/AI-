@@ -216,7 +216,14 @@ function transformText(){
     if(!t) return "";
 
     // ✅ 지문은 따옴표 금지 (별표는 파서에서 이미 제거됨)
-    if(kind === "scene") return t;
+    if(kind === "scene"){
+  if(document.getElementById("removeEmptyLines").checked){
+    // scene 내부의 빈 줄도 제거 (두 줄 이상 → 한 줄)
+    return t.replace(/\n\s*\n+/g, "\n");
+  }
+  return t;
+}
+
 
     // 따옴표 옵션이 none이면 그대로
     if(quoteStyle === "none") return t;
