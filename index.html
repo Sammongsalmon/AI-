@@ -88,6 +88,22 @@ textarea[readonly]{
 @media(max-width:900px){
   .grid{grid-template-columns:1fr;}
 }
+#toast{
+  position: fixed;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%);
+  background: rgba(20,20,25,0.9);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+  z-index: 9999;
+}
+
 </style>
 </head>
 <body>
@@ -241,8 +257,19 @@ function transformText(){
 // 아래 3개 함수는 버튼이 있을 때만 쓰면 됨
 function copyResult(){
   navigator.clipboard.writeText(output.value);
-  alert("복사되었습니다.");
+  showToast("복사되었습니다.");
 }
+
+function showToast(message){
+  const toast = document.getElementById("toast");
+  toast.textContent = message;
+  toast.style.opacity = "1";
+
+  setTimeout(() => {
+    toast.style.opacity = "0";
+  }, 1200);
+}
+
 
 function downloadTxt(){
   const blob = new Blob([output.value],{type:"text/plain;charset=utf-8"});
@@ -260,5 +287,6 @@ function clearAll(){
 }
 
 </script>
+<div id="toast">복사되었습니다.</div>
 </body>
 </html>
