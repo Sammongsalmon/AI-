@@ -114,6 +114,7 @@ textarea[readonly]{
   <div class="card">
     <div class="toolbar">
       <label><input type="checkbox" id="removeDetails"> &lt;details&gt; 제거</label>
+      <label><input type="checkbox" id="removeHTML"> HTML 태그 제거</label>
       <label><input type="checkbox" id="removeEmptyLines"> 문단 빈 줄 제거</label>
       <label>
         따옴표
@@ -145,7 +146,15 @@ document.getElementById("quoteStyle").addEventListener("change", transformText);
 document.getElementById("removeDetails").addEventListener("change", transformText);
 document.getElementById("removeEmptyLines").addEventListener("change", transformText);
 
-// 핵심: *...* 블록을 "지문 문단"으로 항상 분리 + 나머지는 빈 줄 기준 문단
+// 🔹 v2 추가: HTML 제거 체크박스가 있으면 연결
+const removeHTMLCheckbox = document.getElementById("removeHTML");
+if(removeHTMLCheckbox){
+  removeHTMLCheckbox.addEventListener("change", transformText);
+}
+
+// ------------------------------
+// 1️⃣ 별표 지문 파서
+// ------------------------------
 function parseChunks(text){
   const s = (text || "").replace(/\r/g, "");
   const out = [];
@@ -171,9 +180,8 @@ function parseChunks(text){
       continue;
     }
 
-    // 별표 지문 시작
     flushNormal();
-    i++; // consume starting *
+    i++;
 
     let content = "";
     while (i < s.length && s[i] !== "*"){
@@ -181,14 +189,11 @@ function parseChunks(text){
       i++;
     }
 
-    // 닫는 *가 있으면 소비, 없으면 파일 끝(그래도 지문)
     if (i < s.length && s[i] === "*") i++;
 
     out.push({ kind: "scene", text: content.trim() });
 
-    // 지문 뒤 공백/개행은 문단 경계로 취급 (붙은 **, 엔터 1번 등도 처리)
     while (i < s.length && (s[i] === " " || s[i] === "\t" || s[i] === "\n")){
-      // 다음이 '*'면 바로 다음 지문으로 이어질 수 있게 끊기
       i++;
       if (i < s.length && s[i] === "*") break;
     }
@@ -198,6 +203,9 @@ function parseChunks(text){
   return out;
 }
 
+// ------------------------------
+// 2️⃣ 따옴표 처리
+// ------------------------------
 function getQuotes(style){
   if(style === "straight") return ['"', '"'];
   if(style === "doubleCurly") return ['“', '”'];
@@ -210,17 +218,40 @@ function isAlreadyQuoted(t){
   return pairs.some(([o,c]) => t.startsWith(o) && t.endsWith(c) && t.length >= 2);
 }
 
+// ------------------------------
+// 3️⃣ 메인 변환 함수 (v2)
+// ------------------------------
 function transformText(){
   let text = input.value || "";
 
+  // 🔹 details 제거
   if(document.getElementById("removeDetails").checked){
-    // 1) <details> ... </details> 통째 제거
     text = text.replace(/<details\b[\s\S]*?<\/details>/gi,"");
-    // 2) 단독 <details> / </details> 줄 제거
     text = text.replace(/^\s*<\/?details.*?>\s*$/gim,"");
-    // 3) <summary> ... </summary> 제거
     text = text.replace(/<summary.*?>.*?<\/summary>/gi,"");
   }
+
+  // 🔹 v2: HTML 태그 제거 옵션
+  if(removeHTMLCheckbox && removeHTMLCheckbox.checked){
+
+    // script/style 제거
+    text = text.replace(/<script[\s\S]*?<\/script>/gi,"");
+    text = text.replace(/<style[\s\S]*?<\/style>/gi,"");
+
+    // <br> 줄바꿈 처리
+    text = text.replace(/<br\s*\/?>/gi,"\n");
+    text = text.replace(/<\/p>/gi,"\n");
+
+    // 일반 태그 제거
+    text = text.replace(/<[^>]+>/g,"");
+
+    // 깨진 <태그 형태 제거
+    text = text.replace(/<[^>\n]*/g,"");
+  }
+
+  // 🔹 v2: 마크다운 굵게 제거
+  text = text.replace(/\*\*(.*?)\*\*/g,"$1");
+  text = text.replace(/__(.*?)__/g,"$1");
 
   const chunks = parseChunks(text);
 
@@ -228,23 +259,18 @@ function transformText(){
   const [openQ, closeQ] = getQuotes(quoteStyle);
 
   const result = chunks.map(({kind, text: raw}) => {
-    const t = (raw || "").trim();
+    let t = (raw || "").trim();
     if(!t) return "";
 
-    // ✅ 지문은 따옴표 금지 (별표는 파서에서 이미 제거됨)
     if(kind === "scene"){
-  if(document.getElementById("removeEmptyLines").checked){
-    // scene 내부의 빈 줄도 제거 (두 줄 이상 → 한 줄)
-    return t.replace(/\n\s*\n+/g, "\n");
-  }
-  return t;
-}
+      if(document.getElementById("removeEmptyLines").checked){
+        return t.replace(/\n\s*\n+/g, "\n");
+      }
+      return t;
+    }
 
-
-    // 따옴표 옵션이 none이면 그대로
     if(quoteStyle === "none") return t;
 
-    // 이미 따옴표면 유지
     if(isAlreadyQuoted(t)) return t;
 
     return openQ + t + closeQ;
@@ -254,7 +280,9 @@ function transformText(){
   output.value = result.join(joiner).trim();
 }
 
-// 아래 3개 함수는 버튼이 있을 때만 쓰면 됨
+// ------------------------------
+// 4️⃣ UI 함수
+// ------------------------------
 function copyResult(){
   navigator.clipboard.writeText(output.value);
   showToast("복사되었습니다.");
@@ -264,12 +292,8 @@ function showToast(message){
   const toast = document.getElementById("toast");
   toast.textContent = message;
   toast.style.opacity = "1";
-
-  setTimeout(() => {
-    toast.style.opacity = "0";
-  }, 1200);
+  setTimeout(() => { toast.style.opacity = "0"; }, 1200);
 }
-
 
 function downloadTxt(){
   const blob = new Blob([output.value],{type:"text/plain;charset=utf-8"});
@@ -286,6 +310,7 @@ function clearAll(){
   output.value="";
 }
 
+  
 </script>
 <div id="toast">복사되었습니다.</div>
 </body>
