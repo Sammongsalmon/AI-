@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>로그 다듬기</title>
+
 <style>
 :root{
   --bg:#fbfbf9;
@@ -26,15 +27,8 @@ body{
   margin:40px auto;
   padding:0 20px;
 }
-h1{
-  margin:0 0 8px 0;
-  font-size:22px;
-}
-.sub{
-  color:var(--sub);
-  font-size:13px;
-  margin-bottom:20px;
-}
+h1{margin:0 0 8px 0;font-size:22px;}
+.sub{color:var(--sub);font-size:13px;margin-bottom:20px;}
 .card{
   background:var(--paper);
   border:1px solid var(--line);
@@ -48,11 +42,8 @@ h1{
   margin-bottom:18px;
   align-items:center;
 }
-label{
-  font-size:13px;
-  color:var(--sub);
-}
-select{
+label{font-size:13px;color:var(--sub);}
+select,input[type="text"]{
   padding:6px 8px;
   border-radius:10px;
   border:1px solid var(--line);
@@ -64,9 +55,7 @@ button{
   background:#fff;
   cursor:pointer;
 }
-button:hover{
-  background:#f4f4f2;
-}
+button:hover{background:#f4f4f2;}
 .grid{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -82,12 +71,8 @@ textarea{
   font-size:14px;
   line-height:1.7;
 }
-textarea[readonly]{
-  background:#fafaf8;
-}
-@media(max-width:900px){
-  .grid{grid-template-columns:1fr;}
-}
+textarea[readonly]{background:#fafaf8;}
+@media(max-width:900px){.grid{grid-template-columns:1fr;}}
 #toast{
   position: fixed;
   left: 50%;
@@ -103,22 +88,25 @@ textarea[readonly]{
   pointer-events: none;
   z-index: 9999;
 }
-
 </style>
 </head>
+
 <body>
 <div class="wrap">
   <h1>✍️ 로그 다듬기</h1>
-  <div class="sub">지문(*) 처리 · 대사 따옴표 · details 제거 · 빈 줄 정리</div>
+  <div class="sub">지문(*) 처리 · 대사 따옴표 · HTML 제거 · 보호 키워드 · 구분선 정리</div>
 
   <div class="card">
     <div class="toolbar">
-      <label><input type="checkbox" id="removeDetails"> 접이식 토글 제거</label>
-      <label><input type="checkbox" id="removeHTML"> HTML 태그 제거</label>
+      <label><input type="checkbox" id="removeDetails"> &lt;details&gt; 제거</label>
       <label><input type="checkbox" id="removeEmptyLines"> 문단 빈 줄 제거</label>
+      <label><input type="checkbox" id="removeHTML"> HTML 태그 제거</label>
+      <label><input type="checkbox" id="removeDecor"> 구분선/기호만 줄 제거</label>
+
       <label><input type="checkbox" id="protectEnabled"> 보호 키워드</label>
-<input id="protectToken" type="text" placeholder="예: 🧷 또는 KEEP" style="padding:8px 10px;border-radius:10px;border:1px solid var(--line);font-size:13px;min-width:180px;">
-      <label><input type="checkbox" id="removeDecor"> 구분선/기호만 있는 줄 제거</label>
+      <input id="protectToken" type="text"
+        placeholder="예: 🧷, KEEP, ⚑  (콤마로 구분)">
+
       <label>
         따옴표
         <select id="quoteStyle">
@@ -128,6 +116,7 @@ textarea[readonly]{
           <option value="singleCurly">‘ ’</option>
         </select>
       </label>
+
       <button onclick="copyResult()">결과 복사</button>
       <button onclick="downloadTxt()">TXT 다운로드</button>
       <button onclick="clearAll()">초기화</button>
@@ -140,276 +129,159 @@ textarea[readonly]{
   </div>
 </div>
 
+<div id="toast">복사되었습니다.</div>
+
 <script>
 const input = document.getElementById("inputText");
 const output = document.getElementById("outputText");
 
-const quoteStyleEl = document.getElementById("quoteStyle");
 const removeDetailsEl = document.getElementById("removeDetails");
 const removeEmptyLinesEl = document.getElementById("removeEmptyLines");
-
-// (있으면 연결)
 const removeHTMLCheckbox = document.getElementById("removeHTML");
 const removeDecorEl = document.getElementById("removeDecor");
 const protectEnabledEl = document.getElementById("protectEnabled");
 const protectTokenEl = document.getElementById("protectToken");
+const quoteStyleEl = document.getElementById("quoteStyle");
 
 input.addEventListener("input", transformText);
-quoteStyleEl.addEventListener("change", transformText);
-removeDetailsEl.addEventListener("change", transformText);
-removeEmptyLinesEl.addEventListener("change", transformText);
+document.querySelectorAll("input,select").forEach(el=>{
+  el.addEventListener("change", transformText);
+});
 
-if (removeHTMLCheckbox) removeHTMLCheckbox.addEventListener("change", transformText);
-if (removeDecorEl) removeDecorEl.addEventListener("change", transformText);
-if (protectEnabledEl) protectEnabledEl.addEventListener("change", transformText);
-if (protectTokenEl) protectTokenEl.addEventListener("input", transformText);
-
-// ------------------------------
-// 공통 유틸
-// ------------------------------
-function getProtectToken(){
-  if (!protectEnabledEl || !protectEnabledEl.checked) return "";
-  const tok = (protectTokenEl ? protectTokenEl.value : "").trim();
-  return tok;
+// ------------------ 보호 키워드 ------------------
+function getProtectTokens(){
+  if (!protectEnabledEl.checked) return [];
+  return protectTokenEl.value
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+function isProtectedText(t,tokens){
+  return tokens.some(tok => t.includes(tok));
 }
 
-function isProtectedText(t, token){
-  return !!(token && t && t.includes(token));
-}
-
-// "글자 없이 ---< 이런 것들만" 판정
-// - 마크다운 구분선(---, *** , ___ 등)
-// - 꺾쇠/점/대시 등 기호만 잔뜩인 줄
+// ------------------ 기호/구분선 판정 ------------------
 function isDecorOnlyLine(line){
-  const s = (line || "").trim();
-  if (!s) return false;
-  // 구분선류: --- *** ___ ——— 등
-  if (/^[-*_—–]{3,}$/.test(s)) return true;
-  // 기호만: <>…·•. 등 (원하면 더 늘릴 수 있음)
-  if (/^[<>\[\]\(\){}|\\/·•….,:;'"`~!@#$%^&+=-]+$/.test(s)) return true;
+  const s=line.trim();
+  if(!s) return false;
+  if(/^[-*_—–]{3,}$/.test(s)) return true;
+  if(/^[<>\[\]\(\){}|\\/·•….,:;'"`~!@#$%^&+=-]+$/.test(s)) return true;
   return false;
 }
-
-// 문단 전체가 "구분선/기호만"인지 판정 (여러 줄이어도)
 function isDecorOnlyParagraph(p){
-  const lines = (p || "").split("\n").map(l => l.trim()).filter(l => l.length > 0);
-  if (lines.length === 0) return false;
+  const lines=p.split("\n").map(l=>l.trim()).filter(Boolean);
+  if(!lines.length) return false;
   return lines.every(isDecorOnlyLine);
 }
-
-// 문단에서 decor-only 줄 제거
-function removeDecorLinesFromParagraph(p){
-  const lines = (p || "").split("\n");
-  const kept = lines.filter(l => !isDecorOnlyLine(l));
-  // 줄 제거 후 앞뒤 공백 정리
-  return kept.join("\n").replace(/[ \t]+\n/g, "\n").trim();
+function removeDecorLines(p){
+  return p.split("\n").filter(l=>!isDecorOnlyLine(l)).join("\n").trim();
 }
 
-// ------------------------------
-// 1) 별표 지문 파서 (유지)
-// ------------------------------
+// ------------------ 별표 지문 파서 ------------------
 function parseChunks(text){
-  const s = (text || "").replace(/\r/g, "");
-  const out = [];
-
-  let i = 0;
-  let normalBuf = "";
-
-  const flushNormal = () => {
-    if (!normalBuf) return;
-    const parts = normalBuf
-      .split(/\n\s*\n+/)
-      .map(p => p.trim())
-      .filter(Boolean);
-
-    for (const p of parts) out.push({ kind: "normal", text: p });
-    normalBuf = "";
+  const s=(text||"").replace(/\r/g,"");
+  const out=[];
+  let i=0,normal="";
+  const flush=()=>{
+    if(!normal) return;
+    normal.split(/\n\s*\n+/).map(p=>p.trim()).filter(Boolean)
+      .forEach(p=>out.push({kind:"normal",text:p}));
+    normal="";
   };
-
-  while (i < s.length){
-    if (s[i] !== "*"){
-      normalBuf += s[i];
-      i++;
-      continue;
-    }
-
-    flushNormal();
-    i++; // consume starting *
-
-    let content = "";
-    while (i < s.length && s[i] !== "*"){
-      content += s[i];
-      i++;
-    }
-
-    if (i < s.length && s[i] === "*") i++; // closing *
-
-    out.push({ kind: "scene", text: content.trim() });
-
-    while (i < s.length && (s[i] === " " || s[i] === "\t" || s[i] === "\n")){
-      i++;
-      if (i < s.length && s[i] === "*") break;
-    }
+  while(i<s.length){
+    if(s[i]!=="*"){normal+=s[i++];continue;}
+    flush(); i++;
+    let content="";
+    while(i<s.length&&s[i]!=="*"){content+=s[i++];}
+    if(i<s.length&&s[i]==="*") i++;
+    out.push({kind:"scene",text:content.trim()});
+    while(i<s.length&&/\s/.test(s[i])) i++;
   }
-
-  flushNormal();
+  flush();
   return out;
 }
 
-// ------------------------------
-// 2) 따옴표 처리
-// ------------------------------
-function getQuotes(style){
-  if(style === "straight") return ['"', '"'];
-  if(style === "doubleCurly") return ['“', '”'];
-  if(style === "singleCurly") return ['‘', '’'];
-  return ["", ""];
-}
-
-function isAlreadyQuoted(t){
-  const pairs = [['"', '"'], ['“','”'], ['‘','’']];
-  return pairs.some(([o,c]) => t.startsWith(o) && t.endsWith(c) && t.length >= 2);
-}
-
-// ------------------------------
-// 3) v3 핵심: details 제거 시 보호 키워드가 있으면 그 문단만 살려두기
-// ------------------------------
-function filterDetailsByProtection(text, token){
-  // removeDetails 옵션이 켜졌을 때만 호출됨.
-  // - details 블록 내에서 token 포함 문단만 추출해서 블록 자리에 남김
-  // - token이 없으면 details 통째 삭제
-  return (text || "").replace(/<details\b[\s\S]*?<\/details>/gi, (block) => {
-    if (!token) return ""; // 보호 키워드 없으면 전부 삭제
-
-    // summary 제거 후 내용만
-    let inner = block
-      .replace(/<summary[\s\S]*?<\/summary>/gi, "")
-      .replace(/<\/?details[^>]*>/gi, "");
-
-    // 일단 문단 단위로 나눔(빈 줄 기준)
-    const paras = inner.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
-
-    // token 들어간 문단만 보존
-    const kept = paras.filter(p => p.includes(token));
-
-    if (kept.length === 0) return "";
-    // 문단 경계 유지
-    return "\n\n" + kept.join("\n\n") + "\n\n";
-  })
-  // 혹시 남은 단독 태그 줄 제거
-  .replace(/^\s*<\/?details.*?>\s*$/gim, "")
-  .replace(/^\s*<summary.*?>.*?<\/summary>\s*$/gim, "");
-}
-
-// ------------------------------
-// 4) 메인 변환 (v3)
-// ------------------------------
+// ------------------ 메인 변환 ------------------
 function transformText(){
-  let text = input.value || "";
-  const token = getProtectToken();
+  let text=input.value||"";
+  const tokens=getProtectTokens();
 
-  // (선택) details 제거: 보호 키워드 적용
   if(removeDetailsEl.checked){
-    text = filterDetailsByProtection(text, token);
-    // 남은 summary 제거(혹시)
-    text = text.replace(/<summary.*?>.*?<\/summary>/gi,"");
+    text=text.replace(/<details[\s\S]*?<\/details>/gi,"");
   }
 
-  // (선택) HTML 태그 제거
-  if(removeHTMLCheckbox && removeHTMLCheckbox.checked){
-    text = text.replace(/<script[\s\S]*?<\/script>/gi,"");
-    text = text.replace(/<style[\s\S]*?<\/style>/gi,"");
-
-    text = text.replace(/<br\s*\/?>/gi,"\n");
-    text = text.replace(/<\/p>/gi,"\n");
-
-    text = text.replace(/<[^>]+>/g,"");
-    // 깨진 <... 형태 제거 (줄 끝까지 태그처럼 붙은 경우)
-    text = text.replace(/<[^>\n]*/g,"");
+  if(removeHTMLCheckbox.checked){
+    text=text.replace(/<script[\s\S]*?<\/script>/gi,"");
+    text=text.replace(/<style[\s\S]*?<\/style>/gi,"");
+    text=text.replace(/<br\s*\/?>/gi,"\n");
+    text=text.replace(/<\/p>/gi,"\n");
+    text=text.replace(/<[^>]+>/g,"");
+    text=text.replace(/<[^>\n]*/g,"");
   }
 
-  // 마크다운 굵게 제거 (**굵게**, __굵게__)
-  text = text.replace(/\*\*(.*?)\*\*/g,"$1");
-  text = text.replace(/__(.*?)__/g,"$1");
+  text=text.replace(/\*\*(.*?)\*\*/g,"$1");
 
-  const chunks = parseChunks(text);
+  const chunks=parseChunks(text);
+  const [openQ,closeQ]=(()=>{
+    if(quoteStyleEl.value==="straight")return['"','"'];
+    if(quoteStyleEl.value==="doubleCurly")return['“','”'];
+    if(quoteStyleEl.value==="singleCurly")return['‘','’'];
+    return["",""];
+  })();
 
-  const quoteStyle = quoteStyleEl.value;
-  const [openQ, closeQ] = getQuotes(quoteStyle);
-
-  const result = chunks.map(({kind, text: raw}) => {
-    let t = (raw || "").trim();
+  const result=chunks.map(({kind,text:t})=>{
+    t=t.trim();
     if(!t) return "";
 
-    const protectedHere = isProtectedText(t, token);
+    const protectedHere=isProtectedText(t,tokens);
 
-    // (선택) 구분선/기호 줄 제거
-    if (removeDecorEl && removeDecorEl.checked && !protectedHere){
-      // 문단 전체가 기호뿐이면 아예 삭제
-      if (isDecorOnlyParagraph(t)) return "";
-      // 아니라면 기호 줄만 제거
-      t = removeDecorLinesFromParagraph(t);
-      if (!t) return "";
+    if(removeDecorEl.checked&&!protectedHere){
+      if(isDecorOnlyParagraph(t)) return "";
+      t=removeDecorLines(t);
     }
 
-    // ✅ 지문(scene): 따옴표 금지
-    if(kind === "scene"){
-      if(removeEmptyLinesEl.checked){
-        // scene 내부 빈 줄도 같이 제거
-        return t.replace(/\n\s*\n+/g, "\n");
-      }
+    if(protectedHere){
+      if(removeEmptyLinesEl.checked)
+        return t.replace(/\n\s*\n+/g,"\n");
       return t;
     }
 
-    // 3) 요구사항: 글자 없이 ---< 같은 문단은 대사 처리 안 해서 따옴표 금지
-    // (removeDecor가 꺼져 있어도 따옴표는 붙지 않게)
-    if (isDecorOnlyParagraph(t)) return t; // 그대로 두거나, 위 옵션에서 지워짐
+    if(kind==="scene"){
+      if(removeEmptyLinesEl.checked)
+        return t.replace(/\n\s*\n+/g,"\n");
+      return t;
+    }
 
-    // 따옴표 옵션 none이면 그대로
-    if(quoteStyle === "none") return t;
+    if(isDecorOnlyParagraph(t)) return t;
 
-    // 이미 따옴표면 유지
-    if(isAlreadyQuoted(t)) return t;
+    if(quoteStyleEl.value==="none") return t;
 
-    return openQ + t + closeQ;
+    return openQ+t+closeQ;
   }).filter(Boolean);
 
-  const joiner = removeEmptyLinesEl.checked ? "\n" : "\n\n";
-  output.value = result.join(joiner).trim();
+  const joiner=removeEmptyLinesEl.checked?"\n":"\n\n";
+  output.value=result.join(joiner).trim();
 }
 
-// ------------------------------
-// UI 함수
-// ------------------------------
+// ------------------ UI ------------------
 function copyResult(){
   navigator.clipboard.writeText(output.value);
   showToast("복사되었습니다.");
 }
-
-function showToast(message){
-  const toast = document.getElementById("toast");
-  toast.textContent = message;
-  toast.style.opacity = "1";
-  setTimeout(() => { toast.style.opacity = "0"; }, 1200);
+function showToast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg;
+  t.style.opacity="1";
+  setTimeout(()=>t.style.opacity="0",1200);
 }
-
 function downloadTxt(){
-  const blob = new Blob([output.value],{type:"text/plain;charset=utf-8"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href=url;
-  a.download="cleaned_log.txt";
-  a.click();
+  const blob=new Blob([output.value],{type:"text/plain;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download="cleaned_log.txt";a.click();
   URL.revokeObjectURL(url);
 }
-
-function clearAll(){
-  input.value="";
-  output.value="";
-}
-
-  
+function clearAll(){input.value="";output.value="";}
 </script>
-<div id="toast">복사되었습니다.</div>
 </body>
 </html>
