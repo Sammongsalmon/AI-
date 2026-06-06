@@ -66,6 +66,8 @@ let containsDecisions = {};
 let oocDecisions = {};
 let currentDuplicateGroups = [];
 let currentContainsItems = [];
+let containsOpenGroups = new Set();
+let containsOpenTouched = false;
 let currentOocItems = [];
 let duplicatePageByGroup = {};
 let duplicateGroupPage = 0;
@@ -90,6 +92,10 @@ chatPaste.addEventListener("input", () => {
   scheduleAutosave();
 });
 chatPaste.addEventListener("paste", handleRichPaste);
+[output, chatOutput].forEach(el => {
+  if(!el) return;
+  el.addEventListener("scroll", () => scheduleAutosave(), {passive:true});
+});
 
 [
   removeDetailsEl,
@@ -148,6 +154,7 @@ duplicateReviewPanel.addEventListener("input", handleDuplicateReviewInput);
 duplicateReviewPanel.addEventListener("keydown", handleDuplicateReviewKeydown);
 containsReviewPanel.addEventListener("change", handleContainsReviewChange);
 containsReviewPanel.addEventListener("click", handleContainsReviewClick);
+containsReviewPanel.addEventListener("toggle", handleContainsReviewToggle, true);
 oocReviewPanel.addEventListener("change", handleOocReviewChange);
 oocReviewPanel.addEventListener("click", handleOocReviewClick);
 oocReviewPanel.addEventListener("input", handleOocReviewInput);
@@ -211,8 +218,10 @@ function collectWorkValues(){
     activeMode,
     classicInput: input ? input.value : "",
     classicOutput: output ? output.value : "",
+    classicOutputScroll: output ? output.scrollTop : 0,
     chatHTML: chatPaste ? chatPaste.innerHTML : "",
     chatOutputValue: chatOutput ? chatOutput.value : "",
+    chatOutputScroll: chatOutput ? chatOutput.scrollTop : 0,
     cachedChatFileName,
     options: collectPresetValues(),
     duplicateDecisions,
@@ -284,6 +293,13 @@ function updateAutosaveBadge(text){
   }
   el.textContent = text + suffix;
 }
+function restoreOutputScrollFromState(state){
+  if(!state) return;
+  requestAnimationFrame(() => {
+    if(output && Number.isFinite(Number(state.classicOutputScroll))) output.scrollTop = Number(state.classicOutputScroll) || 0;
+    if(chatOutput && Number.isFinite(Number(state.chatOutputScroll))) chatOutput.scrollTop = Number(state.chatOutputScroll) || 0;
+  });
+}
 async function restoreSavedWork(){
   isRestoringWork = true;
   let state = null;
@@ -334,6 +350,7 @@ async function restoreSavedWork(){
   if(state){
     if(output && state.classicOutput) output.value = state.classicOutput;
     if(chatOutput && state.chatOutputValue) chatOutput.value = state.chatOutputValue;
+    restoreOutputScrollFromState(state);
   }
   updateResultStats([], [], getActiveOutputValue());
   updateEpubPreview();
@@ -1491,15 +1508,17 @@ function updateContainsReviewPanel(items){
   let html = `<div class="reviewHead"><div><div class="reviewTitle">특정 글자 포함 문단 확인</div><div class="reviewMeta">키워드별로 묶었습니다. 접힌 상태에서도 남김/삭제를 고를 수 있습니다. ${totalRows}개 묶음 · ${totalHits}개 감지</div></div><div class="bulkButtons"><button type="button" class="btn subtle" data-contains-bulk="keep">모두 남김</button><button type="button" class="btn subtle warn" data-contains-bulk="delete">모두 삭제</button></div></div>`;
 
   currentContainsItems.forEach((group, gidx) => {
-    const open = gidx === 0 ? " open" : "";
-    html += `<details class="containsKeywordGroup"${open}><summary><span class="keywordTitle">${escapeHTML(group.token)}</span><span class="keywordMeta">${group.rows.length}개 묶음 · 총 ${group.count}개</span></summary><div class="containsRows">`;
+    const open = containsOpenTouched ? containsOpenGroups.has(group.tokenKey) : gidx === 0;
+    const allDeleted = (group.rows || []).length > 0 && (group.rows || []).every(item => containsDecisions[item.groupKey || item.key] === "delete");
+    const summaryState = allDeleted ? "삭제" : "남김";
+    html += `<details class="containsKeywordGroup" data-contains-group="${escapeAttr(group.tokenKey)}"${open ? " open" : ""}><summary><span class="keywordSummaryLeft"><span class="keywordTitle">${escapeHTML(group.token)}</span><span class="keywordMeta">${group.rows.length}개 묶음 · 총 ${group.count}개 · ${summaryState}</span></span><span class="keywordSummaryActions" data-stop-summary><button type="button" class="miniChoiceBtn${!allDeleted ? " active" : ""}" data-contains-group-bulk="keep" data-contains-group-key="${escapeAttr(group.tokenKey)}">묶음 남김</button><button type="button" class="miniChoiceBtn warn${allDeleted ? " active" : ""}" data-contains-group-bulk="delete" data-contains-group-key="${escapeAttr(group.tokenKey)}">묶음 삭제</button></span></summary><div class="containsRows">`;
     group.rows.forEach((item, idx) => {
       const key = item.groupKey || item.key;
       const decision = containsDecisions[key] || "keep";
       const chunk = item.chunk;
       const kindLabel = chunk.kind === "scene" ? "지문" : "대사";
       const extra = item.count && item.count > 1 ? ` 외 ${item.count - 1}개` : "";
-      html += `<details class="containsRow"><summary><span class="containsPreview">${escapeHTML(getContainsSnippet(chunk.text))}${escapeHTML(extra)}</span><span class="containsRight"><span class="pill">${escapeHTML(ownerLabel(chunk.owner))}</span><span class="pill">${kindLabel}</span><span class="inlineChoice" data-stop-summary><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" value="keep" ${decision !== "delete" ? "checked" : ""}>남김</label><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" value="delete" ${decision === "delete" ? "checked" : ""}>삭제</label></span></span></summary><div class="reviewBlock"><div class="previewText compactPreview">${escapeHTML(chunk.text)}</div></div></details>`;
+      html += `<details class="containsRow"><summary><span class="containsPreview">${escapeHTML(getContainsSnippet(chunk.text))}${escapeHTML(extra)}</span><span class="containsRight"><span class="pill">${escapeHTML(ownerLabel(chunk.owner))}</span><span class="pill">${kindLabel}</span><span class="inlineChoice" data-stop-summary><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" data-contains-group-key="${escapeAttr(group.tokenKey)}" value="keep" ${decision !== "delete" ? "checked" : ""}>남김</label><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" data-contains-group-key="${escapeAttr(group.tokenKey)}" value="delete" ${decision === "delete" ? "checked" : ""}>삭제</label></span></span></summary><div class="reviewBlock"><div class="previewText compactPreview">${escapeHTML(chunk.text)}</div></div></details>`;
     });
     html += `</div></details>`;
   });
@@ -1510,12 +1529,40 @@ function handleContainsReviewChange(e){
   const target = e.target;
   if(!target || !target.matches('input[type="radio"][data-contains-key]')) return;
   containsDecisions[target.dataset.containsKey] = target.value;
+  if(target.dataset.containsGroupKey){
+    containsOpenTouched = true;
+    containsOpenGroups.add(target.dataset.containsGroupKey);
+  }
   transformText();
+}
+function handleContainsReviewToggle(e){
+  const detail = e.target;
+  if(!detail || !detail.classList || !detail.classList.contains("containsKeywordGroup")) return;
+  const key = detail.dataset.containsGroup;
+  if(!key) return;
+  containsOpenTouched = true;
+  if(detail.open) containsOpenGroups.add(key);
+  else containsOpenGroups.delete(key);
 }
 function handleContainsReviewClick(e){
   const control = e.target.closest('[data-stop-summary]');
   if(control){
     e.stopPropagation();
+  }
+  const groupButton = e.target.closest("button[data-contains-group-bulk]");
+  if(groupButton){
+    e.preventDefault();
+    e.stopPropagation();
+    const groupKey = groupButton.dataset.containsGroupKey;
+    const value = groupButton.dataset.containsGroupBulk === "delete" ? "delete" : "keep";
+    const group = currentContainsItems.find(item => item.tokenKey === groupKey);
+    if(group){
+      (group.rows || []).forEach(item => { containsDecisions[item.groupKey || item.key] = value; });
+      containsOpenTouched = true;
+      if(groupKey) containsOpenGroups.add(groupKey);
+      transformText();
+    }
+    return;
   }
   const button = e.target.closest("button[data-contains-bulk]");
   if(!button) return;
@@ -1944,32 +1991,46 @@ function downloadTxt(){
   URL.revokeObjectURL(url);
 }
 function clearAll(){
+  if(!window.confirm("정말 초기화하시겠습니까? 현재 입력과 변환 결과가 비워집니다.")) return;
   resetReviewDecisions();
+  cachedChatFileName = "";
+  duplicateGroupPage = 0;
+  duplicateFilterText = "";
+  duplicateOrderQuery = "";
+  oocGroupPage = 0;
+  oocFilterText = "";
+  oocOrderQuery = "";
+  chapterKeywordQuery = "";
+  chapterOrderQuery = "";
+  chapterMatchPage = 0;
+  if(chapterKeywordInputEl) chapterKeywordInputEl.value = "";
+  if(chapterOrderInputEl) chapterOrderInputEl.value = "";
   if(activeMode === "chat"){
     chatPaste.innerHTML="";
     chatOutput.value="";
+    chatOutput.scrollTop = 0;
     chatFileInput.value="";
     duplicateReviewPanel.innerHTML = "";
     duplicateReviewPanel.classList.add("hidden");
     containsReviewPanel.innerHTML = "";
     containsReviewPanel.classList.add("hidden");
+    if(oocReviewPanel){ oocReviewPanel.innerHTML = ""; oocReviewPanel.classList.add("hidden"); }
   }else{
     input.value="";
     output.value="";
+    output.scrollTop = 0;
     duplicateReviewPanel.innerHTML = "";
     duplicateReviewPanel.classList.add("hidden");
     containsReviewPanel.innerHTML = "";
     containsReviewPanel.classList.add("hidden");
+    if(oocReviewPanel){ oocReviewPanel.innerHTML = ""; oocReviewPanel.classList.add("hidden"); }
   }
   transformText();
-  if(state){
-    if(output && state.classicOutput) output.value = state.classicOutput;
-    if(chatOutput && state.chatOutputValue) chatOutput.value = state.chatOutputValue;
-  }
   updateResultStats([], [], getActiveOutputValue());
   updateEpubPreview();
   updateChapterDividerPanel();
   scheduleAutosave();
+  showToast("초기화했습니다.");
 }
 
 
