@@ -3,491 +3,356 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>로그 다듬기</title>
-
+<title>로그 다듬기 · EPUB 제작</title>
 <style>
+
 :root{
-  --bg:#fbfbf9;
-  --paper:#ffffff;
-  --ink:#17181c;
-  --sub:#5a5f6b;
-  --muted:#8c929d;
-  --line:#e7e7e2;
-  --accent:#17181c;
-  --soft:#f4f4f2;
+  --bg:#f7f6f2;
+  --paper:#fffefb;
+  --paper2:#fbfaf6;
+  --ink:#26241f;
+  --sub:#666158;
+  --muted:#9a9388;
+  --line:#e5e0d6;
+  --line2:#eee9df;
+  --accent:#2f2a24;
+  --accentSoft:#ece7de;
+  --green:#5a6f58;
+  --red:#9c4f4f;
+  --shadow:0 18px 55px rgba(47,42,36,.08);
+  --softShadow:0 8px 30px rgba(47,42,36,.05);
   --radius:22px;
-  --shadow:0 18px 45px rgba(23,24,28,.06);
-  --shadowSoft:0 8px 24px rgba(23,24,28,.05);
+  --radiusSmall:14px;
 }
 *{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
 body{
   margin:0;
-  background:var(--bg);
+  background:
+    radial-gradient(circle at top left,rgba(236,231,222,.9),transparent 32rem),
+    linear-gradient(180deg,#faf9f5 0%,var(--bg) 42%,#f4f1eb 100%);
   color:var(--ink);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Pretendard,Arial,sans-serif;
+  letter-spacing:-.01em;
 }
-.wrap{
-  max-width:1100px;
-  margin:40px auto;
-  padding:0 20px;
+button,input,select,textarea{font:inherit;}
+button{border:0;}
+.appFrame{
+  max-width:1460px;
+  margin:0 auto;
+  padding:28px;
+  display:grid;
+  grid-template-columns:280px minmax(0,1fr);
+  gap:24px;
 }
-h1{margin:0 0 8px 0;font-size:22px;}
-.sub{color:var(--sub);font-size:13px;margin-bottom:20px;}
-.card{
-  background:var(--paper);
+.sidebar{
+  position:sticky;
+  top:24px;
+  align-self:start;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+.sideCard,.card{
+  background:rgba(255,254,251,.9);
   border:1px solid var(--line);
   border-radius:var(--radius);
-  padding:20px;
-  box-shadow:var(--shadow);
-  overflow:hidden;
+  box-shadow:var(--softShadow);
 }
-.tabs{
-  display:inline-flex;
-  gap:6px;
-  margin-bottom:18px;
-  padding:5px;
-  border:1px solid var(--line);
-  border-radius:999px;
-  background:#f7f7f4;
-}
-.tab{
-  padding:10px 16px;
-  border-radius:999px;
-  border:0;
-  background:transparent;
-  color:var(--sub);
-  cursor:pointer;
-  font-size:13px;
-  font-weight:700;
-}
-.tab.active{
-  background:var(--accent);
-  border-color:var(--accent);
-  color:#fff;
-}
-.toolbar{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-  margin-bottom:14px;
-  align-items:center;
-}
-.optionGroup{
-  width:100%;
-  border:1px solid var(--line);
-  border-radius:18px;
-  background:linear-gradient(180deg,#fff,#fdfdfb);
-  padding:16px;
-  margin:12px 0;
-  box-shadow:var(--shadowSoft);
-}
-.optionGroup.subtle{
-  box-shadow:none;
-  background:#fff;
-}
-.optionGroupTitle{
-  font-size:13px;
-  font-weight:800;
-  color:var(--ink);
-  margin:0 0 12px;
-  letter-spacing:-0.02em;
-}
-.optionRow{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-  align-items:center;
-}
-.toggle{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-height:38px;
-  padding:9px 13px;
-  border:1px solid var(--line);
-  border-radius:999px;
-  background:#fff;
-  color:var(--sub);
-  font-size:13px;
-  font-weight:700;
-  cursor:pointer;
-  user-select:none;
-  transition:background .15s ease,color .15s ease,border-color .15s ease,box-shadow .15s ease;
-}
-.toggle:hover{background:var(--soft);}
-.toggle input[type="checkbox"]{display:none;}
-.toggle:has(input[type="checkbox"]:checked){
-  background:var(--accent);
-  border-color:var(--accent);
-  color:#fff;
-  box-shadow:0 5px 15px rgba(23,24,28,.12);
-}
-.control{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  min-height:38px;
-  padding:7px 11px;
-  border:1px solid var(--line);
-  border-radius:14px;
-  background:#fff;
-  color:var(--sub);
-  font-size:13px;
-  white-space:nowrap;
-}
-.control input[type="text"]{min-width:160px;}
-.control input[type="color"]{
-  width:32px;
-  height:28px;
-  padding:0;
-  border:0;
-  background:transparent;
-}
-.actionBar{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-  margin:10px 0 16px;
-}
-.actionButton{
-  min-height:38px;
-  border-radius:999px;
-  font-weight:700;
-}
-.filePicker{
-  width:100%;
-  padding:14px;
-  border:1px solid var(--line);
-  border-radius:16px;
-  background:#fafaf8;
-  margin:0 0 12px;
-  overflow:hidden;
-}
-.filePicker label{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  flex-wrap:wrap;
-}
-.filePicker input[type="file"]{max-width:100%;}
-.toolbar.extra{
-  margin-top:-4px;
-  padding:12px;
-  border:1px dashed var(--line);
-  border-radius:14px;
-  background:#fafaf8;
-}
-label{font-size:13px;color:var(--sub);}
-select,input[type="text"]{
-  padding:6px 8px;
-  border-radius:12px;
-  border:1px solid var(--line);
-  background:#fff;
-  max-width:100%;
-}
-button{
-  padding:8px 12px;
-  border-radius:12px;
-  border:1px solid var(--line);
-  background:#fff;
-  cursor:pointer;
-  font-weight:700;
-}
-button:hover{background:var(--soft);}
-.grid{
+.sideCard{padding:18px;}
+.brandMark{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.brandIcon{width:38px;height:38px;border-radius:12px;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:800;}
+.brandTitle{font-size:18px;font-weight:850;line-height:1.2;}
+.brandSub{font-size:12px;color:var(--muted);line-height:1.5;margin-top:2px;}
+.flowList{display:grid;gap:8px;margin-top:14px;}
+.flowItem{display:flex;gap:10px;align-items:center;padding:9px 10px;border:1px solid var(--line2);border-radius:13px;background:#fff;color:var(--sub);font-size:13px;font-weight:700;}
+.flowDot{width:8px;height:8px;border-radius:50%;background:#bbb2a6;}
+.workflowHint{font-size:12px;color:var(--sub);line-height:1.6;padding:12px 13px;border:1px dashed var(--line);border-radius:14px;background:var(--paper2);}
+.statsGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.stat{padding:10px;border:1px solid var(--line2);border-radius:14px;background:#fff;min-width:0;}
+.stat strong{display:block;font-size:18px;line-height:1;color:var(--ink);}
+.stat span{display:block;margin-top:6px;font-size:11px;color:var(--muted);}
+.canvas{min-width:0;display:flex;flex-direction:column;gap:18px;}
+.hero{
+  padding:26px;
   display:grid;
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  grid-template-columns:minmax(0,1fr) auto;
   gap:18px;
-  width:100%;
-  overflow:hidden;
+  align-items:end;
 }
-.grid > *{min-width:0;}
+.eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:800;color:var(--sub);background:var(--accentSoft);padding:6px 10px;border-radius:999px;margin-bottom:12px;}
+h1{margin:0;font-size:30px;letter-spacing:-.04em;line-height:1.18;}
+.heroText{margin:10px 0 0;color:var(--sub);font-size:14px;line-height:1.7;max-width:720px;}
+.tabs{display:flex;gap:8px;padding:6px;border:1px solid var(--line);border-radius:18px;background:#f1eee8;}
+.tab{min-width:126px;padding:12px 16px;border-radius:14px;background:transparent;color:var(--sub);font-weight:850;cursor:pointer;transition:.15s ease;}
+.tab.active{background:var(--accent);color:#fff;box-shadow:0 8px 18px rgba(47,42,36,.16);}
+.card{padding:22px;overflow:hidden;}
+.sectionHead{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px;}
+.sectionTitle{font-size:18px;font-weight:850;margin:0;letter-spacing:-.025em;}
+.sectionDesc{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.6;}
+.badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 10px;color:var(--sub);font-size:12px;font-weight:750;white-space:nowrap;}
+.panel.hidden,.hidden{display:none !important;}
+.editorGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;width:100%;overflow:hidden;}
+.editorBox{min-width:0;display:flex;flex-direction:column;gap:9px;}
+.editorLabel{display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--sub);font-size:12px;font-weight:850;}
+.editorLabel span:last-child{font-weight:650;color:var(--muted);}
 textarea,.pastebox{
-  width:100%;
-  width:100%;
-  max-width:100%;
-  min-height:440px;
-  border:1px solid var(--line);
-  border-radius:18px;
-  padding:16px;
-  font-size:14px;
-  line-height:1.75;
-  overflow-x:hidden;
-  box-shadow:inset 0 1px 0 rgba(23,24,28,.03);
+  width:100%;max-width:100%;height:520px;min-height:420px;border:1px solid var(--line);border-radius:18px;background:#fff;padding:18px;font-size:14px;line-height:1.78;box-shadow:inset 0 1px 0 rgba(47,42,36,.04);outline:none;overflow:auto;overflow-x:hidden;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;
 }
-textarea{
-  height:440px;
-  resize:none;
-  white-space:pre-wrap;
-  overflow-wrap:anywhere;
-  word-break:break-word;
-}
-textarea[readonly]{background:#fafaf8;}
-.pastebox{
-  height:440px;
-  overflow-y:auto;
-  overflow-x:hidden;
-  outline:none;
-  background:#fff;
-  white-space:pre-wrap;
-  overflow-wrap:anywhere;
-  word-break:break-word;
-}
-.pastebox *{
-  max-width:100% !important;
-  overflow-wrap:anywhere !important;
-  word-break:break-word !important;
-}
-.pastebox img,.pastebox video,.pastebox canvas,.pastebox svg{
-  max-width:100% !important;
-  height:auto !important;
-}
-.pastebox table{
-  table-layout:fixed;
-  width:100%;
-}
-.pastebox:empty::before{
-  content:attr(data-placeholder);
-  color:var(--muted);
-}
-.hint{
-  color:var(--muted);
-  font-size:12px;
-  line-height:1.6;
-  margin-top:8px;
-}
-.field{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  flex-wrap:wrap;
-}
-.reviewArea{
-  margin:18px 0 0 0;
-}
+textarea{resize:vertical;}
+textarea[readonly]{background:#faf9f5;}
+.pastebox:empty:before{content:attr(data-placeholder);color:var(--muted);}
+.pastebox *{max-width:100% !important;overflow-wrap:anywhere !important;word-break:break-word !important;}
+.pastebox img,.pastebox video,.pastebox canvas,.pastebox svg{max-width:100% !important;height:auto !important;}
+.pastebox table{table-layout:fixed;width:100%;}
+.filePicker{border:1px dashed var(--line);background:var(--paper2);border-radius:16px;padding:14px;margin-bottom:12px;}
+.filePicker label{display:flex;gap:12px;align-items:center;flex-wrap:wrap;color:var(--sub);font-size:13px;}
+.filePicker input{max-width:100%;}
+.hint,.miniHelp{font-size:12px;color:var(--muted);line-height:1.6;}
+.actionDock{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;padding-top:16px;border-top:1px solid var(--line2);}
+.btn{min-height:38px;padding:9px 13px;border-radius:12px;border:1px solid var(--line);background:#fff;color:var(--ink);font-weight:800;cursor:pointer;transition:.15s ease;}
+.btn:hover{background:#f4f1eb;transform:translateY(-1px);}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 10px 22px rgba(47,42,36,.15);}
+.btn.subtle{background:var(--paper2);color:var(--sub);}
+.btn.warn{color:var(--red);}
+.controlsGrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+details.notionBlock{border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:var(--softShadow);overflow:hidden;}
+details.notionBlock summary{list-style:none;cursor:pointer;padding:16px 18px;display:flex;justify-content:space-between;gap:12px;align-items:center;font-weight:850;}
+details.notionBlock summary::-webkit-details-marker{display:none;}
+details.notionBlock summary:after{content:"⌄";color:var(--muted);transition:.15s ease;}
+details.notionBlock[open] summary:after{transform:rotate(180deg);}
+.blockBody{padding:0 18px 18px;border-top:1px solid var(--line2);}
+.optionRow{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:14px;}
+.toggle{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:9px 13px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--sub);font-size:13px;font-weight:800;cursor:pointer;user-select:none;transition:.15s ease;}
+.toggle input{display:none;}
+.toggle:hover{background:#f7f4ee;}
+.toggle:has(input:checked){background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 7px 17px rgba(47,42,36,.14);}
+.control{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:8px 11px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--sub);font-size:13px;font-weight:750;max-width:100%;}
+.control.wide{width:100%;align-items:flex-start;flex-direction:column;}
+.control input[type="text"],.control input[type="number"],.control select,.control textarea{border:1px solid var(--line2);border-radius:10px;background:#fff;padding:7px 8px;color:var(--ink);min-width:130px;max-width:100%;}
+.control textarea{width:100%;height:88px;min-height:88px;resize:vertical;}
+.control input[type="color"]{width:34px;height:28px;padding:0;border:0;background:transparent;}
+.formGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+.formGrid .control{width:100%;justify-content:space-between;}
+.formGrid .control input,.formGrid .control select{flex:1;min-width:0;}
+.reviewBoard{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,.8fr);gap:14px;}
+.reviewArea{display:flex;flex-direction:column;gap:12px;}
 .reviewArea:empty{display:none;}
-.reviewPanel{
-  border:1px solid var(--line);
-  border-radius:14px;
-  background:#fff;
-  padding:16px;
-  margin-bottom:12px;
-  box-shadow:var(--shadowSoft);
-}
-.reviewHead{
-  display:flex;
-  justify-content:space-between;
-  gap:10px;
-  align-items:flex-start;
-  margin-bottom:10px;
-}
-.reviewTitle{
-  font-weight:700;
-  font-size:14px;
-  color:var(--ink);
-}
-.reviewMeta{
-  font-size:12px;
-  color:var(--muted);
-  line-height:1.5;
-}
-.reviewItem{
-  border-top:1px dashed var(--line);
-  padding-top:12px;
-  margin-top:12px;
-}
-.reviewBlock{
-  border:1px solid var(--line);
-  border-radius:12px;
-  padding:10px;
-  background:#fafaf8;
-  margin-top:8px;
-}
-.reviewChoices{
-  display:grid;
-  grid-template-columns:1fr;
-  gap:10px;
-}
-.reviewNav{
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:space-between;
-  gap:8px;
-  align-items:center;
-  margin-top:12px;
-}
-.reviewNav .navButtons{display:flex;gap:8px;flex-wrap:wrap;}
-.reviewChoice{
-  display:block;
-  border:1px solid var(--line);
-  border-radius:12px;
-  padding:10px;
-  background:#fff;
-}
+.reviewPanel{border:1px solid var(--line);border-radius:18px;background:#fff;padding:16px;box-shadow:var(--softShadow);}
+.reviewHead{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px;}
+.reviewTitle{font-weight:850;font-size:14px;color:var(--ink);}
+.reviewMeta{font-size:12px;color:var(--muted);line-height:1.55;margin-top:4px;}
+.reviewItem{border-top:1px dashed var(--line);padding-top:14px;margin-top:14px;}
+.reviewBlock{border:1px solid var(--line2);border-radius:14px;padding:12px;background:var(--paper2);margin-top:8px;}
+.reviewChoices{display:grid;gap:10px;margin-top:10px;}
+.reviewChoice{display:block;border:1px solid var(--line);border-radius:14px;padding:12px;background:#fff;}
 .reviewChoice input{margin-right:6px;}
-.previewText{
-  white-space:pre-wrap;
-  max-height:220px;
-  overflow:auto;
-  line-height:1.6;
-  font-size:13px;
-  color:var(--ink);
-}
-.smallMuted{
-  font-size:12px;
-  color:var(--muted);
-}
-.pill{
-  display:inline-block;
-  padding:2px 7px;
-  border-radius:999px;
-  border:1px solid var(--line);
-  background:#fff;
-  font-size:12px;
-  color:var(--sub);
-  margin-right:4px;
-}
-.hidden{display:none !important;}
-.panel.hidden{display:none !important;}
-#toast{
-  position: fixed;
-  left: 50%;
-  bottom: 30px;
-  transform: translateX(-50%);
-  background: rgba(20,20,25,0.9);
-  color: #fff;
-  padding: 10px 16px;
-  border-radius: 999px;
-  font-size: 13px;
-  opacity: 0;
-  transition: opacity 0.25s ease;
-  pointer-events: none;
-  z-index: 9999;
-}
-@media(max-width:900px){
-  .grid{grid-template-columns:1fr;}
-  .tabs{flex-wrap:wrap;}
-}
+.reviewNav{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;}
+.navButtons{display:flex;gap:8px;flex-wrap:wrap;}
+.previewText{white-space:pre-wrap;max-height:360px;overflow:auto;line-height:1.7;font-size:13px;color:var(--ink);}
+.pill{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:12px;color:var(--sub);margin-right:4px;margin-bottom:4px;}
+.smallMuted{font-size:12px;color:var(--muted);}
+.field{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.riskPanel{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;}
+.riskChip{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);border-radius:999px;background:#fff;padding:8px 10px;cursor:pointer;color:var(--sub);font-size:12px;font-weight:800;}
+.riskChip b{background:var(--accentSoft);border-radius:999px;padding:1px 6px;color:var(--accent);}
+.emptyState{padding:14px;border:1px dashed var(--line);border-radius:14px;background:var(--paper2);color:var(--muted);font-size:12px;line-height:1.6;}
+.epubGrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.epubPreviewGrid{display:grid;grid-template-columns:minmax(260px,.75fr) minmax(0,1.25fr);gap:14px;margin-top:14px;}
+.chapterList,.bookPreviewWrap{border:1px solid var(--line);border-radius:18px;background:#fff;padding:16px;min-width:0;}
+.chapterRow{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line2);font-size:13px;}
+.chapterRow b{width:24px;height:24px;border-radius:8px;background:var(--paper2);display:grid;place-items:center;color:var(--sub);font-size:11px;}
+.chapterRow span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.chapterRow em{font-style:normal;color:var(--muted);font-size:12px;}
+.previewMeta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;color:var(--muted);font-size:12px;}
+.previewMeta b{color:var(--ink);font-size:14px;}
+.bookPreview{max-height:420px;overflow:auto;border:1px solid var(--line2);border-radius:14px;padding:18px;background:linear-gradient(180deg,#fff,#fffdf8);line-height:1.82;font-family:serif;font-size:15px;}
+.bookPreview p{margin:0 0 1em;}
+.mutedText{color:var(--muted);}
+.exportDock{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:rgba(38,36,31,.92);color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .25s ease;pointer-events:none;z-index:9999;box-shadow:0 12px 35px rgba(0,0,0,.18);}
+@media(max-width:1180px){.appFrame{grid-template-columns:1fr}.sidebar{position:static}.statsGrid{grid-template-columns:repeat(4,1fr)}.hero{grid-template-columns:1fr}.tabs{width:max-content}.reviewBoard,.epubPreviewGrid{grid-template-columns:1fr}}
+@media(max-width:860px){.appFrame{padding:14px}.editorGrid,.controlsGrid,.epubGrid,.formGrid{grid-template-columns:1fr}textarea,.pastebox{height:430px}.statsGrid{grid-template-columns:1fr 1fr}.tabs{width:100%;flex-direction:column}.tab{width:100%}}
+
 </style>
 </head>
-
 <body>
-<div class="wrap">
-  <h1>✍️ 로그 다듬기</h1>
-  <div class="sub">지문/대사 변환 · 채팅방 백업 파일 읽기 · 중복/삭제 검토 · 이름표 출력</div>
-
-  <div class="card">
-    <div class="tabs" role="tablist" aria-label="다듬기 모드">
-      <button type="button" class="tab active" data-tab="classic" role="tab" aria-selected="true">로그 다듬기</button>
-      <button type="button" class="tab" data-tab="chat" role="tab" aria-selected="false">채팅방 전체 백업</button>
-    </div>
-
-    <div class="optionGroup">
-      <div class="optionGroupTitle">기본 정리</div>
-      <div class="optionRow">
-        <label class="toggle"><input type="checkbox" id="removeDetails">접힘 토큰 제거</label>
-        <label class="toggle"><input type="checkbox" id="removeEmptyLines">빈 줄 정리</label>
-        <label class="toggle"><input type="checkbox" id="removeHTML">HTML 태그 제거</label>
-        <label class="toggle"><input type="checkbox" id="removeDecor">구분선/기호 줄 제거</label>
-        <label class="toggle"><input type="checkbox" id="protectEnabled">보호 키워드 사용</label>
-        <span class="control">보호어 <input id="protectToken" type="text" placeholder="예: 🧷, KEEP, ⚑"></span>
+<div class="appFrame">
+  <aside class="sidebar" aria-label="작업 흐름과 통계">
+    <div class="sideCard">
+      <div class="brandMark"><div class="brandIcon">✦</div><div><div class="brandTitle">로그 다듬기</div><div class="brandSub">로판Ai 백업 · 검토 · EPUB 제작</div></div></div>
+      <div id="workflowHint" class="workflowHint">입력값을 넣으면 결과와 검토 후보가 자동으로 갱신됩니다.</div>
+      <div class="flowList">
+        <div class="flowItem"><span class="flowDot"></span>입력과 결과</div>
+        <div class="flowItem"><span class="flowDot"></span>정리 옵션</div>
+        <div class="flowItem"><span class="flowDot"></span>검토 보드</div>
+        <div class="flowItem"><span class="flowDot"></span>EPUB 제작</div>
+        <div class="flowItem"><span class="flowDot"></span>내보내기</div>
       </div>
     </div>
-
-    <div class="optionGroup">
-      <div class="optionGroupTitle">출력 형식</div>
-      <div class="optionRow">
-        <span class="control">따옴표
-          <select id="quoteStyle">
-            <option value="none">넣지 않음</option>
-            <option value="straight">&quot; &quot;</option>
-            <option value="doubleCurly" selected>“ ”</option>
-            <option value="singleCurly">‘ ’</option>
-          </select>
-        </span>
+    <div class="sideCard">
+      <div class="sectionHead" style="margin-bottom:12px"><div><h2 class="sectionTitle" style="font-size:15px">결과 통계</h2><p class="sectionDesc">변환 결과 기준으로 계산됩니다.</p></div></div>
+      <div id="resultStats" class="statsGrid">
+        <div class="stat"><strong>0</strong><span>글자</span></div>
+        <div class="stat"><strong>0</strong><span>공백 제외</span></div>
+        <div class="stat"><strong>0</strong><span>문단</span></div>
+        <div class="stat"><strong>0</strong><span>지문</span></div>
       </div>
     </div>
+  </aside>
 
-    <div class="optionGroup" id="chatOptions">
-      <div class="optionGroupTitle">로판Ai 검토</div>
-      <div class="optionRow">
-        <label class="toggle"><input type="checkbox" id="deleteContainsEnabled">특정 글자 포함 문단</label>
-        <span class="control">키워드 <input id="deleteContainsToken" type="text" placeholder="예: [시스템], OOC, ⚠"></span>
-        <span class="control">처리
-          <select id="deleteContainsMode">
-            <option value="auto" selected>바로 삭제</option>
-            <option value="review">확인 후 선택</option>
-          </select>
-        </span>
-        <label class="toggle"><input type="checkbox" id="removeTables">블록/표 제거</label>
-        <label class="toggle"><input type="checkbox" id="reviewDuplicates">중복 답변 검토</label>
+  <main class="canvas">
+    <section class="card hero">
+      <div>
+        <div class="eyebrow">Notion style workspace</div>
+        <h1>채팅 로그를 정리하고 EPUB 원고까지 한 번에 만들기</h1>
+        <p class="heroText">기울임체/정자체 서식을 읽어 지문과 대사를 나누고, 중복 답변과 삭제 후보를 검토한 뒤 TXT·HTML·Markdown·EPUB으로 내보낼 수 있습니다.</p>
       </div>
-      <div class="optionGroupTitle speakerOnly" style="margin-top:14px;">이름표</div>
-      <div class="optionRow speakerOnly">
-        <label class="toggle"><input type="checkbox" id="labelSpeakers">이름으로 구분</label>
-        <span class="control">내 이름 <input id="userName" type="text" placeholder=""></span>
-        <span class="control">캐릭터 이름 <input id="characterName" type="text" placeholder=""></span>
-        <span class="control">표시
-          <select id="speakerMarkerPreset">
-            <option value="none">이름만</option>
-            <option value="▪︎" selected>▪︎ 이름</option>
-            <option value="•">• 이름</option>
-            <option value="◆">◆ 이름</option>
-            <option value="custom">직접 입력</option>
-          </select>
-        </span>
-        <span class="control">기호 <input id="speakerMarkerCustom" type="text" placeholder="예: ❖" style="width:90px;min-width:90px;"></span>
-        <span class="control">색상 <input id="speakerLabelColor" type="color" value="#17181c"></span>
-        <span class="control">색상 적용
-          <select id="speakerColorTarget">
-            <option value="none" selected>없음</option>
-            <option value="marker">유니코드만</option>
-            <option value="all">이름표 전체</option>
-          </select>
-        </span>
+      <div class="tabs" role="tablist" aria-label="다듬기 모드">
+        <button type="button" class="tab active" data-tab="classic" role="tab" aria-selected="true">로그 다듬기</button>
+        <button type="button" class="tab" data-tab="chat" role="tab" aria-selected="false">채팅방 전체 백업</button>
       </div>
-      <div class="hint speakerOnly">이름 구분을 켜면 입력/답변 구간과 글자색 단서를 이용해 문단 앞에 이름표를 붙입니다. 색상 적용은 HTML 형태의 span 태그로 출력됩니다.</div>
-    </div>
+    </section>
 
-    <div class="actionBar">
-      <button type="button" class="actionButton" onclick="copyResult()">결과 복사</button>
-      <button type="button" class="actionButton" onclick="downloadTxt()">TXT 다운로드</button>
-      <button type="button" class="actionButton" onclick="clearAll()">초기화</button>
-    </div>
-
-    <div class="panel" id="classicPanel">
-      <div class="grid">
-        <textarea id="inputText" placeholder="여기에 로그를 붙여 넣으세요"></textarea>
-        <textarea id="outputText" readonly placeholder="변환 결과"></textarea>
+    <section class="card" id="inputOutput">
+      <div class="sectionHead">
+        <div><h2 class="sectionTitle">입력과 결과</h2><p class="sectionDesc">왼쪽에 원본을 넣으면 오른쪽 결과가 자동으로 갱신됩니다. 긴 HTML이나 MHT 내용도 칸 안에서 줄바꿈됩니다.</p></div>
+        <span class="badge">자동 변환</span>
       </div>
-    </div>
 
-    <div class="panel hidden" id="chatPanel">
-      <div class="grid">
-        <div>
-          <div class="filePicker">
-            <label>
-              <strong>로판Ai 저장 파일 불러오기</strong>
-              <input type="file" id="chatFileInput" accept=".mht,.mhtml,.html,.htm">
-            </label>
-          </div>
-          <div id="chatPaste" class="pastebox" contenteditable="true" spellcheck="false"
-            data-placeholder="로판Ai 전체 채팅방을 여기에 복붙하거나, 위에서 .mht/.mhtml/.html 저장 파일을 불러오세요. 서식이 살아 있어야 기울임체/일반 문단을 구분할 수 있습니다."></div>
-          <div class="hint">Chrome에서 페이지 다운로드 옵션으로 .mht 파일을 받아 업로드하면 전체 내용을 한 번에 붙여넣을 수 있습니다. 브라우저 채팅방에서 바로 복사해 붙여넣어도 됩니다.</div>
+      <div class="panel" id="classicPanel">
+        <div class="editorGrid">
+          <div class="editorBox"><div class="editorLabel"><span>원본 로그</span><span>*지문* / 대사</span></div><textarea id="inputText" placeholder="여기에 로그를 붙여 넣으세요"></textarea></div>
+          <div class="editorBox"><div class="editorLabel"><span>변환 결과</span><span>복사·다운로드 가능</span></div><textarea id="outputText" readonly placeholder="변환 결과"></textarea></div>
         </div>
-        <textarea id="chatOutputText" readonly placeholder="변환 결과"></textarea>
       </div>
-    </div>
 
-    <div class="reviewArea">
-      <div id="duplicateReviewPanel" class="reviewPanel hidden"></div>
-      <div id="containsReviewPanel" class="reviewPanel hidden"></div>
-    </div>
-  </div>
+      <div class="panel hidden" id="chatPanel">
+        <div class="editorGrid">
+          <div class="editorBox">
+            <div class="editorLabel"><span>채팅방 백업 원본</span><span>MHT / HTML / 서식 복붙</span></div>
+            <div class="filePicker"><label><strong>로판Ai 저장 파일 불러오기</strong><input type="file" id="chatFileInput" accept=".mht,.mhtml,.html,.htm"></label><div class="hint">Chrome에서 페이지 다운로드 옵션으로 .mht 파일을 받아 업로드하면 전체 내용을 한 번에 붙여넣을 수 있습니다.</div></div>
+            <div id="chatPaste" class="pastebox" contenteditable="true" spellcheck="false" data-placeholder="로판Ai 전체 채팅방을 여기에 복붙하거나 위에서 .mht/.mhtml/.html 파일을 불러오세요. 서식이 살아 있어야 기울임체와 일반 문단을 구분할 수 있습니다."></div>
+          </div>
+          <div class="editorBox"><div class="editorLabel"><span>변환 결과</span><span>이름표·검토 선택 반영</span></div><textarea id="chatOutputText" readonly placeholder="변환 결과"></textarea></div>
+        </div>
+      </div>
+
+      <div class="actionDock">
+        <button type="button" class="btn primary" onclick="copyResult()">결과 복사</button>
+        <button type="button" class="btn" onclick="downloadTxt()">TXT 다운로드</button>
+        <button type="button" class="btn" onclick="downloadHtml()">HTML 다운로드</button>
+        <button type="button" class="btn" onclick="downloadMarkdown()">Markdown 다운로드</button>
+        <button type="button" class="btn" onclick="downloadEpub()">EPUB 다운로드</button>
+        <button type="button" class="btn subtle" onclick="clearAll()">초기화</button>
+      </div>
+    </section>
+
+    <section class="card" id="optionsBoard">
+      <div class="sectionHead"><div><h2 class="sectionTitle">정리 옵션</h2><p class="sectionDesc">자주 쓰는 기능은 버튼형 토글로 묶고, 세부 설정은 접이식 블록 안에 배치했습니다.</p></div><span class="badge">옵션 프리셋 가능</span></div>
+      <div class="controlsGrid">
+        <details class="notionBlock" open>
+          <summary>기본 정리</summary>
+          <div class="blockBody"><div class="optionRow">
+            <label class="toggle"><input type="checkbox" id="removeDetails">접힘 토큰 제거</label>
+            <label class="toggle"><input type="checkbox" id="removeEmptyLines">빈 줄 정리</label>
+            <label class="toggle"><input type="checkbox" id="removeHTML">HTML 태그 제거</label>
+            <label class="toggle"><input type="checkbox" id="removeDecor">구분선/기호 줄 제거</label>
+            <label class="toggle"><input type="checkbox" id="protectEnabled">보호 키워드 사용</label>
+            <span class="control">보호어 <input id="protectToken" type="text" placeholder="예: 🧷, KEEP, ⚑"></span>
+          </div></div>
+        </details>
+
+        <details class="notionBlock" open>
+          <summary>출력 형식</summary>
+          <div class="blockBody"><div class="optionRow">
+            <span class="control">따옴표 <select id="quoteStyle"><option value="none">넣지 않음</option><option value="straight">&quot; &quot;</option><option value="doubleCurly" selected>“ ”</option><option value="singleCurly">‘ ’</option></select></span>
+            <button type="button" class="btn subtle" onclick="saveCurrentPreset()">프리셋 저장</button>
+            <button type="button" class="btn subtle" onclick="loadSavedPreset()">프리셋 불러오기</button>
+            <button type="button" class="btn subtle warn" onclick="clearSavedPreset()">프리셋 삭제</button>
+          </div></div>
+        </details>
+
+        <details class="notionBlock" id="chatOptions" open>
+          <summary>검토 규칙</summary>
+          <div class="blockBody"><div class="optionRow">
+            <label class="toggle"><input type="checkbox" id="deleteContainsEnabled">특정 글자 포함 문단</label>
+            <span class="control">키워드 <input id="deleteContainsToken" type="text" placeholder="예: OOC, 시스템, 기록지"></span>
+            <span class="control">처리 <select id="deleteContainsMode"><option value="auto" selected>바로 삭제</option><option value="review">확인 후 선택</option></select></span>
+            <label class="toggle"><input type="checkbox" id="removeTables">블록/표 제거</label>
+            <label class="toggle"><input type="checkbox" id="reviewDuplicates">중복 답변 검토</label>
+          </div><div class="hint">영어 키워드는 대소문자를 구분하지 않습니다. 중복 답변 검토는 채팅방 전체 백업에서 같은 입력 후보를 묶어 보여줍니다.</div></div>
+        </details>
+
+        <details class="notionBlock speakerOnly" open>
+          <summary>이름표</summary>
+          <div class="blockBody"><div class="optionRow">
+            <label class="toggle"><input type="checkbox" id="labelSpeakers">이름으로 구분</label>
+            <span class="control">내 이름 <input id="userName" type="text"></span>
+            <span class="control">캐릭터 이름 <input id="characterName" type="text"></span>
+            <span class="control">사용 범위 <select id="speakerLabelMode"><option value="output" selected>결과에도 출력</option><option value="reviewOnly">검토용만</option><option value="hideInEpub">EPUB에서는 제거</option></select></span>
+            <span class="control">표시 <select id="speakerMarkerPreset"><option value="none">이름만</option><option value="▪︎" selected>▪︎ 이름</option><option value="•">• 이름</option><option value="◆">◆ 이름</option><option value="custom">직접 입력</option></select></span>
+            <span class="control">기호 <input id="speakerMarkerCustom" type="text" style="width:90px;min-width:90px;"></span>
+            <span class="control">색상 <input id="speakerLabelColor" type="color" value="#17181c"></span>
+            <span class="control">색상 적용 <select id="speakerColorTarget"><option value="none" selected>없음</option><option value="marker">유니코드만</option><option value="all">이름표 전체</option></select></span>
+          </div><div class="hint">채팅방 백업 탭에서만 보입니다. 색상 적용은 HTML span 형태로 결과에 들어갑니다.</div></div>
+        </details>
+      </div>
+    </section>
+
+    <section class="card" id="reviewBoard">
+      <div class="sectionHead"><div><h2 class="sectionTitle">검토 보드</h2><p class="sectionDesc">삭제 후보와 중복 답변은 결과창 아래에서 확인하고, 후보는 한 블록씩 넘겨 보며 선택합니다.</p></div><div class="optionRow" style="margin-top:0"><button type="button" class="btn subtle" onclick="resetReviewOnly()">검토 선택 초기화</button><button type="button" class="btn subtle" onclick="resetDuplicateChoices()">중복만 초기화</button><button type="button" class="btn subtle" onclick="resetContainsChoices()">키워드만 초기화</button></div></div>
+      <div class="reviewBoard">
+        <div class="reviewArea"><div id="duplicateReviewPanel" class="reviewPanel hidden"></div><div id="containsReviewPanel" class="reviewPanel hidden"></div></div>
+        <aside class="reviewPanel"><div class="reviewTitle">위험 문구 감지</div><div class="reviewMeta">OOC, 시스템, 기록지, 깨진 문자처럼 EPUB에 남기 싫은 문구를 찾아 보여줍니다.</div><div id="riskPanel" class="riskPanel" style="margin-top:12px"><div class="emptyState">결과가 생기면 위험 문구 후보가 표시됩니다.</div></div></aside>
+      </div>
+    </section>
+
+    <section class="card" id="epubBoard">
+      <div class="sectionHead"><div><h2 class="sectionTitle">EPUB 제작</h2><p class="sectionDesc">최종 결과를 원고로 보고 메타데이터, 챕터 분리, 스타일 프리셋, 표지 파일을 적용합니다.</p></div><span class="badge">브라우저 안에서 생성</span></div>
+      <div class="epubGrid">
+        <details class="notionBlock" open><summary>메타데이터와 표지</summary><div class="blockBody"><div class="formGrid">
+          <span class="control">제목 <input id="epubTitle" type="text" placeholder="정리한 로그"></span>
+          <span class="control">작가 <input id="epubAuthor" type="text"></span>
+          <span class="control">부제 <input id="epubSubtitle" type="text"></span>
+          <span class="control">언어 <input id="epubLanguage" type="text" value="ko"></span>
+          <span class="control">시리즈 <input id="epubSeries" type="text"></span>
+          <span class="control">권수 <input id="epubVolume" type="text"></span>
+          <span class="control">태그 <input id="epubTags" type="text" placeholder="로판, 장면, 백업"></span>
+          <span class="control">표지 <input id="epubCoverInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></span>
+          <span class="control wide">소개글 <textarea id="epubDescription" placeholder="EPUB 메타데이터에 들어갈 소개글"></textarea></span>
+        </div></div></details>
+
+        <details class="notionBlock" open><summary>챕터와 목차</summary><div class="blockBody"><div class="optionRow">
+          <span class="control">나누기 <select id="chapterSplitMode"><option value="none" selected>나누지 않음</option><option value="chars">글자 수 기준</option><option value="paragraphs">문단 수 기준</option><option value="separator">구분선 기준</option></select></span>
+          <span class="control">기준값 <input id="chapterSize" type="number" min="1" value="7000"></span>
+          <span class="control">구분선 <input id="chapterSeparator" type="text" value="---"></span>
+          <span class="control">챕터명 <input id="chapterTitlePrefix" type="text" value="Chapter"></span>
+        </div><div class="hint">구분선 기준은 해당 줄 하나가 구분선과 같을 때 챕터를 나눕니다.</div></div></details>
+
+        <details class="notionBlock" open><summary>EPUB 스타일</summary><div class="blockBody"><div class="optionRow">
+          <span class="control">프리셋 <select id="epubStylePreset"><option value="novel" selected>웹소설형</option><option value="paper">종이책형</option><option value="script">대본형</option><option value="backup">채팅 기록형</option></select></span>
+          <span class="control">원고 처리 <select id="epubTextMode"><option value="current" selected>현재 결과 그대로</option><option value="removeLabels">이름표 제거</option><option value="novel">소설화 모드</option></select></span>
+        </div><div class="hint">소설화 모드는 이름표를 제거하고 빈 줄을 정리해 EPUB 원고에 가깝게 만듭니다.</div></div></details>
+
+        <details class="notionBlock" open><summary>내보내기</summary><div class="blockBody"><div class="exportDock">
+          <button type="button" class="btn primary" onclick="downloadEpub()">EPUB 다운로드</button>
+          <button type="button" class="btn" onclick="downloadHtml()">HTML 다운로드</button>
+          <button type="button" class="btn" onclick="downloadMarkdown()">Markdown 다운로드</button>
+          <button type="button" class="btn" onclick="downloadDoc()">DOC용 HTML 다운로드</button>
+          <button type="button" class="btn" onclick="downloadTxt()">TXT 다운로드</button>
+        </div><div class="hint">DOC용 HTML은 워드에서 열기 쉬운 .doc 파일입니다. 완전한 DOCX 패키지는 아닙니다.</div></div></details>
+      </div>
+
+      <div class="epubPreviewGrid">
+        <div class="chapterList"><div class="reviewTitle">챕터 미리보기</div><div id="chapterPreview" style="margin-top:10px"><div class="emptyState">결과가 생기면 챕터 목록이 표시됩니다.</div></div></div>
+        <div class="bookPreviewWrap"><div class="reviewTitle">본문 미리보기</div><div id="epubPreview" style="margin-top:10px"><div class="emptyState">EPUB으로 만들 첫 챕터 일부가 표시됩니다.</div></div></div>
+      </div>
+    </section>
+  </main>
 </div>
 
 <div id="toast">복사되었습니다.</div>
-
 <script>
 
 const input = document.getElementById("inputText");
@@ -515,6 +380,27 @@ const speakerMarkerPresetEl = document.getElementById("speakerMarkerPreset");
 const speakerMarkerCustomEl = document.getElementById("speakerMarkerCustom");
 const speakerLabelColorEl = document.getElementById("speakerLabelColor");
 const speakerColorTargetEl = document.getElementById("speakerColorTarget");
+const speakerLabelModeEl = document.getElementById("speakerLabelMode");
+const resultStatsEl = document.getElementById("resultStats");
+const riskPanelEl = document.getElementById("riskPanel");
+const chapterPreviewEl = document.getElementById("chapterPreview");
+const epubPreviewEl = document.getElementById("epubPreview");
+const workflowHintEl = document.getElementById("workflowHint");
+const epubTitleEl = document.getElementById("epubTitle");
+const epubSubtitleEl = document.getElementById("epubSubtitle");
+const epubAuthorEl = document.getElementById("epubAuthor");
+const epubSeriesEl = document.getElementById("epubSeries");
+const epubVolumeEl = document.getElementById("epubVolume");
+const epubDescriptionEl = document.getElementById("epubDescription");
+const epubTagsEl = document.getElementById("epubTags");
+const epubLanguageEl = document.getElementById("epubLanguage");
+const epubCoverInputEl = document.getElementById("epubCoverInput");
+const chapterSplitModeEl = document.getElementById("chapterSplitMode");
+const chapterSizeEl = document.getElementById("chapterSize");
+const chapterSeparatorEl = document.getElementById("chapterSeparator");
+const chapterTitlePrefixEl = document.getElementById("chapterTitlePrefix");
+const epubStylePresetEl = document.getElementById("epubStylePreset");
+const epubTextModeEl = document.getElementById("epubTextMode");
 const duplicateReviewPanel = document.getElementById("duplicateReviewPanel");
 const containsReviewPanel = document.getElementById("containsReviewPanel");
 const chatOptions = document.getElementById("chatOptions");
@@ -558,6 +444,15 @@ userNameEl.addEventListener("input", transformText);
 characterNameEl.addEventListener("input", transformText);
 speakerMarkerCustomEl.addEventListener("input", transformText);
 speakerLabelColorEl.addEventListener("input", transformText);
+if(speakerLabelModeEl) speakerLabelModeEl.addEventListener("change", transformText);
+[
+  epubTitleEl, epubSubtitleEl, epubAuthorEl, epubSeriesEl, epubVolumeEl,
+  epubDescriptionEl, epubTagsEl, epubLanguageEl, chapterSplitModeEl, chapterSizeEl,
+  chapterSeparatorEl, chapterTitlePrefixEl, epubStylePresetEl, epubTextModeEl, epubCoverInputEl
+].forEach(el => {
+  if(!el) return;
+  el.addEventListener(el.tagName === "SELECT" || el.type === "file" ? "change" : "input", () => updateEpubPreview());
+});
 chatFileInput.addEventListener("change", loadChatFile);
 duplicateReviewPanel.addEventListener("change", handleDuplicateReviewChange);
 duplicateReviewPanel.addEventListener("click", handleDuplicateReviewClick);
@@ -1326,9 +1221,8 @@ function hashString(str){
   return (h >>> 0).toString(36);
 }
 function previewText(text, limit){
-  const s = normalizeParagraphText(text || "");
-  if(s.length <= limit) return s;
-  return s.slice(0, limit).trim() + "…";
+  // 중복 후보 검토에서는 내용을 확인해야 하므로 뒤를 생략하지 않고 전체를 보여준다.
+  return normalizeParagraphText(text || "");
 }
 function findNextAnswerBlock(blocks, index){
   for(let i=index + 1; i<blocks.length; i++){
@@ -1614,6 +1508,16 @@ function renderChunks(chunks, options){
 }
 
 // ------------------ 메인 변환 ------------------
+function shouldRenderSpeakerLabels(){
+  if(activeMode !== "chat") return false;
+  if(!labelSpeakersEl || !labelSpeakersEl.checked) return false;
+  const mode = speakerLabelModeEl ? speakerLabelModeEl.value : "output";
+  return mode !== "reviewOnly";
+}
+function afterTransform(chunks, blocks, renderedText){
+  updateResultStats(chunks || [], blocks || [], renderedText || "");
+  updateEpubPreview();
+}
 function transformText(){
   if(activeMode === "chat"){
     const parsed = parseRofanChatChunks(chatPaste);
@@ -1625,14 +1529,16 @@ function transformText(){
     const containsItems = buildContainsReviewItems(parsed.chunks, dropBlockIds, deleteTokens);
     updateContainsReviewPanel(containsItems);
 
-    chatOutput.value = renderChunks(parsed.chunks, {
+    const rendered = renderChunks(parsed.chunks, {
       removeTables: removeTablesEl.checked,
       deleteTokens,
       deleteContainsMode: deleteContainsModeEl.value,
       containsDecisions,
       dropBlockIds,
-      labelSpeakers: true
+      labelSpeakers: shouldRenderSpeakerLabels()
     });
+    chatOutput.value = rendered;
+    afterTransform(parsed.chunks, parsed.blocks, rendered);
     return;
   }
 
@@ -1658,12 +1564,13 @@ function transformText(){
 
   const chunks = parseChunks(text);
   const deleteTokens = getDeleteContainsTokens();
+  currentDuplicateGroups = [];
   duplicateReviewPanel.classList.add("hidden");
   duplicateReviewPanel.innerHTML = "";
   const emptyDrop = new Set();
   const containsItems = buildContainsReviewItems(chunks, emptyDrop, deleteTokens);
   updateContainsReviewPanel(containsItems);
-  output.value = renderChunks(chunks, {
+  const rendered = renderChunks(chunks, {
     removeTables: removeTablesEl.checked,
     deleteTokens,
     deleteContainsMode: deleteContainsModeEl.value,
@@ -1671,6 +1578,8 @@ function transformText(){
     dropBlockIds: emptyDrop,
     labelSpeakers: false
   });
+  output.value = rendered;
+  afterTransform(chunks, [], rendered);
 }
 
 // ------------------ UI ------------------
@@ -1733,6 +1642,414 @@ function clearAll(){
     containsReviewPanel.classList.add("hidden");
   }
   transformText();
+}
+
+
+// ------------------ 통계 / EPUB / 내보내기 ------------------
+function stripHTMLTags(text){
+  return String(text || "").replace(/<[^>]*>/g, "");
+}
+function normalizeSpeakerCompareLine(line){
+  return stripHTMLTags(line || "").replace(/\s+/g, "").trim();
+}
+function getPossibleSpeakerLabels(){
+  const names = [getSpeakerName("user"), getSpeakerName("character")].filter(Boolean);
+  const marker = getSpeakerMarker();
+  const labels = [];
+  names.forEach(name => {
+    labels.push(name);
+    if(marker) labels.push(marker + name, marker + " " + name);
+  });
+  return labels.map(normalizeSpeakerCompareLine).filter(Boolean);
+}
+function stripSpeakerLabelLines(text){
+  const labels = new Set(getPossibleSpeakerLabels());
+  if(!labels.size) return text;
+  return String(text || "").split(/\n/).filter(line => !labels.has(normalizeSpeakerCompareLine(line))).join("\n").replace(/\n{3,}/g,"\n\n").trim();
+}
+function getPreparedOutputForExport(){
+  let text = (getActiveOutput().value || "").replace(/\r/g, "");
+  const mode = epubTextModeEl ? epubTextModeEl.value : "current";
+  const labelMode = speakerLabelModeEl ? speakerLabelModeEl.value : "output";
+  if(mode === "removeLabels" || labelMode === "hideInEpub" || labelMode === "reviewOnly"){
+    text = stripSpeakerLabelLines(text);
+  }
+  if(mode === "novel"){
+    text = stripSpeakerLabelLines(text).replace(/\n{3,}/g,"\n\n").trim();
+  }
+  return text.trim();
+}
+function getResultStats(text, chunks){
+  const clean = stripHTMLTags(text || "");
+  const paragraphs = clean.split(/\n\s*\n+/).map(p=>p.trim()).filter(Boolean);
+  return {
+    chars: clean.length,
+    charsNoSpace: clean.replace(/\s/g,"").length,
+    paragraphs: paragraphs.length,
+    chunks: chunks.length,
+    scenes: chunks.filter(c => c.kind === "scene").length,
+    dialogues: chunks.filter(c => c.kind !== "scene").length,
+    user: chunks.filter(c => c.owner === "user").length,
+    character: chunks.filter(c => c.owner === "character").length
+  };
+}
+function fmtNum(n){ return Number(n || 0).toLocaleString("ko-KR"); }
+function updateResultStats(chunks, blocks, renderedText){
+  const stats = getResultStats(renderedText || "", chunks || []);
+  if(resultStatsEl){
+    resultStatsEl.innerHTML = `
+      <div class="stat"><strong>${fmtNum(stats.chars)}</strong><span>글자</span></div>
+      <div class="stat"><strong>${fmtNum(stats.charsNoSpace)}</strong><span>공백 제외</span></div>
+      <div class="stat"><strong>${fmtNum(stats.paragraphs)}</strong><span>문단</span></div>
+      <div class="stat"><strong>${fmtNum(stats.scenes)}</strong><span>지문</span></div>
+      <div class="stat"><strong>${fmtNum(stats.dialogues)}</strong><span>대사</span></div>
+      <div class="stat"><strong>${fmtNum(currentDuplicateGroups.length)}</strong><span>중복 묶음</span></div>
+      <div class="stat"><strong>${fmtNum(currentContainsItems.length)}</strong><span>키워드 후보</span></div>`;
+  }
+  updateRiskPanel(renderedText || "");
+  if(workflowHintEl){
+    const missing = !renderedText ? "입력값을 넣으면 결과와 검토 후보가 자동으로 갱신됩니다." : `${fmtNum(stats.paragraphs)}개 문단이 준비되었습니다. 검토 후 TXT/HTML/EPUB으로 내보낼 수 있습니다.`;
+    workflowHintEl.textContent = missing;
+  }
+}
+const RISK_TERMS = ["OOC", "시스템", "기록지", "설정", "요약", "이전 대화", "AI", "모델", "검열", "�"];
+function countTermInsensitive(text, term){
+  const hay = String(text || "").toLowerCase();
+  const needle = String(term || "").toLowerCase();
+  if(!needle) return 0;
+  let count = 0, pos = 0;
+  while((pos = hay.indexOf(needle, pos)) !== -1){ count++; pos += needle.length; }
+  return count;
+}
+function updateRiskPanel(text){
+  if(!riskPanelEl) return;
+  const found = RISK_TERMS.map(term => ({term, count:countTermInsensitive(text, term)})).filter(x => x.count > 0);
+  if(!found.length){
+    riskPanelEl.innerHTML = `<div class="emptyState">위험 문구 후보가 보이지 않습니다.</div>`;
+    return;
+  }
+  riskPanelEl.innerHTML = found.map(x => `<button type="button" class="riskChip" onclick="appendDeleteKeyword('${escapeAttr(x.term)}')"><span>${escapeHTML(x.term)}</span><b>${x.count}</b></button>`).join("") + `<div class="miniHelp">칩을 누르면 특정 글자 삭제 키워드에 추가됩니다.</div>`;
+}
+function appendDeleteKeyword(term){
+  const tokens = splitTokens(deleteContainsTokenEl.value || "");
+  if(!tokens.some(t => t.toLowerCase() === String(term).toLowerCase())) tokens.push(term);
+  deleteContainsTokenEl.value = tokens.join(", ");
+  deleteContainsEnabledEl.checked = true;
+  deleteContainsModeEl.value = "review";
+  transformText();
+  showToast("검토 키워드에 추가했습니다.");
+}
+function resetDuplicateChoices(){
+  duplicateDecisions = {};
+  duplicatePageByGroup = {};
+  transformText();
+  showToast("중복 선택을 초기화했습니다.");
+}
+function resetContainsChoices(){
+  containsDecisions = {};
+  transformText();
+  showToast("키워드 검토 선택을 초기화했습니다.");
+}
+function resetReviewOnly(){
+  resetReviewDecisions();
+  transformText();
+  showToast("검토 선택을 초기화했습니다.");
+}
+function getEpubConfig(){
+  const title = (epubTitleEl && epubTitleEl.value.trim()) || "정리한 로그";
+  return {
+    title,
+    subtitle: (epubSubtitleEl && epubSubtitleEl.value.trim()) || "",
+    author: (epubAuthorEl && epubAuthorEl.value.trim()) || "",
+    series: (epubSeriesEl && epubSeriesEl.value.trim()) || "",
+    volume: (epubVolumeEl && epubVolumeEl.value.trim()) || "",
+    description: (epubDescriptionEl && epubDescriptionEl.value.trim()) || "",
+    tags: splitTokens(epubTagsEl ? epubTagsEl.value : ""),
+    language: (epubLanguageEl && epubLanguageEl.value.trim()) || "ko",
+    chapterMode: chapterSplitModeEl ? chapterSplitModeEl.value : "none",
+    chapterSize: Math.max(1, parseInt(chapterSizeEl ? chapterSizeEl.value : "7000", 10) || 7000),
+    separator: (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "---",
+    chapterPrefix: (chapterTitlePrefixEl && chapterTitlePrefixEl.value.trim()) || "Chapter",
+    stylePreset: epubStylePresetEl ? epubStylePresetEl.value : "novel"
+  };
+}
+function splitTextIntoParagraphs(text){
+  return String(text || "").replace(/\r/g,"").split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
+}
+function splitTextIntoChapters(text){
+  const cfg = getEpubConfig();
+  const source = String(text || "").trim();
+  if(!source) return [];
+  const chapters = [];
+  const makeTitle = (idx) => `${cfg.chapterPrefix} ${idx + 1}`;
+  if(cfg.chapterMode === "separator"){
+    const sep = cfg.separator.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`^\\s*${sep}\\s*$`, "gm");
+    source.split(re).map(s=>s.trim()).filter(Boolean).forEach((body, idx) => chapters.push({title:makeTitle(idx), body}));
+  }else if(cfg.chapterMode === "paragraphs"){
+    const paras = splitTextIntoParagraphs(source);
+    for(let i=0; i<paras.length; i += cfg.chapterSize){
+      chapters.push({title:makeTitle(chapters.length), body:paras.slice(i, i + cfg.chapterSize).join("\n\n")});
+    }
+  }else if(cfg.chapterMode === "chars"){
+    const paras = splitTextIntoParagraphs(source);
+    let bucket = [], count = 0;
+    paras.forEach(p => {
+      if(bucket.length && count + p.length > cfg.chapterSize){
+        chapters.push({title:makeTitle(chapters.length), body:bucket.join("\n\n")});
+        bucket = []; count = 0;
+      }
+      bucket.push(p); count += p.length;
+    });
+    if(bucket.length) chapters.push({title:makeTitle(chapters.length), body:bucket.join("\n\n")});
+  }else{
+    chapters.push({title:cfg.title, body:source});
+  }
+  return chapters.length ? chapters : [{title:cfg.title, body:source}];
+}
+function escapeXML(str){
+  return String(str || "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#39;");
+}
+function restoreAllowedInlineSpans(escaped){
+  return String(escaped || "").replace(/&lt;span style=&quot;color:(#[0-9a-fA-F]{6})&quot;&gt;([\s\S]*?)&lt;\/span&gt;/g, '<span style="color:$1">$2</span>');
+}
+function paragraphToXhtml(p){
+  const lines = String(p || "").split(/\n/).map(line => restoreAllowedInlineSpans(escapeXML(line)));
+  return `<p>${lines.join("<br/>")}</p>`;
+}
+function textToXhtmlBody(text){
+  return splitTextIntoParagraphs(text).map(paragraphToXhtml).join("\n");
+}
+function getEpubCss(){
+  const preset = getEpubConfig().stylePreset;
+  const base = `body{line-height:1.82;word-break:keep-all;overflow-wrap:break-word;} p{margin:0 0 1em;} h1{font-size:1.45em;margin:0 0 1.2em;} .cover{text-align:center;} .cover img{max-width:100%;height:auto;}`;
+  if(preset === "paper") return base + ` body{font-family:serif;} p{text-indent:1em;margin-bottom:.65em;}`;
+  if(preset === "script") return base + ` body{font-family:sans-serif;} p{margin-bottom:1.1em;} p:nth-child(odd){padding-left:.5em;border-left:2px solid #ddd;}`;
+  if(preset === "backup") return base + ` body{font-family:monospace;font-size:.92em;} p{white-space:pre-wrap;margin-bottom:1.2em;}`;
+  return base + ` body{font-family:serif;} p{margin-bottom:.95em;}`;
+}
+function updateEpubPreview(){
+  const text = getPreparedOutputForExport();
+  const chapters = splitTextIntoChapters(text);
+  const cfg = getEpubConfig();
+  if(chapterPreviewEl){
+    if(!chapters.length){
+      chapterPreviewEl.innerHTML = `<div class="emptyState">결과가 생기면 챕터 목록이 표시됩니다.</div>`;
+    }else{
+      chapterPreviewEl.innerHTML = chapters.slice(0, 30).map((ch, idx) => `<div class="chapterRow"><b>${idx + 1}</b><span>${escapeHTML(ch.title)}</span><em>${fmtNum(stripHTMLTags(ch.body).length)}자</em></div>`).join("") + (chapters.length > 30 ? `<div class="miniHelp">외 ${chapters.length - 30}개 챕터</div>` : "");
+    }
+  }
+  if(epubPreviewEl){
+    const first = chapters[0] ? chapters[0].body : "";
+    const previewBody = splitTextIntoParagraphs(first).slice(0, 12).map(paragraphToXhtml).join("\n");
+    epubPreviewEl.innerHTML = `
+      <div class="previewMeta"><b>${escapeHTML(cfg.title)}</b>${cfg.author ? `<span>${escapeHTML(cfg.author)}</span>` : ""}<span>${chapters.length || 0}개 챕터</span></div>
+      <div class="bookPreview">${previewBody || `<p class="mutedText">미리볼 결과가 없습니다.</p>`}</div>`;
+  }
+}
+function safeFileName(name, ext){
+  const base = String(name || "download").replace(/[\\/:*?"<>|]/g,"_").replace(/\s+/g,"_").slice(0,80) || "download";
+  return base + ext;
+}
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+function buildStandaloneHTML(){
+  const cfg = getEpubConfig();
+  const chapters = splitTextIntoChapters(getPreparedOutputForExport());
+  const toc = chapters.map((ch, idx) => `<li><a href="#ch${idx+1}">${escapeXML(ch.title)}</a></li>`).join("\n");
+  const body = chapters.map((ch, idx) => `<section id="ch${idx+1}"><h1>${escapeXML(ch.title)}</h1>${textToXhtmlBody(ch.body)}</section>`).join("\n");
+  return `<!doctype html><html lang="${escapeXML(cfg.language)}"><head><meta charset="utf-8"><title>${escapeXML(cfg.title)}</title><style>${getEpubCss()} nav{margin-bottom:2rem;padding:1rem;border:1px solid #ddd;border-radius:12px;} section{max-width:720px;margin:0 auto 3rem;}</style></head><body><nav><strong>목차</strong><ol>${toc}</ol></nav>${body}</body></html>`;
+}
+function downloadHtml(){
+  const cfg = getEpubConfig();
+  downloadBlob(new Blob([buildStandaloneHTML()], {type:"text/html;charset=utf-8"}), safeFileName(cfg.title, ".html"));
+}
+function downloadMarkdown(){
+  const cfg = getEpubConfig();
+  const chapters = splitTextIntoChapters(stripHTMLTags(getPreparedOutputForExport()));
+  let md = `# ${cfg.title}\n\n`;
+  if(cfg.subtitle) md += `_${cfg.subtitle}_\n\n`;
+  if(cfg.author) md += `작가: ${cfg.author}\n\n`;
+  if(cfg.description) md += `${cfg.description}\n\n`;
+  chapters.forEach(ch => { md += `## ${ch.title}\n\n${ch.body}\n\n`; });
+  downloadBlob(new Blob([md], {type:"text/markdown;charset=utf-8"}), safeFileName(cfg.title, ".md"));
+}
+function downloadDoc(){
+  const cfg = getEpubConfig();
+  const html = buildStandaloneHTML();
+  downloadBlob(new Blob([html], {type:"application/msword;charset=utf-8"}), safeFileName(cfg.title, ".doc"));
+}
+function makeXhtmlDoc(title, body){
+  return `<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="${escapeXML(getEpubConfig().language)}" xml:lang="${escapeXML(getEpubConfig().language)}"><head><meta charset="utf-8"/><title>${escapeXML(title)}</title><link rel="stylesheet" type="text/css" href="styles.css"/></head><body>${body}</body></html>`;
+}
+async function getCoverInfo(){
+  const file = epubCoverInputEl && epubCoverInputEl.files && epubCoverInputEl.files[0];
+  if(!file) return null;
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g,"") || "jpg";
+  const typeMap = {jpg:"image/jpeg", jpeg:"image/jpeg", png:"image/png", webp:"image/webp", gif:"image/gif"};
+  return {name:`cover.${ext}`, media:typeMap[ext] || file.type || "image/jpeg", data:new Uint8Array(await file.arrayBuffer())};
+}
+function uuidLike(){
+  const s = `${Date.now()}-${Math.random()}-${getEpubConfig().title}`;
+  return "id-" + hashString(s);
+}
+async function downloadEpub(){
+  const cfg = getEpubConfig();
+  const chapters = splitTextIntoChapters(getPreparedOutputForExport());
+  if(!chapters.length){ showToast("EPUB으로 만들 결과가 없습니다."); return; }
+  const cover = await getCoverInfo();
+  const entries = [];
+  entries.push({name:"mimetype", data:"application/epub+zip"});
+  entries.push({name:"META-INF/container.xml", data:`<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`});
+  entries.push({name:"OEBPS/styles.css", data:getEpubCss()});
+  const chapterItems = [];
+  chapters.forEach((ch, idx) => {
+    const file = `chapter-${String(idx+1).padStart(3,"0")}.xhtml`;
+    chapterItems.push({id:`ch${idx+1}`, href:file, title:ch.title});
+    entries.push({name:`OEBPS/${file}`, data:makeXhtmlDoc(ch.title, `<h1>${escapeXML(ch.title)}</h1>${textToXhtmlBody(ch.body)}`)});
+  });
+  if(cover){
+    entries.push({name:`OEBPS/${cover.name}`, data:cover.data});
+    entries.push({name:"OEBPS/cover.xhtml", data:makeXhtmlDoc("Cover", `<section class="cover"><img src="${escapeXML(cover.name)}" alt="cover"/></section>`)});
+  }
+  const navItems = chapterItems.map(item => `<li><a href="${escapeXML(item.href)}">${escapeXML(item.title)}</a></li>`).join("");
+  entries.push({name:"OEBPS/nav.xhtml", data:makeXhtmlDoc("목차", `<nav epub:type="toc" id="toc"><h1>목차</h1><ol>${navItems}</ol></nav>`)});
+  const uid = uuidLike();
+  const metaTags = [
+    `<dc:identifier id="pub-id">${escapeXML(uid)}</dc:identifier>`,
+    `<dc:title>${escapeXML(cfg.title)}</dc:title>`,
+    cfg.subtitle ? `<dc:title id="subtitle">${escapeXML(cfg.subtitle)}</dc:title>` : "",
+    cfg.author ? `<dc:creator>${escapeXML(cfg.author)}</dc:creator>` : "",
+    `<dc:language>${escapeXML(cfg.language)}</dc:language>`,
+    cfg.description ? `<dc:description>${escapeXML(cfg.description)}</dc:description>` : "",
+    ...cfg.tags.map(tag => `<dc:subject>${escapeXML(tag)}</dc:subject>`),
+    cfg.series ? `<meta property="belongs-to-collection" id="series">${escapeXML(cfg.series)}</meta>` : "",
+    cfg.volume ? `<meta property="group-position">${escapeXML(cfg.volume)}</meta>` : "",
+    `<meta property="dcterms:modified">${new Date().toISOString().replace(/\.\d{3}Z$/, "Z")}</meta>`,
+    cover ? `<meta name="cover" content="cover-image"/>` : ""
+  ].filter(Boolean).join("\n");
+  const manifest = [
+    `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
+    `<item id="css" href="styles.css" media-type="text/css"/>`,
+    cover ? `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>` : "",
+    cover ? `<item id="cover-image" href="${escapeXML(cover.name)}" media-type="${escapeXML(cover.media)}" properties="cover-image"/>` : "",
+    ...chapterItems.map(item => `<item id="${item.id}" href="${escapeXML(item.href)}" media-type="application/xhtml+xml"/>`)
+  ].filter(Boolean).join("\n");
+  const spine = [cover ? `<itemref idref="cover" linear="no"/>` : "", ...chapterItems.map(item => `<itemref idref="${item.id}"/>`)].filter(Boolean).join("\n");
+  const opf = `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="pub-id" xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/"><metadata>${metaTags}</metadata><manifest>${manifest}</manifest><spine>${spine}</spine></package>`;
+  entries.push({name:"OEBPS/content.opf", data:opf});
+  const blob = createZipBlob(entries, "application/epub+zip");
+  downloadBlob(blob, safeFileName(cfg.title, ".epub"));
+}
+let CRC_TABLE = null;
+function getCRCTable(){
+  if(CRC_TABLE) return CRC_TABLE;
+  CRC_TABLE = new Uint32Array(256);
+  for(let n=0; n<256; n++){
+    let c=n;
+    for(let k=0; k<8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    CRC_TABLE[n] = c >>> 0;
+  }
+  return CRC_TABLE;
+}
+function crc32(bytes){
+  const table = getCRCTable();
+  let c = 0 ^ -1;
+  for(let i=0; i<bytes.length; i++) c = (c >>> 8) ^ table[(c ^ bytes[i]) & 0xff];
+  return (c ^ -1) >>> 0;
+}
+function dosDateTime(date){
+  const d = date || new Date();
+  const time = ((d.getHours() & 31) << 11) | ((d.getMinutes() & 63) << 5) | ((Math.floor(d.getSeconds()/2)) & 31);
+  const day = ((d.getFullYear() - 1980) << 9) | ((d.getMonth()+1) << 5) | d.getDate();
+  return {time, day};
+}
+function writeU16(dv, offset, value){ dv.setUint16(offset, value, true); }
+function writeU32(dv, offset, value){ dv.setUint32(offset, value >>> 0, true); }
+function createZipBlob(entries, type){
+  const enc = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  const dt = dosDateTime(new Date());
+  entries.forEach(entry => {
+    const nameBytes = enc.encode(entry.name);
+    const dataBytes = entry.data instanceof Uint8Array ? entry.data : enc.encode(String(entry.data || ""));
+    const crc = crc32(dataBytes);
+    const local = new Uint8Array(30 + nameBytes.length);
+    const dv = new DataView(local.buffer);
+    writeU32(dv,0,0x04034b50); writeU16(dv,4,20); writeU16(dv,6,0x0800); writeU16(dv,8,0);
+    writeU16(dv,10,dt.time); writeU16(dv,12,dt.day); writeU32(dv,14,crc); writeU32(dv,18,dataBytes.length); writeU32(dv,22,dataBytes.length);
+    writeU16(dv,26,nameBytes.length); writeU16(dv,28,0); local.set(nameBytes,30);
+    chunks.push(local, dataBytes);
+    const cd = new Uint8Array(46 + nameBytes.length);
+    const cdv = new DataView(cd.buffer);
+    writeU32(cdv,0,0x02014b50); writeU16(cdv,4,20); writeU16(cdv,6,20); writeU16(cdv,8,0x0800); writeU16(cdv,10,0);
+    writeU16(cdv,12,dt.time); writeU16(cdv,14,dt.day); writeU32(cdv,16,crc); writeU32(cdv,20,dataBytes.length); writeU32(cdv,24,dataBytes.length);
+    writeU16(cdv,28,nameBytes.length); writeU16(cdv,30,0); writeU16(cdv,32,0); writeU16(cdv,34,0); writeU16(cdv,36,0); writeU32(cdv,38,0); writeU32(cdv,42,offset);
+    cd.set(nameBytes,46);
+    central.push(cd);
+    offset += local.length + dataBytes.length;
+  });
+  const centralSize = central.reduce((sum, c) => sum + c.length, 0);
+  const centralOffset = offset;
+  chunks.push(...central);
+  const end = new Uint8Array(22);
+  const edv = new DataView(end.buffer);
+  writeU32(edv,0,0x06054b50); writeU16(edv,4,0); writeU16(edv,6,0); writeU16(edv,8,entries.length); writeU16(edv,10,entries.length); writeU32(edv,12,centralSize); writeU32(edv,16,centralOffset); writeU16(edv,20,0);
+  chunks.push(end);
+  return new Blob(chunks, {type:type || "application/zip"});
+}
+function collectPresetValues(){
+  const ids = ["removeDetails","removeEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","epubStylePreset","epubTextMode"];
+  const data = {};
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    data[id] = el.type === "checkbox" ? el.checked : el.value;
+  });
+  return data;
+}
+function applyPresetValues(data){
+  Object.entries(data || {}).forEach(([id, value]) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(el.type === "checkbox") el.checked = !!value;
+    else el.value = value;
+  });
+}
+function saveCurrentPreset(){
+  localStorage.setItem("rofan-cleaner-preset", JSON.stringify(collectPresetValues()));
+  showToast("현재 옵션을 저장했습니다.");
+}
+function loadSavedPreset(){
+  const raw = localStorage.getItem("rofan-cleaner-preset");
+  if(!raw){ showToast("저장된 프리셋이 없습니다."); return; }
+  try{
+    applyPresetValues(JSON.parse(raw));
+    transformText();
+    showToast("프리셋을 불러왔습니다.");
+  }catch(err){
+    console.error(err);
+    showToast("프리셋을 불러오지 못했습니다.");
+  }
+}
+function clearSavedPreset(){
+  localStorage.removeItem("rofan-cleaner-preset");
+  showToast("저장된 프리셋을 삭제했습니다.");
 }
 
 updateModeVisibility();

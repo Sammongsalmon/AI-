@@ -24,6 +24,27 @@ const speakerMarkerPresetEl = document.getElementById("speakerMarkerPreset");
 const speakerMarkerCustomEl = document.getElementById("speakerMarkerCustom");
 const speakerLabelColorEl = document.getElementById("speakerLabelColor");
 const speakerColorTargetEl = document.getElementById("speakerColorTarget");
+const speakerLabelModeEl = document.getElementById("speakerLabelMode");
+const resultStatsEl = document.getElementById("resultStats");
+const riskPanelEl = document.getElementById("riskPanel");
+const chapterPreviewEl = document.getElementById("chapterPreview");
+const epubPreviewEl = document.getElementById("epubPreview");
+const workflowHintEl = document.getElementById("workflowHint");
+const epubTitleEl = document.getElementById("epubTitle");
+const epubSubtitleEl = document.getElementById("epubSubtitle");
+const epubAuthorEl = document.getElementById("epubAuthor");
+const epubSeriesEl = document.getElementById("epubSeries");
+const epubVolumeEl = document.getElementById("epubVolume");
+const epubDescriptionEl = document.getElementById("epubDescription");
+const epubTagsEl = document.getElementById("epubTags");
+const epubLanguageEl = document.getElementById("epubLanguage");
+const epubCoverInputEl = document.getElementById("epubCoverInput");
+const chapterSplitModeEl = document.getElementById("chapterSplitMode");
+const chapterSizeEl = document.getElementById("chapterSize");
+const chapterSeparatorEl = document.getElementById("chapterSeparator");
+const chapterTitlePrefixEl = document.getElementById("chapterTitlePrefix");
+const epubStylePresetEl = document.getElementById("epubStylePreset");
+const epubTextModeEl = document.getElementById("epubTextMode");
 const duplicateReviewPanel = document.getElementById("duplicateReviewPanel");
 const containsReviewPanel = document.getElementById("containsReviewPanel");
 const chatOptions = document.getElementById("chatOptions");
@@ -67,6 +88,15 @@ userNameEl.addEventListener("input", transformText);
 characterNameEl.addEventListener("input", transformText);
 speakerMarkerCustomEl.addEventListener("input", transformText);
 speakerLabelColorEl.addEventListener("input", transformText);
+if(speakerLabelModeEl) speakerLabelModeEl.addEventListener("change", transformText);
+[
+  epubTitleEl, epubSubtitleEl, epubAuthorEl, epubSeriesEl, epubVolumeEl,
+  epubDescriptionEl, epubTagsEl, epubLanguageEl, chapterSplitModeEl, chapterSizeEl,
+  chapterSeparatorEl, chapterTitlePrefixEl, epubStylePresetEl, epubTextModeEl, epubCoverInputEl
+].forEach(el => {
+  if(!el) return;
+  el.addEventListener(el.tagName === "SELECT" || el.type === "file" ? "change" : "input", () => updateEpubPreview());
+});
 chatFileInput.addEventListener("change", loadChatFile);
 duplicateReviewPanel.addEventListener("change", handleDuplicateReviewChange);
 duplicateReviewPanel.addEventListener("click", handleDuplicateReviewClick);
@@ -1122,6 +1152,16 @@ function renderChunks(chunks, options){
 }
 
 // ------------------ 메인 변환 ------------------
+function shouldRenderSpeakerLabels(){
+  if(activeMode !== "chat") return false;
+  if(!labelSpeakersEl || !labelSpeakersEl.checked) return false;
+  const mode = speakerLabelModeEl ? speakerLabelModeEl.value : "output";
+  return mode !== "reviewOnly";
+}
+function afterTransform(chunks, blocks, renderedText){
+  updateResultStats(chunks || [], blocks || [], renderedText || "");
+  updateEpubPreview();
+}
 function transformText(){
   if(activeMode === "chat"){
     const parsed = parseRofanChatChunks(chatPaste);
@@ -1133,14 +1173,16 @@ function transformText(){
     const containsItems = buildContainsReviewItems(parsed.chunks, dropBlockIds, deleteTokens);
     updateContainsReviewPanel(containsItems);
 
-    chatOutput.value = renderChunks(parsed.chunks, {
+    const rendered = renderChunks(parsed.chunks, {
       removeTables: removeTablesEl.checked,
       deleteTokens,
       deleteContainsMode: deleteContainsModeEl.value,
       containsDecisions,
       dropBlockIds,
-      labelSpeakers: true
+      labelSpeakers: shouldRenderSpeakerLabels()
     });
+    chatOutput.value = rendered;
+    afterTransform(parsed.chunks, parsed.blocks, rendered);
     return;
   }
 
@@ -1166,12 +1208,13 @@ function transformText(){
 
   const chunks = parseChunks(text);
   const deleteTokens = getDeleteContainsTokens();
+  currentDuplicateGroups = [];
   duplicateReviewPanel.classList.add("hidden");
   duplicateReviewPanel.innerHTML = "";
   const emptyDrop = new Set();
   const containsItems = buildContainsReviewItems(chunks, emptyDrop, deleteTokens);
   updateContainsReviewPanel(containsItems);
-  output.value = renderChunks(chunks, {
+  const rendered = renderChunks(chunks, {
     removeTables: removeTablesEl.checked,
     deleteTokens,
     deleteContainsMode: deleteContainsModeEl.value,
@@ -1179,6 +1222,8 @@ function transformText(){
     dropBlockIds: emptyDrop,
     labelSpeakers: false
   });
+  output.value = rendered;
+  afterTransform(chunks, [], rendered);
 }
 
 // ------------------ UI ------------------
@@ -1241,6 +1286,414 @@ function clearAll(){
     containsReviewPanel.classList.add("hidden");
   }
   transformText();
+}
+
+
+// ------------------ 통계 / EPUB / 내보내기 ------------------
+function stripHTMLTags(text){
+  return String(text || "").replace(/<[^>]*>/g, "");
+}
+function normalizeSpeakerCompareLine(line){
+  return stripHTMLTags(line || "").replace(/\s+/g, "").trim();
+}
+function getPossibleSpeakerLabels(){
+  const names = [getSpeakerName("user"), getSpeakerName("character")].filter(Boolean);
+  const marker = getSpeakerMarker();
+  const labels = [];
+  names.forEach(name => {
+    labels.push(name);
+    if(marker) labels.push(marker + name, marker + " " + name);
+  });
+  return labels.map(normalizeSpeakerCompareLine).filter(Boolean);
+}
+function stripSpeakerLabelLines(text){
+  const labels = new Set(getPossibleSpeakerLabels());
+  if(!labels.size) return text;
+  return String(text || "").split(/\n/).filter(line => !labels.has(normalizeSpeakerCompareLine(line))).join("\n").replace(/\n{3,}/g,"\n\n").trim();
+}
+function getPreparedOutputForExport(){
+  let text = (getActiveOutput().value || "").replace(/\r/g, "");
+  const mode = epubTextModeEl ? epubTextModeEl.value : "current";
+  const labelMode = speakerLabelModeEl ? speakerLabelModeEl.value : "output";
+  if(mode === "removeLabels" || labelMode === "hideInEpub" || labelMode === "reviewOnly"){
+    text = stripSpeakerLabelLines(text);
+  }
+  if(mode === "novel"){
+    text = stripSpeakerLabelLines(text).replace(/\n{3,}/g,"\n\n").trim();
+  }
+  return text.trim();
+}
+function getResultStats(text, chunks){
+  const clean = stripHTMLTags(text || "");
+  const paragraphs = clean.split(/\n\s*\n+/).map(p=>p.trim()).filter(Boolean);
+  return {
+    chars: clean.length,
+    charsNoSpace: clean.replace(/\s/g,"").length,
+    paragraphs: paragraphs.length,
+    chunks: chunks.length,
+    scenes: chunks.filter(c => c.kind === "scene").length,
+    dialogues: chunks.filter(c => c.kind !== "scene").length,
+    user: chunks.filter(c => c.owner === "user").length,
+    character: chunks.filter(c => c.owner === "character").length
+  };
+}
+function fmtNum(n){ return Number(n || 0).toLocaleString("ko-KR"); }
+function updateResultStats(chunks, blocks, renderedText){
+  const stats = getResultStats(renderedText || "", chunks || []);
+  if(resultStatsEl){
+    resultStatsEl.innerHTML = `
+      <div class="stat"><strong>${fmtNum(stats.chars)}</strong><span>글자</span></div>
+      <div class="stat"><strong>${fmtNum(stats.charsNoSpace)}</strong><span>공백 제외</span></div>
+      <div class="stat"><strong>${fmtNum(stats.paragraphs)}</strong><span>문단</span></div>
+      <div class="stat"><strong>${fmtNum(stats.scenes)}</strong><span>지문</span></div>
+      <div class="stat"><strong>${fmtNum(stats.dialogues)}</strong><span>대사</span></div>
+      <div class="stat"><strong>${fmtNum(currentDuplicateGroups.length)}</strong><span>중복 묶음</span></div>
+      <div class="stat"><strong>${fmtNum(currentContainsItems.length)}</strong><span>키워드 후보</span></div>`;
+  }
+  updateRiskPanel(renderedText || "");
+  if(workflowHintEl){
+    const missing = !renderedText ? "입력값을 넣으면 결과와 검토 후보가 자동으로 갱신됩니다." : `${fmtNum(stats.paragraphs)}개 문단이 준비되었습니다. 검토 후 TXT/HTML/EPUB으로 내보낼 수 있습니다.`;
+    workflowHintEl.textContent = missing;
+  }
+}
+const RISK_TERMS = ["OOC", "시스템", "기록지", "설정", "요약", "이전 대화", "AI", "모델", "검열", "�"];
+function countTermInsensitive(text, term){
+  const hay = String(text || "").toLowerCase();
+  const needle = String(term || "").toLowerCase();
+  if(!needle) return 0;
+  let count = 0, pos = 0;
+  while((pos = hay.indexOf(needle, pos)) !== -1){ count++; pos += needle.length; }
+  return count;
+}
+function updateRiskPanel(text){
+  if(!riskPanelEl) return;
+  const found = RISK_TERMS.map(term => ({term, count:countTermInsensitive(text, term)})).filter(x => x.count > 0);
+  if(!found.length){
+    riskPanelEl.innerHTML = `<div class="emptyState">위험 문구 후보가 보이지 않습니다.</div>`;
+    return;
+  }
+  riskPanelEl.innerHTML = found.map(x => `<button type="button" class="riskChip" onclick="appendDeleteKeyword('${escapeAttr(x.term)}')"><span>${escapeHTML(x.term)}</span><b>${x.count}</b></button>`).join("") + `<div class="miniHelp">칩을 누르면 특정 글자 삭제 키워드에 추가됩니다.</div>`;
+}
+function appendDeleteKeyword(term){
+  const tokens = splitTokens(deleteContainsTokenEl.value || "");
+  if(!tokens.some(t => t.toLowerCase() === String(term).toLowerCase())) tokens.push(term);
+  deleteContainsTokenEl.value = tokens.join(", ");
+  deleteContainsEnabledEl.checked = true;
+  deleteContainsModeEl.value = "review";
+  transformText();
+  showToast("검토 키워드에 추가했습니다.");
+}
+function resetDuplicateChoices(){
+  duplicateDecisions = {};
+  duplicatePageByGroup = {};
+  transformText();
+  showToast("중복 선택을 초기화했습니다.");
+}
+function resetContainsChoices(){
+  containsDecisions = {};
+  transformText();
+  showToast("키워드 검토 선택을 초기화했습니다.");
+}
+function resetReviewOnly(){
+  resetReviewDecisions();
+  transformText();
+  showToast("검토 선택을 초기화했습니다.");
+}
+function getEpubConfig(){
+  const title = (epubTitleEl && epubTitleEl.value.trim()) || "정리한 로그";
+  return {
+    title,
+    subtitle: (epubSubtitleEl && epubSubtitleEl.value.trim()) || "",
+    author: (epubAuthorEl && epubAuthorEl.value.trim()) || "",
+    series: (epubSeriesEl && epubSeriesEl.value.trim()) || "",
+    volume: (epubVolumeEl && epubVolumeEl.value.trim()) || "",
+    description: (epubDescriptionEl && epubDescriptionEl.value.trim()) || "",
+    tags: splitTokens(epubTagsEl ? epubTagsEl.value : ""),
+    language: (epubLanguageEl && epubLanguageEl.value.trim()) || "ko",
+    chapterMode: chapterSplitModeEl ? chapterSplitModeEl.value : "none",
+    chapterSize: Math.max(1, parseInt(chapterSizeEl ? chapterSizeEl.value : "7000", 10) || 7000),
+    separator: (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "---",
+    chapterPrefix: (chapterTitlePrefixEl && chapterTitlePrefixEl.value.trim()) || "Chapter",
+    stylePreset: epubStylePresetEl ? epubStylePresetEl.value : "novel"
+  };
+}
+function splitTextIntoParagraphs(text){
+  return String(text || "").replace(/\r/g,"").split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
+}
+function splitTextIntoChapters(text){
+  const cfg = getEpubConfig();
+  const source = String(text || "").trim();
+  if(!source) return [];
+  const chapters = [];
+  const makeTitle = (idx) => `${cfg.chapterPrefix} ${idx + 1}`;
+  if(cfg.chapterMode === "separator"){
+    const sep = cfg.separator.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`^\\s*${sep}\\s*$`, "gm");
+    source.split(re).map(s=>s.trim()).filter(Boolean).forEach((body, idx) => chapters.push({title:makeTitle(idx), body}));
+  }else if(cfg.chapterMode === "paragraphs"){
+    const paras = splitTextIntoParagraphs(source);
+    for(let i=0; i<paras.length; i += cfg.chapterSize){
+      chapters.push({title:makeTitle(chapters.length), body:paras.slice(i, i + cfg.chapterSize).join("\n\n")});
+    }
+  }else if(cfg.chapterMode === "chars"){
+    const paras = splitTextIntoParagraphs(source);
+    let bucket = [], count = 0;
+    paras.forEach(p => {
+      if(bucket.length && count + p.length > cfg.chapterSize){
+        chapters.push({title:makeTitle(chapters.length), body:bucket.join("\n\n")});
+        bucket = []; count = 0;
+      }
+      bucket.push(p); count += p.length;
+    });
+    if(bucket.length) chapters.push({title:makeTitle(chapters.length), body:bucket.join("\n\n")});
+  }else{
+    chapters.push({title:cfg.title, body:source});
+  }
+  return chapters.length ? chapters : [{title:cfg.title, body:source}];
+}
+function escapeXML(str){
+  return String(str || "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#39;");
+}
+function restoreAllowedInlineSpans(escaped){
+  return String(escaped || "").replace(/&lt;span style=&quot;color:(#[0-9a-fA-F]{6})&quot;&gt;([\s\S]*?)&lt;\/span&gt;/g, '<span style="color:$1">$2</span>');
+}
+function paragraphToXhtml(p){
+  const lines = String(p || "").split(/\n/).map(line => restoreAllowedInlineSpans(escapeXML(line)));
+  return `<p>${lines.join("<br/>")}</p>`;
+}
+function textToXhtmlBody(text){
+  return splitTextIntoParagraphs(text).map(paragraphToXhtml).join("\n");
+}
+function getEpubCss(){
+  const preset = getEpubConfig().stylePreset;
+  const base = `body{line-height:1.82;word-break:keep-all;overflow-wrap:break-word;} p{margin:0 0 1em;} h1{font-size:1.45em;margin:0 0 1.2em;} .cover{text-align:center;} .cover img{max-width:100%;height:auto;}`;
+  if(preset === "paper") return base + ` body{font-family:serif;} p{text-indent:1em;margin-bottom:.65em;}`;
+  if(preset === "script") return base + ` body{font-family:sans-serif;} p{margin-bottom:1.1em;} p:nth-child(odd){padding-left:.5em;border-left:2px solid #ddd;}`;
+  if(preset === "backup") return base + ` body{font-family:monospace;font-size:.92em;} p{white-space:pre-wrap;margin-bottom:1.2em;}`;
+  return base + ` body{font-family:serif;} p{margin-bottom:.95em;}`;
+}
+function updateEpubPreview(){
+  const text = getPreparedOutputForExport();
+  const chapters = splitTextIntoChapters(text);
+  const cfg = getEpubConfig();
+  if(chapterPreviewEl){
+    if(!chapters.length){
+      chapterPreviewEl.innerHTML = `<div class="emptyState">결과가 생기면 챕터 목록이 표시됩니다.</div>`;
+    }else{
+      chapterPreviewEl.innerHTML = chapters.slice(0, 30).map((ch, idx) => `<div class="chapterRow"><b>${idx + 1}</b><span>${escapeHTML(ch.title)}</span><em>${fmtNum(stripHTMLTags(ch.body).length)}자</em></div>`).join("") + (chapters.length > 30 ? `<div class="miniHelp">외 ${chapters.length - 30}개 챕터</div>` : "");
+    }
+  }
+  if(epubPreviewEl){
+    const first = chapters[0] ? chapters[0].body : "";
+    const previewBody = splitTextIntoParagraphs(first).slice(0, 12).map(paragraphToXhtml).join("\n");
+    epubPreviewEl.innerHTML = `
+      <div class="previewMeta"><b>${escapeHTML(cfg.title)}</b>${cfg.author ? `<span>${escapeHTML(cfg.author)}</span>` : ""}<span>${chapters.length || 0}개 챕터</span></div>
+      <div class="bookPreview">${previewBody || `<p class="mutedText">미리볼 결과가 없습니다.</p>`}</div>`;
+  }
+}
+function safeFileName(name, ext){
+  const base = String(name || "download").replace(/[\\/:*?"<>|]/g,"_").replace(/\s+/g,"_").slice(0,80) || "download";
+  return base + ext;
+}
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+function buildStandaloneHTML(){
+  const cfg = getEpubConfig();
+  const chapters = splitTextIntoChapters(getPreparedOutputForExport());
+  const toc = chapters.map((ch, idx) => `<li><a href="#ch${idx+1}">${escapeXML(ch.title)}</a></li>`).join("\n");
+  const body = chapters.map((ch, idx) => `<section id="ch${idx+1}"><h1>${escapeXML(ch.title)}</h1>${textToXhtmlBody(ch.body)}</section>`).join("\n");
+  return `<!doctype html><html lang="${escapeXML(cfg.language)}"><head><meta charset="utf-8"><title>${escapeXML(cfg.title)}</title><style>${getEpubCss()} nav{margin-bottom:2rem;padding:1rem;border:1px solid #ddd;border-radius:12px;} section{max-width:720px;margin:0 auto 3rem;}</style></head><body><nav><strong>목차</strong><ol>${toc}</ol></nav>${body}</body></html>`;
+}
+function downloadHtml(){
+  const cfg = getEpubConfig();
+  downloadBlob(new Blob([buildStandaloneHTML()], {type:"text/html;charset=utf-8"}), safeFileName(cfg.title, ".html"));
+}
+function downloadMarkdown(){
+  const cfg = getEpubConfig();
+  const chapters = splitTextIntoChapters(stripHTMLTags(getPreparedOutputForExport()));
+  let md = `# ${cfg.title}\n\n`;
+  if(cfg.subtitle) md += `_${cfg.subtitle}_\n\n`;
+  if(cfg.author) md += `작가: ${cfg.author}\n\n`;
+  if(cfg.description) md += `${cfg.description}\n\n`;
+  chapters.forEach(ch => { md += `## ${ch.title}\n\n${ch.body}\n\n`; });
+  downloadBlob(new Blob([md], {type:"text/markdown;charset=utf-8"}), safeFileName(cfg.title, ".md"));
+}
+function downloadDoc(){
+  const cfg = getEpubConfig();
+  const html = buildStandaloneHTML();
+  downloadBlob(new Blob([html], {type:"application/msword;charset=utf-8"}), safeFileName(cfg.title, ".doc"));
+}
+function makeXhtmlDoc(title, body){
+  return `<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="${escapeXML(getEpubConfig().language)}" xml:lang="${escapeXML(getEpubConfig().language)}"><head><meta charset="utf-8"/><title>${escapeXML(title)}</title><link rel="stylesheet" type="text/css" href="styles.css"/></head><body>${body}</body></html>`;
+}
+async function getCoverInfo(){
+  const file = epubCoverInputEl && epubCoverInputEl.files && epubCoverInputEl.files[0];
+  if(!file) return null;
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g,"") || "jpg";
+  const typeMap = {jpg:"image/jpeg", jpeg:"image/jpeg", png:"image/png", webp:"image/webp", gif:"image/gif"};
+  return {name:`cover.${ext}`, media:typeMap[ext] || file.type || "image/jpeg", data:new Uint8Array(await file.arrayBuffer())};
+}
+function uuidLike(){
+  const s = `${Date.now()}-${Math.random()}-${getEpubConfig().title}`;
+  return "id-" + hashString(s);
+}
+async function downloadEpub(){
+  const cfg = getEpubConfig();
+  const chapters = splitTextIntoChapters(getPreparedOutputForExport());
+  if(!chapters.length){ showToast("EPUB으로 만들 결과가 없습니다."); return; }
+  const cover = await getCoverInfo();
+  const entries = [];
+  entries.push({name:"mimetype", data:"application/epub+zip"});
+  entries.push({name:"META-INF/container.xml", data:`<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`});
+  entries.push({name:"OEBPS/styles.css", data:getEpubCss()});
+  const chapterItems = [];
+  chapters.forEach((ch, idx) => {
+    const file = `chapter-${String(idx+1).padStart(3,"0")}.xhtml`;
+    chapterItems.push({id:`ch${idx+1}`, href:file, title:ch.title});
+    entries.push({name:`OEBPS/${file}`, data:makeXhtmlDoc(ch.title, `<h1>${escapeXML(ch.title)}</h1>${textToXhtmlBody(ch.body)}`)});
+  });
+  if(cover){
+    entries.push({name:`OEBPS/${cover.name}`, data:cover.data});
+    entries.push({name:"OEBPS/cover.xhtml", data:makeXhtmlDoc("Cover", `<section class="cover"><img src="${escapeXML(cover.name)}" alt="cover"/></section>`)});
+  }
+  const navItems = chapterItems.map(item => `<li><a href="${escapeXML(item.href)}">${escapeXML(item.title)}</a></li>`).join("");
+  entries.push({name:"OEBPS/nav.xhtml", data:makeXhtmlDoc("목차", `<nav epub:type="toc" id="toc"><h1>목차</h1><ol>${navItems}</ol></nav>`)});
+  const uid = uuidLike();
+  const metaTags = [
+    `<dc:identifier id="pub-id">${escapeXML(uid)}</dc:identifier>`,
+    `<dc:title>${escapeXML(cfg.title)}</dc:title>`,
+    cfg.subtitle ? `<dc:title id="subtitle">${escapeXML(cfg.subtitle)}</dc:title>` : "",
+    cfg.author ? `<dc:creator>${escapeXML(cfg.author)}</dc:creator>` : "",
+    `<dc:language>${escapeXML(cfg.language)}</dc:language>`,
+    cfg.description ? `<dc:description>${escapeXML(cfg.description)}</dc:description>` : "",
+    ...cfg.tags.map(tag => `<dc:subject>${escapeXML(tag)}</dc:subject>`),
+    cfg.series ? `<meta property="belongs-to-collection" id="series">${escapeXML(cfg.series)}</meta>` : "",
+    cfg.volume ? `<meta property="group-position">${escapeXML(cfg.volume)}</meta>` : "",
+    `<meta property="dcterms:modified">${new Date().toISOString().replace(/\.\d{3}Z$/, "Z")}</meta>`,
+    cover ? `<meta name="cover" content="cover-image"/>` : ""
+  ].filter(Boolean).join("\n");
+  const manifest = [
+    `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
+    `<item id="css" href="styles.css" media-type="text/css"/>`,
+    cover ? `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>` : "",
+    cover ? `<item id="cover-image" href="${escapeXML(cover.name)}" media-type="${escapeXML(cover.media)}" properties="cover-image"/>` : "",
+    ...chapterItems.map(item => `<item id="${item.id}" href="${escapeXML(item.href)}" media-type="application/xhtml+xml"/>`)
+  ].filter(Boolean).join("\n");
+  const spine = [cover ? `<itemref idref="cover" linear="no"/>` : "", ...chapterItems.map(item => `<itemref idref="${item.id}"/>`)].filter(Boolean).join("\n");
+  const opf = `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="pub-id" xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/"><metadata>${metaTags}</metadata><manifest>${manifest}</manifest><spine>${spine}</spine></package>`;
+  entries.push({name:"OEBPS/content.opf", data:opf});
+  const blob = createZipBlob(entries, "application/epub+zip");
+  downloadBlob(blob, safeFileName(cfg.title, ".epub"));
+}
+let CRC_TABLE = null;
+function getCRCTable(){
+  if(CRC_TABLE) return CRC_TABLE;
+  CRC_TABLE = new Uint32Array(256);
+  for(let n=0; n<256; n++){
+    let c=n;
+    for(let k=0; k<8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    CRC_TABLE[n] = c >>> 0;
+  }
+  return CRC_TABLE;
+}
+function crc32(bytes){
+  const table = getCRCTable();
+  let c = 0 ^ -1;
+  for(let i=0; i<bytes.length; i++) c = (c >>> 8) ^ table[(c ^ bytes[i]) & 0xff];
+  return (c ^ -1) >>> 0;
+}
+function dosDateTime(date){
+  const d = date || new Date();
+  const time = ((d.getHours() & 31) << 11) | ((d.getMinutes() & 63) << 5) | ((Math.floor(d.getSeconds()/2)) & 31);
+  const day = ((d.getFullYear() - 1980) << 9) | ((d.getMonth()+1) << 5) | d.getDate();
+  return {time, day};
+}
+function writeU16(dv, offset, value){ dv.setUint16(offset, value, true); }
+function writeU32(dv, offset, value){ dv.setUint32(offset, value >>> 0, true); }
+function createZipBlob(entries, type){
+  const enc = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  const dt = dosDateTime(new Date());
+  entries.forEach(entry => {
+    const nameBytes = enc.encode(entry.name);
+    const dataBytes = entry.data instanceof Uint8Array ? entry.data : enc.encode(String(entry.data || ""));
+    const crc = crc32(dataBytes);
+    const local = new Uint8Array(30 + nameBytes.length);
+    const dv = new DataView(local.buffer);
+    writeU32(dv,0,0x04034b50); writeU16(dv,4,20); writeU16(dv,6,0x0800); writeU16(dv,8,0);
+    writeU16(dv,10,dt.time); writeU16(dv,12,dt.day); writeU32(dv,14,crc); writeU32(dv,18,dataBytes.length); writeU32(dv,22,dataBytes.length);
+    writeU16(dv,26,nameBytes.length); writeU16(dv,28,0); local.set(nameBytes,30);
+    chunks.push(local, dataBytes);
+    const cd = new Uint8Array(46 + nameBytes.length);
+    const cdv = new DataView(cd.buffer);
+    writeU32(cdv,0,0x02014b50); writeU16(cdv,4,20); writeU16(cdv,6,20); writeU16(cdv,8,0x0800); writeU16(cdv,10,0);
+    writeU16(cdv,12,dt.time); writeU16(cdv,14,dt.day); writeU32(cdv,16,crc); writeU32(cdv,20,dataBytes.length); writeU32(cdv,24,dataBytes.length);
+    writeU16(cdv,28,nameBytes.length); writeU16(cdv,30,0); writeU16(cdv,32,0); writeU16(cdv,34,0); writeU16(cdv,36,0); writeU32(cdv,38,0); writeU32(cdv,42,offset);
+    cd.set(nameBytes,46);
+    central.push(cd);
+    offset += local.length + dataBytes.length;
+  });
+  const centralSize = central.reduce((sum, c) => sum + c.length, 0);
+  const centralOffset = offset;
+  chunks.push(...central);
+  const end = new Uint8Array(22);
+  const edv = new DataView(end.buffer);
+  writeU32(edv,0,0x06054b50); writeU16(edv,4,0); writeU16(edv,6,0); writeU16(edv,8,entries.length); writeU16(edv,10,entries.length); writeU32(edv,12,centralSize); writeU32(edv,16,centralOffset); writeU16(edv,20,0);
+  chunks.push(end);
+  return new Blob(chunks, {type:type || "application/zip"});
+}
+function collectPresetValues(){
+  const ids = ["removeDetails","removeEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","epubStylePreset","epubTextMode"];
+  const data = {};
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    data[id] = el.type === "checkbox" ? el.checked : el.value;
+  });
+  return data;
+}
+function applyPresetValues(data){
+  Object.entries(data || {}).forEach(([id, value]) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(el.type === "checkbox") el.checked = !!value;
+    else el.value = value;
+  });
+}
+function saveCurrentPreset(){
+  localStorage.setItem("rofan-cleaner-preset", JSON.stringify(collectPresetValues()));
+  showToast("현재 옵션을 저장했습니다.");
+}
+function loadSavedPreset(){
+  const raw = localStorage.getItem("rofan-cleaner-preset");
+  if(!raw){ showToast("저장된 프리셋이 없습니다."); return; }
+  try{
+    applyPresetValues(JSON.parse(raw));
+    transformText();
+    showToast("프리셋을 불러왔습니다.");
+  }catch(err){
+    console.error(err);
+    showToast("프리셋을 불러오지 못했습니다.");
+  }
+}
+function clearSavedPreset(){
+  localStorage.removeItem("rofan-cleaner-preset");
+  showToast("저장된 프리셋을 삭제했습니다.");
 }
 
 updateModeVisibility();
