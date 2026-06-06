@@ -140,14 +140,16 @@ function wirePrettyFileInputs(){
     label.dataset.fileWired = '1';
     label.setAttribute('tabindex', label.getAttribute('tabindex') || '0');
     label.setAttribute('role', 'button');
-    label.addEventListener('click', ev => {
-      if(ev.target === fileInput) return;
-      ev.preventDefault();
-      fileInput.click();
-    });
+    // 파일 선택은 label 기본 동작을 그대로 사용합니다.
+    // programmatic click + preventDefault 조합은 일부 모바일 브라우저에서 파일 선택 후 change가 누락될 수 있습니다.
+    label.addEventListener('pointerdown', ev => {
+      if(ev.target !== fileInput) fileInput.value = '';
+    }, {passive:true});
+    fileInput.addEventListener('click', () => { fileInput.value = ''; });
     label.addEventListener('keydown', ev => {
       if(ev.key === 'Enter' || ev.key === ' '){
         ev.preventDefault();
+        fileInput.value = '';
         fileInput.click();
       }
     });
@@ -4225,12 +4227,12 @@ function setupRenderedClassicInput(){
     const d=document.createElement('div'); d.textContent=text||''; return d.innerHTML;
   }
 
-  // File buttons: 모바일/데스크톱에서 숨겨진 input 클릭이 누락되는 경우를 한 번 더 보강합니다.
-  document.addEventListener('click', function(ev){
+  // File buttons: label 기본 파일 선택 동작을 보존하고, 같은 파일을 다시 선택해도 change가 발생하도록 값만 초기화합니다.
+  document.addEventListener('pointerdown', function(ev){
     const label = ev.target && ev.target.closest ? ev.target.closest('label.prettyFile, .fileControl') : null;
-    if(!label || ev.target.matches('input[type="file"]')) return;
+    if(!label || (ev.target.matches && ev.target.matches('input[type="file"]'))) return;
     const file = label.querySelector('input[type="file"]');
-    if(file){ ev.preventDefault(); file.click(); }
+    if(file) file.value = '';
   }, true);
 
   // 앱에서 만든 Markdown/HTML 주석은 입력창에서 숨기고, 색상/이름표는 렌더링해서 보여줍니다.
@@ -4462,6 +4464,30 @@ function setupRenderedClassicInput(){
       }
     }, true);
   });
+
+
+
+  // 파일 input change가 누락되거나 기존 핸들러가 덮여도 각 탭 로더가 반드시 실행되도록 보강합니다.
+  function bindReliableFileLoader(inputId, loaderName, labelId){
+    const el = document.getElementById(inputId);
+    if(!el || el.dataset.reliableLoaderWired === '1') return;
+    el.dataset.reliableLoaderWired = '1';
+    const run = () => {
+      try{
+        const label = labelId ? document.getElementById(labelId) : null;
+        if(label && el.files && el.files[0]) label.textContent = el.files[0].name || '선택됨';
+        const fn = window[loaderName] || (typeof globalThis !== 'undefined' ? globalThis[loaderName] : null);
+        if(typeof fn === 'function') fn();
+      }catch(err){ console.error(loaderName + ' reliable loader failed', err); if(typeof showToast === 'function') showToast('파일을 읽지 못했습니다.'); }
+    };
+    el.addEventListener('change', run, true);
+    el.addEventListener('input', run, true);
+  }
+  bindReliableFileLoader('classicFileInput','loadClassicFile','classicFileName');
+  bindReliableFileLoader('chatFileInput','loadChatFile','chatFileName');
+  bindReliableFileLoader('epubEditFileInput','loadEpubEditFile','epubEditFileName');
+  bindReliableFileLoader('epubCoverInput','loadCoverFile','epubCoverFileName');
+  bindReliableFileLoader('epubFontInput','loadEpubFontFile','epubFontFileName');
 
   // 초기 화면 동기화
   setTimeout(() => {

@@ -1,9 +1,10 @@
 const input = document.getElementById("inputText");
+const inputPreview = document.getElementById("inputTextPreview");
 const output = document.getElementById("outputText");
-const outputPreview = document.getElementById("outputPreview");
+const outputPreview = document.getElementById("outputTextPreview");
 const chatPaste = document.getElementById("chatPaste");
 const chatOutput = document.getElementById("chatOutputText");
-const chatOutputPreview = document.getElementById("chatOutputPreview");
+const chatOutputPreview = document.getElementById("chatOutputTextPreview");
 const chatFileInput = document.getElementById("chatFileInput");
 const classicFileInput = document.getElementById("classicFileInput");
 const excerptStartTextEl = document.getElementById("excerptStartText");
@@ -53,8 +54,8 @@ const oocCascadeModeEl = document.getElementById("oocCascadeMode");
 const speakerMarkerPresetEl = document.getElementById("speakerMarkerPreset");
 const speakerMarkerCustomEl = document.getElementById("speakerMarkerCustom");
 const speakerLabelColorEl = document.getElementById("speakerLabelColor");
-const speakerUserLabelColorEl = document.getElementById("speakerUserLabelColor");
-const speakerCharacterLabelColorEl = document.getElementById("speakerCharacterLabelColor");
+const speakerUserColorEl = document.getElementById("speakerUserColor");
+const speakerCharacterColorEl = document.getElementById("speakerCharacterColor");
 const speakerColorTargetEl = document.getElementById("speakerColorTarget");
 const speakerLabelModeEl = document.getElementById("speakerLabelMode");
 const resultStatsEl = document.getElementById("resultStats");
@@ -139,14 +140,16 @@ function wirePrettyFileInputs(){
     label.dataset.fileWired = '1';
     label.setAttribute('tabindex', label.getAttribute('tabindex') || '0');
     label.setAttribute('role', 'button');
-    label.addEventListener('click', ev => {
-      if(ev.target === fileInput) return;
-      ev.preventDefault();
-      fileInput.click();
-    });
+    // 파일 선택은 label 기본 동작을 그대로 사용합니다.
+    // programmatic click + preventDefault 조합은 일부 모바일 브라우저에서 파일 선택 후 change가 누락될 수 있습니다.
+    label.addEventListener('pointerdown', ev => {
+      if(ev.target !== fileInput) fileInput.value = '';
+    }, {passive:true});
+    fileInput.addEventListener('click', () => { fileInput.value = ''; });
     label.addEventListener('keydown', ev => {
       if(ev.key === 'Enter' || ev.key === ' '){
         ev.preventDefault();
+        fileInput.value = '';
         fileInput.click();
       }
     });
@@ -197,6 +200,11 @@ function updateQuoteColorPreview(){
 }
 setupColorWidget(epubEditTextColorEl, epubEditTextColorREl, epubEditTextColorGEl, epubEditTextColorBEl);
 setupColorWidget(epubQuoteColorEl, epubQuoteColorREl, epubQuoteColorGEl, epubQuoteColorBEl);
+[speakerUserColorEl, speakerCharacterColorEl].forEach(el => {
+  if(!el) return;
+  el.addEventListener("input", () => { updateColorSwatch(el); transformText(); scheduleAutosave(); });
+  updateColorSwatch(el);
+});
 
 input.addEventListener("input", () => {
   if(!isApplyingClassicExcerpt) classicActiveChunks = null;
@@ -238,9 +246,11 @@ chatPaste.addEventListener("input", () => {
   scheduleAutosave();
 });
 chatPaste.addEventListener("paste", handleRichPaste);
-[output, chatOutput, outputPreview, chatOutputPreview].forEach(el => {
+[output, chatOutput].forEach(el => {
   if(!el) return;
   el.addEventListener("scroll", () => scheduleAutosave(), {passive:true});
+  const preview = resultPreviewFor(el);
+  if(preview) preview.addEventListener("scroll", () => scheduleAutosave(), {passive:true});
 });
 
 [
@@ -268,7 +278,7 @@ deleteContainsTokenEl.addEventListener("input", transformText);
 userNameEl.addEventListener("input", transformText);
 characterNameEl.addEventListener("input", transformText);
 speakerMarkerCustomEl.addEventListener("input", transformText);
-[speakerLabelColorEl, speakerUserLabelColorEl, speakerCharacterLabelColorEl].forEach(el => { if(el) el.addEventListener("input", transformText); });
+if(speakerLabelColorEl) speakerLabelColorEl.addEventListener("input", transformText);
 if(speakerLabelModeEl) speakerLabelModeEl.addEventListener("change", transformText);
 [
   epubTitleEl, epubSubtitleEl, epubAuthorEl, epubSeriesEl, epubVolumeEl,
@@ -376,10 +386,10 @@ function collectWorkValues(){
     cachedEpubFontAsset,
     downloadFileBaseName,
     classicOutput: output ? output.value : "",
-    classicOutputScroll: (outputPreview || output) ? (outputPreview || output).scrollTop : 0,
+    classicOutputScroll: output ? getResultOutputScroll(output) : 0,
     chatHTML: chatPaste ? chatPaste.innerHTML : "",
     chatOutputValue: chatOutput ? chatOutput.value : "",
-    chatOutputScroll: (chatOutputPreview || chatOutput) ? (chatOutputPreview || chatOutput).scrollTop : 0,
+    chatOutputScroll: chatOutput ? getResultOutputScroll(chatOutput) : 0,
     cachedChatFileName,
     options: collectPresetValues(),
     duplicateDecisions,
@@ -455,10 +465,8 @@ function updateAutosaveBadge(text){
 function restoreOutputScrollFromState(state){
   if(!state) return;
   requestAnimationFrame(() => {
-    if(output && Number.isFinite(Number(state.classicOutputScroll))) output.scrollTop = Number(state.classicOutputScroll) || 0;
-    if(outputPreview && Number.isFinite(Number(state.classicOutputScroll))) outputPreview.scrollTop = Number(state.classicOutputScroll) || 0;
-    if(chatOutput && Number.isFinite(Number(state.chatOutputScroll))) chatOutput.scrollTop = Number(state.chatOutputScroll) || 0;
-    if(chatOutputPreview && Number.isFinite(Number(state.chatOutputScroll))) chatOutputPreview.scrollTop = Number(state.chatOutputScroll) || 0;
+    if(output && Number.isFinite(Number(state.classicOutputScroll))) setResultOutputScroll(output, Number(state.classicOutputScroll) || 0);
+    if(chatOutput && Number.isFinite(Number(state.chatOutputScroll))) setResultOutputScroll(chatOutput, Number(state.chatOutputScroll) || 0);
     if(epubEditEditor && Number.isFinite(Number(state.epubEditScroll))) epubEditEditor.scrollTop = Number(state.epubEditScroll) || 0;
   });
 }
@@ -522,8 +530,8 @@ async function restoreSavedWork(){
   isRestoringWork = false;
   transformText();
   if(state){
-    if(output && state.classicOutput) setOutputValue("classic", state.classicOutput);
-    if(chatOutput && state.chatOutputValue) setOutputValue("chat", state.chatOutputValue);
+    if(output && state.classicOutput) setResultOutput(output, state.classicOutput);
+    if(chatOutput && state.chatOutputValue) setResultOutput(chatOutput, state.chatOutputValue);
     restoreOutputScrollFromState(state);
   }
   updateResultStats([], [], getActiveOutputValue());
@@ -760,19 +768,15 @@ function getSpeakerMarker(){
   if(preset === "custom") return (speakerMarkerCustomEl.value || "").trim();
   return preset;
 }
-function normalizeHexColor(value, fallback){
-  const v = String(value || "").trim();
-  return /^#[0-9a-f]{6}$/i.test(v) ? v : (fallback || "#17181c");
+function wrapColorHTML(text, color){
+  const safeColor = /^#[0-9a-f]{6}$/i.test(color || "") ? color : "#17181c";
+  return `<span style="color:${safeColor}">${escapeHTML(text)}</span>`;
 }
 function speakerColorForOwner(owner){
-  if(owner === "user" && speakerUserLabelColorEl) return normalizeHexColor(speakerUserLabelColorEl.value, "#4f849c");
-  if(owner === "character" && speakerCharacterLabelColorEl) return normalizeHexColor(speakerCharacterLabelColorEl.value, "#8a6aa5");
-  return normalizeHexColor(speakerLabelColorEl ? speakerLabelColorEl.value : "", "#4f849c");
-}
-function wrapColorHTML(text, color, extraAttrs){
-  const safeColor = normalizeHexColor(color, "#17181c");
-  const attrs = extraAttrs ? " " + String(extraAttrs).trim() : "";
-  return `<span${attrs} style="color:${safeColor}">${escapeHTML(text)}</span>`;
+  const fallback = speakerLabelColorEl && speakerLabelColorEl.value ? speakerLabelColorEl.value : "#4f849c";
+  const el = owner === "user" ? speakerUserColorEl : owner === "character" ? speakerCharacterColorEl : null;
+  const value = el && el.value ? el.value : fallback;
+  return /^#[0-9a-f]{6}$/i.test(value || "") ? value : "#4f849c";
 }
 function makeSpeakerLabel(chunk){
   if(!(activeMode === "chat" || activeMode === "classic")) return "";
@@ -782,13 +786,12 @@ function makeSpeakerLabel(chunk){
   const marker = getSpeakerMarker();
   const colorTarget = speakerColorTargetEl ? speakerColorTargetEl.value : "none";
   const color = speakerColorForOwner(chunk.owner);
-  const ownerAttr = `class="speaker-label" data-speaker-owner="${escapeAttr(chunk.owner)}"`;
   if(colorTarget === "marker" && marker){
-    return wrapColorHTML(marker, color, ownerAttr + ' data-speaker-part="marker"') + escapeHTML(name);
+    return wrapColorHTML(marker, color) + name;
   }
   const label = marker + name;
-  if(colorTarget === "all") return wrapColorHTML(label, color, ownerAttr);
-  return escapeHTML(label);
+  if(colorTarget === "all") return wrapColorHTML(label, color);
+  return label;
 }
 function labelChunk(text, chunk, shouldLabel){
   if(!shouldLabel) return text;
@@ -796,44 +799,6 @@ function labelChunk(text, chunk, shouldLabel){
   if(!label) return text;
   return label + "\n" + text;
 }
-
-function restoreTrustedInlineMarkup(escaped){
-  return String(escaped || "")
-    .replace(/&lt;span((?:\s+(?:class|data-speaker-owner|data-speaker-part)=&quot;[^&quot;]*&quot;)*)\s+style=&quot;color:(#[0-9a-fA-F]{6})&quot;&gt;([\s\S]*?)&lt;\/span&gt;/g, (_m, attrs, color, inner) => `<span${attrs.replace(/&quot;/g, '"')} style="color:${color}">${inner}</span>`)
-    .replace(/&lt;span\s+style=&quot;color:(#[0-9a-fA-F]{6})&quot;&gt;([\s\S]*?)&lt;\/span&gt;/g, '<span style="color:$1">$2</span>');
-}
-function renderOutputHtml(value){
-  return restoreTrustedInlineMarkup(escapeHTML(String(value || ""))).replace(/\n/g, "<br>") || "";
-}
-function setOutputValue(mode, value){
-  const text = String(value || "");
-  if(mode === "chat"){
-    if(chatOutput) chatOutput.value = text;
-    if(chatOutputPreview) chatOutputPreview.innerHTML = renderOutputHtml(text);
-  }else{
-    if(output) output.value = text;
-    if(outputPreview) outputPreview.innerHTML = renderOutputHtml(text);
-  }
-  syncOutputPreviewHeights();
-}
-function syncOutputPreviewHeights(){
-  requestAnimationFrame(() => {
-    const pairs = [
-      {box: classicPanel, input: input, output: outputPreview || output},
-      {box: chatPanel, input: chatPaste, output: chatOutputPreview || chatOutput}
-    ];
-    pairs.forEach(({box,input,output}) => {
-      if(!box || box.classList.contains("hidden") || !input || !output) return;
-      const leftBox = input.closest ? input.closest(".editorBox") : null;
-      const outRect = output.getBoundingClientRect();
-      const leftRect = leftBox ? leftBox.getBoundingClientRect() : input.getBoundingClientRect();
-      const height = Math.max(input.offsetHeight || 420, Math.round(leftRect.bottom - outRect.top));
-      output.style.minHeight = height + "px";
-      output.style.height = height + "px";
-    });
-  });
-}
-window.addEventListener("resize", syncOutputPreviewHeights);
 
 // ------------------ 로판Ai 저장 파일 불러오기 ------------------
 function activateChatTab(){
@@ -1107,6 +1072,66 @@ function escapeHTML(str){
 }
 function escapeAttr(str){
   return escapeHTML(str).replace(/`/g,"&#096;");
+}
+function htmlFromResultText(text){
+  const escaped = escapeHTML(text || "");
+  // 결과창은 안전하게 escape한 뒤, 이 앱이 만든 제한적인 span 색상 태그만 다시 렌더링합니다.
+  // HTML/Markdown/EPUB 내보내기에는 raw 값이 그대로 쓰입니다.
+  return escaped.replace(/&lt;span\b([\s\S]*?)&gt;([\s\S]*?)&lt;\/span&gt;/gi, (match, rawAttrs, inner) => {
+    const attrs = String(rawAttrs || "");
+    const colorMatch = attrs.match(/color\s*:\s*(#[0-9a-fA-F]{6})/i);
+    const color = colorMatch ? colorMatch[1] : "";
+    const ownerMatch = attrs.match(/data-speaker-owner=&quot;([a-zA-Z_-]+)&quot;/i);
+    const hasSpeakerClass = /speaker-label/i.test(attrs);
+    const attrParts = [];
+    if(hasSpeakerClass) attrParts.push('class="speaker-label"');
+    if(ownerMatch) attrParts.push(`data-speaker-owner="${escapeAttr(ownerMatch[1])}"`);
+    if(color) attrParts.push(`style="color:${color}"`);
+    if(!attrParts.length) return inner;
+    return `<span ${attrParts.join(" ")}>${inner}</span>`;
+  });
+}
+function resultPreviewFor(el){
+  if(el === output) return outputPreview;
+  if(el === chatOutput) return chatOutputPreview;
+  return null;
+}
+function syncResultPreview(el){
+  const preview = resultPreviewFor(el);
+  if(!preview || !el) return;
+  const oldScroll = preview.scrollTop;
+  preview.innerHTML = htmlFromResultText(el.value || "");
+  preview.dataset.placeholder = el.getAttribute("placeholder") || "변환 결과";
+  preview.scrollTop = oldScroll;
+}
+function setResultOutput(el, value){
+  if(!el) return;
+  el.value = value || "";
+  syncResultPreview(el);
+}
+function getResultOutputScroll(el){
+  const preview = resultPreviewFor(el);
+  return preview ? preview.scrollTop : (el ? el.scrollTop : 0);
+}
+function setResultOutputScroll(el, value){
+  const preview = resultPreviewFor(el);
+  const v = Number(value) || 0;
+  if(preview) preview.scrollTop = v;
+  if(el) el.scrollTop = v;
+}
+
+function syncActiveResultHeight(){
+  const panel = activeMode === "chat" ? chatPanel : activeMode === "classic" ? classicPanel : null;
+  if(!panel || panel.classList.contains("hidden")) return;
+  const left = panel.querySelector(".editorGrid > .editorBox:not(.resultBox)");
+  const resultBox = panel.querySelector(".editorGrid > .editorBox.resultBox");
+  const preview = resultBox ? resultBox.querySelector(".richResultBox") : null;
+  const label = resultBox ? resultBox.querySelector(".editorLabel") : null;
+  if(!left || !resultBox || !preview) return;
+  const leftHeight = Math.max(360, Math.round(left.getBoundingClientRect().height));
+  const labelHeight = label ? Math.ceil(label.getBoundingClientRect().height) : 0;
+  resultBox.style.minHeight = leftHeight + "px";
+  preview.style.height = Math.max(300, leftHeight - labelHeight - 8) + "px";
 }
 function isItalicElement(el){
   if(!el || el.nodeType !== 1) return false;
@@ -1431,6 +1456,8 @@ function parseRofanChatChunks(root){
   const mergedBlocks = mergeRofanBlocksById(blocks, chunks);
   blocks.splice(0, blocks.length, ...mergedBlocks);
   preserveLeadingCharacterBlocks(blocks, chunks);
+  const responseBlocks = normalizeResponseBlocks(blocks, chunks);
+  blocks.splice(0, blocks.length, ...responseBlocks);
   return {chunks, blocks};
 }
 
@@ -1481,6 +1508,74 @@ function preserveLeadingCharacterBlocks(blocks, chunks){
       slice.forEach(c => { c.owner = "character"; });
     }
   }
+}
+
+function isLikelyChapterSeparatorText(text){
+  const clean = String(text || "").replace(/<[^>]*>/g, "").replace(/\s+/g, "").trim();
+  if(!clean) return false;
+  return /^[\-—―─━_]{3,}$/.test(clean);
+}
+
+function normalizeResponseBlocks(blocks, chunks){
+  if(!Array.isArray(blocks) || !blocks.length) return blocks || [];
+  const sorted = blocks.slice().sort((a,b)=>(a.startChunk||0)-(b.startChunk||0));
+  const grouped = [];
+  let current = null;
+  let seq = 0;
+  const finish = () => {
+    if(!current) return;
+    const related = chunks.slice(current.startChunk, current.endChunk).filter(Boolean);
+    current.text = related.map(c => c.text).filter(Boolean).join("\n\n").trim();
+    const owners = related.map(c => c.owner).filter(Boolean);
+    current.owner = current.owner || owners[0] || "";
+    if(current.text) grouped.push(current);
+    current = null;
+  };
+  sorted.forEach(block => {
+    const start = Math.max(0, block.startChunk || 0);
+    const end = Math.max(start, block.endChunk || start);
+    const related = chunks.slice(start, end).filter(Boolean);
+    const owner = block.owner || (related.find(c => c.owner) || {}).owner || "";
+    const text = related.map(c => c.text).filter(Boolean).join("\n\n").trim();
+    const separator = isLikelyChapterSeparatorText(text);
+    const canMerge = current && !separator && owner && current.owner === owner && current.endChunk === start;
+    if(!canMerge) finish();
+    if(!current){
+      current = {id:`rb${seq++}`, owner, text:"", startChunk:start, endChunk:end};
+    }else{
+      current.endChunk = Math.max(current.endChunk, end);
+    }
+    const id = current.id;
+    for(let i=start; i<end; i++){
+      if(chunks[i]) chunks[i].blockId = id;
+    }
+    if(separator){
+      finish();
+    }
+  });
+  finish();
+  return grouped;
+}
+
+function normalizeChunkResponseBlocks(chunks){
+  if(!Array.isArray(chunks) || !chunks.length) return chunks || [];
+  let seq = 0;
+  let currentId = "";
+  let currentOwner = "";
+  chunks.forEach(chunk => {
+    const owner = chunk.owner || "character";
+    const separator = isLikelyChapterSeparatorText(chunk.text);
+    if(!currentId || separator || owner !== currentOwner){
+      currentId = `md-rb${seq++}`;
+      currentOwner = owner;
+    }
+    chunk.blockId = currentId;
+    if(separator){
+      currentId = "";
+      currentOwner = "";
+    }
+  });
+  return chunks;
 }
 
 // ------------------ 중복/삭제 확인 패널 ------------------
@@ -2226,6 +2321,7 @@ function afterTransform(chunks, blocks, renderedText){
   updateResultStats(chunks || [], blocks || [], renderedText || "");
   updateEpubPreview();
   updateChapterDividerPanel();
+  syncActiveResultHeight();
 }
 function transformText(){
   if(activeMode === "epubedit"){
@@ -2264,7 +2360,7 @@ function transformText(){
     });
     const rendered = renderedPack.text;
     lastStructuredItems = renderedPack.items || [];
-    setOutputValue("chat", rendered);
+    setResultOutput(chatOutput, rendered);
     afterTransform(parsed.chunks, parsed.blocks, rendered);
     return;
   }
@@ -2314,7 +2410,7 @@ function transformText(){
   });
   const rendered = renderedPack.text;
   lastStructuredItems = renderedPack.items || [];
-  setOutputValue("classic", rendered);
+  setResultOutput(output, rendered);
   afterTransform(chunks, [], rendered);
 }
 
@@ -2325,7 +2421,7 @@ function getActiveOutput(){
   return output;
 }
 function copyResult(){
-  const value = getActiveOutputValue();
+  const value = getPlainActiveOutputValue();
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(value)
       .then(() => showToast("복사되었습니다."))
@@ -2369,7 +2465,7 @@ function safeDownloadFileName(ext, fallback){
   return safeFileName(currentDownloadBaseName(fallback), ext);
 }
 function downloadTxt(){
-  const blob=new Blob([getActiveOutputValue()],{type:"text/plain;charset=utf-8"});
+  const blob=new Blob([getPlainActiveOutputValue()],{type:"text/plain;charset=utf-8"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
   a.href=url;
@@ -2408,8 +2504,7 @@ function clearAll(){
     updateResultStats([], [], "");
   }else if(activeMode === "chat"){
     if(chatPaste) chatPaste.innerHTML="";
-    if(chatOutput){ setOutputValue("chat", ""); chatOutput.scrollTop = 0; }
-    if(chatOutputPreview) chatOutputPreview.scrollTop = 0;
+    if(chatOutput){ setResultOutput(chatOutput, ""); setResultOutputScroll(chatOutput, 0); }
     if(chatFileInput) chatFileInput.value="";
     if(chatFileNameEl) chatFileNameEl.textContent = "선택된 파일 없음";
     lastStructuredItems = [];
@@ -2417,8 +2512,7 @@ function clearAll(){
     updateResultStats([], [], getActiveOutputValue());
   }else{
     if(input) input.value="";
-    if(output){ setOutputValue("classic", ""); output.scrollTop = 0; }
-    if(outputPreview) outputPreview.scrollTop = 0;
+    if(output){ setResultOutput(output, ""); setResultOutputScroll(output, 0); }
     if(classicFileInput) classicFileInput.value = "";
     if(classicFileNameEl) classicFileNameEl.textContent = "선택된 파일 없음";
     if(excerptStartTextEl) excerptStartTextEl.value = "";
@@ -2565,6 +2659,9 @@ function getActiveOutputValue(){
   const el = getActiveOutput();
   return el ? (el.value || "") : "";
 }
+function getPlainActiveOutputValue(){
+  return stripHTMLTags(getActiveOutputValue()).replace(/&nbsp;/gi, " ").trim();
+}
 function setActiveOutputValue(value){
   if(activeMode === "epubedit"){
     if(epubEditEditor) epubEditEditor.innerHTML = plainTextToHtml(value || "");
@@ -2576,8 +2673,7 @@ function setActiveOutputValue(value){
   }
   const el = getActiveOutput();
   if(!el) return;
-  if(activeMode === "chat") setOutputValue("chat", value);
-  else setOutputValue("classic", value);
+  setResultOutput(el, value);
   updateResultStats([], [], value || "");
   updateEpubPreview();
   updateChapterDividerPanel();
@@ -2652,6 +2748,11 @@ function insertChapterDividerIntoEditor(current, position, separator){
   }
   return true;
 }
+function refreshChapterViews(){
+  updateEpubPreview();
+  updateChapterDividerPanel();
+  requestAnimationFrame(() => updateEpubPreview());
+}
 function insertChapterDividerAtCurrentMatch(){
   const matches = getChapterSearchMatches();
   if(!matches.length){ showToast("구분선을 넣을 문단을 찾지 못했습니다."); return; }
@@ -2662,22 +2763,17 @@ function insertChapterDividerAtCurrentMatch(){
 
   if(activeMode === "epubedit" && epubEditEditor){
     insertChapterDividerIntoEditor(current, position, separator);
+    refreshChapterViews();
+    scheduleAutosave();
   }else{
     const text = getActiveOutputValue();
     const paras = splitOutputParagraphsWithOffsets(text).map(p => p.text);
-    const insertAt = Math.max(0, Math.min(paras.length, position === "after" ? current.index + 1 : current.index));
+    const insertAt = position === "after" ? current.index + 1 : current.index;
     paras.splice(insertAt, 0, separator);
     setActiveOutputValue(paras.join("\n\n"));
-    if(Array.isArray(lastStructuredItems) && lastStructuredItems.length){
-      const newItem = {text: separator, owner:"character", kind:"scene", blockId:"chapter-separator-" + Date.now()};
-      const itemInsertAt = Math.max(0, Math.min(lastStructuredItems.length, insertAt));
-      lastStructuredItems.splice(itemInsertAt, 0, newItem);
-    }
+    refreshChapterViews();
+    scheduleAutosave();
   }
-  updateEpubPreview();
-  updateChapterDividerPanel();
-  requestAnimationFrame(() => { updateEpubPreview(); updateChapterDividerPanel(); });
-  scheduleAutosave();
   showToast(position === "after" ? "문단 아래에 구분선을 넣었습니다." : "문단 위에 구분선을 넣었습니다.");
 }
 function handleChapterDividerClick(e){
@@ -2732,6 +2828,16 @@ function renderChapterTocHtml(chapters, compact){
 function splitTextIntoParagraphs(text){
   return String(text || "").replace(/\r/g,"").split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
 }
+function isConfiguredChapterSeparator(text, cfg){
+  const raw = String(text || "");
+  const clean = raw.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").replace(/\s+/g, "").trim();
+  const sep = String((cfg && cfg.separator) || (chapterSeparatorEl && chapterSeparatorEl.value) || "—————").replace(/\s+/g, "").trim();
+  if(!clean || !sep) return false;
+  if(clean === sep) return true;
+  const dashLine = /^[\-—―─━_]{3,}$/;
+  return dashLine.test(clean) && dashLine.test(sep);
+}
+
 function splitTextIntoChapters(text){
   const cfg = getEpubConfig();
   const source = String(text || "").trim();
@@ -2739,9 +2845,18 @@ function splitTextIntoChapters(text){
   const chapters = [];
   const makeTitle = (idx) => getChapterTitle(idx, cfg);
   if(cfg.chapterMode === "separator"){
-    const sep = cfg.separator.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`^\\s*${sep}\\s*$`, "gm");
-    source.split(re).map(s=>s.trim()).filter(Boolean).forEach((body, idx) => chapters.push({title:makeTitle(idx), body}));
+    const paras = splitTextIntoParagraphs(source);
+    let bucket = [];
+    const flush = () => {
+      const body = bucket.join("\n\n").trim();
+      if(body) chapters.push({title:makeTitle(chapters.length), body});
+      bucket = [];
+    };
+    paras.forEach(p => {
+      if(isConfiguredChapterSeparator(p, cfg)) flush();
+      else bucket.push(p);
+    });
+    flush();
   }else if(cfg.chapterMode === "paragraphs"){
     const paras = splitTextIntoParagraphs(source);
     for(let i=0; i<paras.length; i += cfg.chapterSize){
@@ -2772,7 +2887,19 @@ function escapeXML(str){
     .replace(/'/g,"&#39;");
 }
 function restoreAllowedInlineSpans(escaped){
-  return restoreTrustedInlineMarkup(escaped);
+  return String(escaped || "").replace(/&lt;span\b([\s\S]*?)&gt;([\s\S]*?)&lt;\/span&gt;/gi, (match, rawAttrs, inner) => {
+    const attrs = String(rawAttrs || "");
+    const colorMatch = attrs.match(/color\s*:\s*(#[0-9a-fA-F]{6})/i);
+    const color = colorMatch ? colorMatch[1] : "";
+    const ownerMatch = attrs.match(/data-speaker-owner=&quot;([a-zA-Z_-]+)&quot;/i);
+    const hasSpeakerClass = /speaker-label/i.test(attrs);
+    const attrParts = [];
+    if(hasSpeakerClass) attrParts.push('class="speaker-label"');
+    if(ownerMatch) attrParts.push(`data-speaker-owner="${escapeXML(ownerMatch[1])}"`);
+    if(color) attrParts.push(`style="color:${color}"`);
+    if(!attrParts.length) return inner;
+    return `<span ${attrParts.join(" ")}>${inner}</span>`;
+  });
 }
 function paragraphToXhtml(p){
   const lines = String(p || "").split(/\n/).map(line => restoreAllowedInlineSpans(escapeXML(line)));
@@ -2828,35 +2955,48 @@ function safeMetaValue(value, fallback){
   const v = String(value || "").replace(/[;\n>]/g, "").trim();
   return v || fallback;
 }
-function shouldStripSpeakerLabelsForExport(){
-  const mode = epubTextModeEl ? epubTextModeEl.value : "current";
-  const labelMode = speakerLabelModeEl ? speakerLabelModeEl.value : "output";
-  return mode === "removeLabels" || mode === "novel" || labelMode === "hideInEpub" || labelMode === "reviewOnly";
-}
 function stripCurrentSpeakerLabelsFromItemText(text){
-  const value = String(text || "");
-  return (shouldStripSpeakerLabelsForExport() ? stripSpeakerLabelLines(value) : value).trim();
+  return stripSpeakerLabelLines(String(text || "")).trim();
 }
+function shouldKeepSpeakerLabelsForExport(){
+  if(!(activeMode === "chat" || activeMode === "classic")) return false;
+  if(!labelSpeakersEl || !labelSpeakersEl.checked) return false;
+  const mode = speakerLabelModeEl ? speakerLabelModeEl.value : "output";
+  return mode === "output";
+}
+function mergeStructuredItemsByBlock(items){
+  const out = [];
+  (items || []).forEach((item, idx) => {
+    if(!item || !String(item.text || "").trim()) return;
+    const blockId = item.blockId || ("block-" + idx);
+    const owner = item.owner || "character";
+    const kind = item.kind || "normal";
+    const last = out[out.length - 1];
+    if(last && last.blockId === blockId && last.owner === owner && last.kind === kind){
+      last.text = [last.text, item.text].filter(Boolean).join("\n\n");
+    }else{
+      out.push({blockId, owner, kind, text:item.text || ""});
+    }
+  });
+  return out;
+}
+
 function structuredItemsToHtml(items){
-  const sep = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "—————";
-  return (items || []).map((item, idx) => {
-    if(String(item.text || "").trim() === sep) return `<p data-chapter-separator="true">${escapeHTML(sep)}</p>`;
+  return mergeStructuredItemsByBlock(items).map((item, idx) => {
     const owner = escapeAttr(safeMetaValue(item.owner, idx === 0 ? "character" : "character"));
     const kind = escapeAttr(safeMetaValue(item.kind, "normal"));
     const blockId = escapeAttr(safeMetaValue(item.blockId, "block-" + idx));
-    const cleanText = stripCurrentSpeakerLabelsFromItemText(item.text || "");
-    const paragraphs = String(cleanText || "").split(/\n+/).filter(Boolean).map(t => `<p>${restoreTrustedInlineMarkup(escapeHTML(t))}</p>`).join("\n");
+    const cleanText = shouldKeepSpeakerLabelsForExport() ? String(item.text || "").trim() : stripCurrentSpeakerLabelsFromItemText(item.text || "");
+    const paragraphs = String(cleanText || "").split(/\n+/).filter(Boolean).map(t => `<p>${htmlFromResultText(t)}</p>`).join("\n");
     return paragraphs ? `<div class="rofan-block" data-block-id="${blockId}" data-owner="${owner}" data-kind="${kind}">${paragraphs}</div>` : "";
   }).filter(Boolean).join("\n");
 }
 function structuredItemsToMarkdown(items){
-  const sep = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "—————";
-  return (items || []).map((item, idx) => {
-    if(String(item.text || "").trim() === sep) return sep;
+  return mergeStructuredItemsByBlock(items).map((item, idx) => {
     const owner = safeMetaValue(item.owner, idx === 0 ? "character" : "character");
     const kind = safeMetaValue(item.kind, "normal");
     const blockId = safeMetaValue(item.blockId, "block-" + idx);
-    const body = stripCurrentSpeakerLabelsFromItemText(item.text || "");
+    const body = shouldKeepSpeakerLabelsForExport() ? String(item.text || "").trim() : stripCurrentSpeakerLabelsFromItemText(item.text || "");
     return body ? `<!-- rofan:block=${blockId};owner=${owner};kind=${kind} -->\n${body}` : "";
   }).filter(Boolean).join("\n\n");
 }
@@ -2906,7 +3046,7 @@ function parseStructuredMarkdownToChunks(raw){
       chunks.push({id:'mdc-' + (seq++), kind:it.kind || 'normal', owner:it.owner || 'character', text:p, color:'', fromTable:false, fromDetails:false, blockId:it.block || ('md-' + seq)});
     });
   });
-  return chunks.length ? chunks : null;
+  return chunks.length ? normalizeChunkResponseBlocks(chunks) : null;
 }
 
 function structuredMarkdownToHtml(raw){
@@ -2976,7 +3116,9 @@ function buildStandaloneHTML(){
   const cfg = getEpubConfig();
   const chapters = getExportChapters();
   const toc = chapters.map((ch, idx) => `<li><a href="#ch${idx+1}">${escapeXML(ch.title)}</a></li>`).join("\n");
-  const body = chapters.map((ch, idx) => `<section id="ch${idx+1}"><h1>${escapeXML(ch.title)}</h1>${chapterBodyToXhtml(ch)}</section>`).join("\n");
+  const body = (activeMode !== "epubedit" && lastStructuredItems && lastStructuredItems.length)
+    ? `<section id="ch1"><h1>${escapeXML(cfg.title)}</h1>${structuredItemsToHtml(lastStructuredItems)}</section>`
+    : chapters.map((ch, idx) => `<section id="ch${idx+1}"><h1>${escapeXML(ch.title)}</h1>${chapterBodyToXhtml(ch)}</section>`).join("\n");
   return `<!doctype html><html lang="${escapeXML(cfg.language)}"><head><meta charset="utf-8"><title>${escapeXML(cfg.title)}</title><style>${getEpubCss()} nav{margin-bottom:2rem;padding:1rem;border:1px solid #ddd;border-radius:12px;} section{max-width:720px;margin:0 auto 3rem;}</style></head><body><nav><strong>목차</strong><ol>${toc}</ol></nav>${body}</body></html>`;
 }
 function downloadHtml(){
@@ -3138,7 +3280,7 @@ function createZipBlob(entries, type){
   return new Blob(chunks, {type:type || "application/zip"});
 }
 function collectPresetValues(){
-  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerUserLabelColor","speakerCharacterLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode","epubEditTextColor","epubQuoteColor","epubEditTextColorR","epubEditTextColorG","epubEditTextColorB","epubQuoteColorR","epubQuoteColorG","epubQuoteColorB"];
+  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerUserColor","speakerCharacterColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode","epubEditTextColor","epubQuoteColor","epubEditTextColorR","epubEditTextColorG","epubEditTextColorB","epubQuoteColorR","epubQuoteColorG","epubQuoteColorB"];
   const data = {};
   ids.forEach(id => {
     const el = document.getElementById(id);
@@ -3147,6 +3289,12 @@ function collectPresetValues(){
   });
   return data;
 }
+function refreshColorWidgets(){
+  syncRgbFromColor(epubEditTextColorEl, epubEditTextColorREl, epubEditTextColorGEl, epubEditTextColorBEl);
+  syncRgbFromColor(epubQuoteColorEl, epubQuoteColorREl, epubQuoteColorGEl, epubQuoteColorBEl);
+  [speakerUserColorEl, speakerCharacterColorEl].forEach(updateColorSwatch);
+  updateQuoteColorPreview();
+}
 function applyPresetValues(data){
   Object.entries(data || {}).forEach(([id, value]) => {
     const el = document.getElementById(id);
@@ -3154,6 +3302,7 @@ function applyPresetValues(data){
     if(el.type === "checkbox") el.checked = !!value;
     else el.value = value;
   });
+  refreshColorWidgets();
 }
 function saveCurrentPreset(){
   localStorage.setItem("rofan-cleaner-preset", JSON.stringify(collectPresetValues()));
@@ -3694,6 +3843,661 @@ function chapterBodyToXhtml(ch){
   return textToXhtmlBody(ch.body || "");
 }
 
+window.addEventListener("resize", () => requestAnimationFrame(syncActiveResultHeight));
 restoreSavedWork();
-syncRgbFromColor(epubEditTextColorEl, epubEditTextColorREl, epubEditTextColorGEl, epubEditTextColorBEl);
-syncRgbFromColor(epubQuoteColorEl, epubQuoteColorREl, epubQuoteColorGEl, epubQuoteColorBEl);
+refreshColorWidgets();
+syncResultPreview(output);
+syncResultPreview(chatOutput);
+requestAnimationFrame(syncActiveResultHeight);
+
+/* --- final stability patch: visual result, tab-safe chapters, block-height sync --- */
+const ROFAN_CHAPTER_BREAK_TOKEN = "⟦ROFAN_CHAPTER_BREAK⟧";
+const chapterSettingsByMode = window.__chapterSettingsByMode || (window.__chapterSettingsByMode = {});
+function captureChapterSettings(){
+  return {
+    split: chapterSplitModeEl ? chapterSplitModeEl.value : "none",
+    size: chapterSizeEl ? chapterSizeEl.value : "7000",
+    sep: chapterSeparatorEl ? chapterSeparatorEl.value : "—————",
+    prefix: chapterTitlePrefixEl ? chapterTitlePrefixEl.value : "Chapter",
+    first: chapterFirstTitleEl ? chapterFirstTitleEl.value : "",
+    pos: chapterPositionEl ? chapterPositionEl.value : "before",
+    keyword: chapterKeywordInputEl ? chapterKeywordInputEl.value : "",
+    order: chapterOrderInputEl ? chapterOrderInputEl.value : ""
+  };
+}
+function applyChapterSettingsPack(pack){
+  if(!pack) return;
+  if(chapterSplitModeEl) chapterSplitModeEl.value = pack.split || "none";
+  if(chapterSizeEl) chapterSizeEl.value = pack.size || "7000";
+  if(chapterSeparatorEl) chapterSeparatorEl.value = pack.sep || "—————";
+  if(chapterTitlePrefixEl) chapterTitlePrefixEl.value = pack.prefix || "Chapter";
+  if(chapterFirstTitleEl) chapterFirstTitleEl.value = pack.first || "";
+  if(chapterPositionEl) chapterPositionEl.value = pack.pos || "before";
+  if(chapterKeywordInputEl){ chapterKeywordInputEl.value = pack.keyword || ""; chapterKeywordQuery = chapterKeywordInputEl.value; }
+  if(chapterOrderInputEl){ chapterOrderInputEl.value = pack.order || ""; chapterOrderQuery = chapterOrderInputEl.value; }
+}
+function saveActiveChapterSettings(){ chapterSettingsByMode[activeMode || "classic"] = captureChapterSettings(); }
+function ensureActiveChapterSettings(){
+  const key = activeMode || "classic";
+  if(!chapterSettingsByMode[key]) chapterSettingsByMode[key] = captureChapterSettings();
+  applyChapterSettingsPack(chapterSettingsByMode[key]);
+}
+[chapterSplitModeEl,chapterSizeEl,chapterSeparatorEl,chapterTitlePrefixEl,chapterFirstTitleEl,chapterPositionEl,chapterKeywordInputEl,chapterOrderInputEl].forEach(el=>{
+  if(!el) return;
+  el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => { saveActiveChapterSettings(); refreshChapterViews(); }, true);
+});
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    saveActiveChapterSettings();
+    const next = tab.dataset.tab || "classic";
+    setTimeout(() => {
+      if(!chapterSettingsByMode[next]) chapterSettingsByMode[next] = Object.assign({}, captureChapterSettings());
+      applyChapterSettingsPack(chapterSettingsByMode[next]);
+      refreshChapterViews();
+      requestAnimationFrame(syncActiveResultHeight);
+    }, 0);
+  }, true);
+});
+
+function isRofanChapterBreakText(text){
+  return String(text || "").includes(ROFAN_CHAPTER_BREAK_TOKEN);
+}
+function stripRofanChapterBreakText(text){
+  return String(text || "").replace(new RegExp(ROFAN_CHAPTER_BREAK_TOKEN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "").trim();
+}
+function htmlFromResultText(text){
+  let escaped = escapeHTML(text || "");
+  const tokenEsc = escapeHTML(ROFAN_CHAPTER_BREAK_TOKEN);
+  escaped = escaped.replace(new RegExp(tokenEsc, "g"), '<hr class="chapter-editor-separator" data-chapter-separator="true">');
+  return escaped.replace(/&lt;span\b([\s\S]*?)&gt;([\s\S]*?)&lt;\/span&gt;/gi, (match, rawAttrs, inner) => {
+    const attrs = String(rawAttrs || "");
+    const colorMatch = attrs.match(/color\s*:\s*(#[0-9a-fA-F]{6})/i);
+    const color = colorMatch ? colorMatch[1] : "";
+    const ownerMatch = attrs.match(/data-speaker-owner=&quot;([a-zA-Z_-]+)&quot;/i);
+    const hasSpeakerClass = /speaker-label/i.test(attrs);
+    const attrParts = [];
+    if(hasSpeakerClass) attrParts.push('class="speaker-label"');
+    if(ownerMatch) attrParts.push(`data-speaker-owner="${escapeAttr(ownerMatch[1])}"`);
+    if(color) attrParts.push(`style="color:${color}"`);
+    if(!attrParts.length) return inner;
+    return `<span ${attrParts.join(" ")}>${inner}</span>`;
+  });
+}
+function syncResultPreview(el){
+  const preview = resultPreviewFor(el);
+  if(!preview || !el) return;
+  const oldScroll = preview.scrollTop;
+  preview.innerHTML = htmlFromResultText(el.value || "");
+  preview.dataset.placeholder = el.getAttribute("placeholder") || "변환 결과";
+  preview.scrollTop = oldScroll;
+}
+function setResultOutput(el, value){
+  if(!el) return;
+  el.value = value || "";
+  syncResultPreview(el);
+  requestAnimationFrame(syncActiveResultHeight);
+}
+function getPlainActiveOutputValue(){
+  return stripHTMLTags(getActiveOutputValue()).replace(new RegExp(ROFAN_CHAPTER_BREAK_TOKEN, "g"), "").replace(/&nbsp;/gi, " ").trim();
+}
+function splitOutputParagraphsWithOffsets(text){
+  const re = /\n\s*\n+/g;
+  const parts = [];
+  let start = 0, m;
+  while((m = re.exec(text))){
+    const raw = text.slice(start, m.index);
+    if(raw.trim()) parts.push({text:raw.trim(), start, end:m.index});
+    start = re.lastIndex;
+  }
+  const raw = text.slice(start);
+  if(raw.trim()) parts.push({text:raw.trim(), start, end:text.length});
+  return parts;
+}
+function getChapterSearchMatches(){
+  const q = String(chapterKeywordQuery || "").trim().toLowerCase();
+  const order = String(chapterOrderQuery || "").trim();
+  const text = getActiveOutputValue();
+  let matches = splitOutputParagraphsWithOffsets(text)
+    .map((p, index) => ({...p, index}))
+    .filter(p => !isRofanChapterBreakText(p.text) && !isConfiguredChapterSeparator(p.text, getEpubConfig()));
+  if(q) matches = matches.filter(p => stripHTMLTags(p.text).toLowerCase().includes(q));
+  if(order){
+    const n = Number(order);
+    if(Number.isFinite(n) && n > 0) matches = matches.filter((_p, idx) => idx + 1 === n || _p.index + 1 === n);
+  }
+  return matches;
+}
+function isConfiguredChapterSeparator(text, cfg){
+  const raw = String(text || "");
+  if(isRofanChapterBreakText(raw)) return true;
+  const clean = raw.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").replace(/\s+/g, "").trim();
+  const sep = String((cfg && cfg.separator) || (chapterSeparatorEl && chapterSeparatorEl.value) || "—————").replace(/\s+/g, "").trim();
+  if(!clean || !sep) return false;
+  if(clean === sep) return true;
+  const dashLine = /^[\-—―─━_]{3,}$/;
+  return dashLine.test(clean) && dashLine.test(sep);
+}
+function insertChapterDividerAtCurrentMatch(){
+  const matches = getChapterSearchMatches();
+  if(!matches.length){ showToast("구분선을 넣을 문단을 찾지 못했습니다."); return; }
+  const current = matches[Math.max(0, Math.min(matches.length - 1, chapterMatchPage || 0))];
+  const separator = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "—————";
+  const position = chapterPositionEl ? chapterPositionEl.value : "before";
+  if(chapterSplitModeEl) chapterSplitModeEl.value = "separator";
+  saveActiveChapterSettings();
+  if(activeMode === "epubedit" && epubEditEditor){
+    insertChapterDividerIntoEditor(current, position, separator);
+  }else{
+    const text = getActiveOutputValue();
+    const insertPos = position === "after" ? current.end : current.start;
+    const before = text.slice(0, insertPos).replace(/[\s\n]+$/g, "");
+    const after = text.slice(insertPos).replace(/^[\s\n]+/g, "");
+    const nextText = [before, ROFAN_CHAPTER_BREAK_TOKEN, after].filter(Boolean).join("\n\n");
+    const el = getActiveOutput();
+    if(el) setResultOutput(el, nextText);
+  }
+  refreshChapterViews();
+  setTimeout(refreshChapterViews, 30);
+  scheduleAutosave();
+  showToast(position === "after" ? "문단 아래에 챕터 구분선을 넣었습니다." : "문단 위에 챕터 구분선을 넣었습니다.");
+}
+function splitTextIntoChapters(text){
+  const cfg = getEpubConfig();
+  const source = String(text || "").trim();
+  if(!source) return [];
+  const chapters = [];
+  const makeTitle = idx => getChapterTitle(idx, cfg);
+  if(cfg.chapterMode === "separator"){
+    const paras = splitTextIntoParagraphs(source);
+    let bucket = [];
+    const flush = () => {
+      const body = bucket.join("\n\n").replace(new RegExp(ROFAN_CHAPTER_BREAK_TOKEN, "g"), "").trim();
+      if(body) chapters.push({title:makeTitle(chapters.length), body});
+      bucket = [];
+    };
+    paras.forEach(p => {
+      if(isConfiguredChapterSeparator(p, cfg)) flush();
+      else bucket.push(p);
+    });
+    flush();
+  }else if(cfg.chapterMode === "paragraphs"){
+    const paras = splitTextIntoParagraphs(source).filter(p => !isConfiguredChapterSeparator(p, cfg));
+    for(let i=0; i<paras.length; i += cfg.chapterSize){ chapters.push({title:makeTitle(chapters.length), body:paras.slice(i, i + cfg.chapterSize).join("\n\n")}); }
+  }else if(cfg.chapterMode === "chars"){
+    const paras = splitTextIntoParagraphs(source).filter(p => !isConfiguredChapterSeparator(p, cfg));
+    let bucket = [], count = 0;
+    paras.forEach(p => {
+      if(bucket.length && count + p.length > cfg.chapterSize){ chapters.push({title:makeTitle(chapters.length), body:bucket.join("\n\n")}); bucket=[]; count=0; }
+      bucket.push(p); count += p.length;
+    });
+    if(bucket.length) chapters.push({title:makeTitle(chapters.length), body:bucket.join("\n\n")});
+  }else{
+    const clean = splitTextIntoParagraphs(source).filter(p => !isConfiguredChapterSeparator(p, cfg)).join("\n\n");
+    chapters.push({title:cfg.firstChapterTitle || cfg.title, body:clean});
+  }
+  return chapters.filter(ch => String(ch.body || "").trim());
+}
+function editorHtmlToChapterBlocks(html){
+  const temp=document.createElement('div'); temp.innerHTML=html || '';
+  const blocks=[];
+  Array.from(temp.childNodes).forEach(node => {
+    const text = String(node.innerText || node.textContent || "").trim();
+    if(node.nodeType===Node.ELEMENT_NODE && (node.tagName==='HR' || node.getAttribute('data-chapter-separator') === 'true')) blocks.push({sep:true});
+    else if(isConfiguredChapterSeparator(text, getEpubConfig())) blocks.push({sep:true});
+    else if(text || node.nodeType===Node.ELEMENT_NODE) blocks.push({html: node.outerHTML || escapeHTML(node.textContent||'')});
+  });
+  return blocks;
+}
+function getExportChapters(markdownMode){
+  if(activeMode !== "epubedit"){
+    return splitTextIntoChapters(markdownMode ? stripHTMLTags(getPreparedOutputForExport()) : getPreparedOutputForExport());
+  }
+  const cfg = getEpubConfig();
+  const html = editorHtmlForExport();
+  const blocks = editorHtmlToChapterBlocks(html);
+  const makeTitle = idx => getChapterTitle(idx, cfg);
+  if(markdownMode){ return splitTextIntoChapters(blockHtmlToText(html)); }
+  const makeChapter = (bucket, idxTitle) => ({title: idxTitle === null ? cfg.title : makeTitle(idxTitle), bodyHtml:bucket.join("\n"), body:blockHtmlToText(bucket.join("\n"))});
+  if(cfg.chapterMode === "separator"){
+    const chapters=[]; let bucket=[];
+    blocks.forEach(b => { if(b.sep){ if(bucket.length){ chapters.push(makeChapter(bucket, chapters.length)); bucket=[]; } } else if(b.html) bucket.push(b.html); });
+    if(bucket.length) chapters.push(makeChapter(bucket, chapters.length));
+    return chapters.length ? chapters : [{title:cfg.firstChapterTitle || cfg.title, bodyHtml:html, body:blockHtmlToText(html)}];
+  }
+  if(cfg.chapterMode === "chars" || cfg.chapterMode === "paragraphs"){
+    const chapters=[]; let bucket=[]; let count=0;
+    blocks.filter(b => b.html).forEach(b => {
+      const t = blockHtmlToText(b.html);
+      const unit = cfg.chapterMode === "paragraphs" ? 1 : t.length;
+      if(bucket.length && count + unit > cfg.chapterSize){ chapters.push(makeChapter(bucket, chapters.length)); bucket=[]; count=0; }
+      bucket.push(b.html); count += unit;
+    });
+    if(bucket.length) chapters.push(makeChapter(bucket, chapters.length));
+    if(chapters.length) return chapters;
+  }
+  return html ? [{title:cfg.firstChapterTitle || cfg.title, bodyHtml:html, body:blockHtmlToText(html)}] : [];
+}
+function exportedBodyHtml(){
+  return getExportChapters().map((ch, idx) => `<section id="ch${idx+1}"><h1>${escapeXML(ch.title)}</h1>${chapterBodyToXhtml(ch)}</section>`).join("\n");
+}
+function buildStandaloneHTML(){
+  const cfg = getEpubConfig();
+  const chapters = getExportChapters();
+  const toc = chapters.map((ch, idx) => `<li><a href="#ch${idx+1}">${escapeXML(ch.title)}</a></li>`).join("\n");
+  const body = chapters.map((ch, idx) => `<section id="ch${idx+1}"><h1>${escapeXML(ch.title)}</h1>${chapterBodyToXhtml(ch)}</section>`).join("\n");
+  return `<!doctype html><html lang="${escapeXML(cfg.language)}"><head><meta charset="utf-8"><title>${escapeXML(cfg.title)}</title><style>${getEpubCss()} nav{margin-bottom:2rem;padding:1rem;border:1px solid #ddd;border-radius:12px;} section{max-width:720px;margin:0 auto 3rem;}</style></head><body><nav><strong>목차</strong><ol>${toc}</ol></nav>${body}</body></html>`;
+}
+function syncActiveResultHeight(){
+  const panel = activeMode === "chat" ? chatPanel : activeMode === "classic" ? classicPanel : null;
+  if(!panel || panel.classList.contains("hidden")) return;
+  const grid = panel.querySelector(".editorGrid");
+  const left = panel.querySelector(".editorGrid > .editorBox:not(.resultBox)");
+  const resultBox = panel.querySelector(".editorGrid > .editorBox.resultBox");
+  const preview = resultBox ? resultBox.querySelector(".richResultBox") : null;
+  const label = resultBox ? resultBox.querySelector(".editorLabel") : null;
+  if(!grid || !left || !resultBox || !preview) return;
+  const mobile = window.matchMedia("(max-width: 860px)").matches;
+  if(mobile){
+    resultBox.style.height = ""; resultBox.style.minHeight = ""; resultBox.style.overflow = "";
+    preview.style.height = "360px"; preview.style.maxHeight = ""; preview.style.flex = "";
+    return;
+  }
+  const leftRect = left.getBoundingClientRect();
+  const leftHeight = Math.max(420, Math.round(leftRect.height));
+  const labelHeight = label ? Math.ceil(label.getBoundingClientRect().height) + 9 : 0;
+  const previewHeight = Math.max(320, leftHeight - labelHeight);
+  resultBox.style.height = leftHeight + "px";
+  resultBox.style.minHeight = leftHeight + "px";
+  resultBox.style.overflow = "hidden";
+  preview.style.height = previewHeight + "px";
+  preview.style.maxHeight = previewHeight + "px";
+  preview.style.flex = "0 0 auto";
+}
+function refreshChapterViews(){
+  updateEpubPreview();
+  updateChapterDividerPanel();
+  requestAnimationFrame(() => { updateEpubPreview(); syncActiveResultHeight(); });
+}
+
+function stripRofanMetaCommentsForDisplay(text){
+  return String(text || "").replace(/<!--\s*rofan:[\s\S]*?-->/gi, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+function htmlFromInputText(text){
+  return htmlFromResultText(stripRofanMetaCommentsForDisplay(text || ""));
+}
+function renderedInputToText(node){
+  if(!node) return "";
+  const clone = node.cloneNode(true);
+  clone.querySelectorAll('.rofanMetaHidden').forEach(el => el.remove());
+  clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+  clone.querySelectorAll('div,p,blockquote,hr').forEach(el => {
+    if(el.tagName === 'HR') el.replaceWith('\n' + (chapterSeparatorEl ? chapterSeparatorEl.value : '—————') + '\n');
+    else el.insertAdjacentText('afterend', '\n\n');
+  });
+  return (clone.textContent || '').replace(/\u00a0/g, ' ').replace(/\n[ \t]+/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+function syncClassicInputPreview(){
+  if(!input || !inputPreview) return;
+  const oldScroll = inputPreview.scrollTop;
+  const html = htmlFromInputText(input.value || "");
+  if(inputPreview.innerHTML !== html) inputPreview.innerHTML = html;
+  inputPreview.scrollTop = oldScroll;
+}
+function setupRenderedClassicInput(){
+  if(!input || !inputPreview || inputPreview.dataset.renderInputWired === '1') return;
+  inputPreview.dataset.renderInputWired = '1';
+  const desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+  if(desc && desc.get && desc.set && !input.dataset.valuePatched){
+    const nativeGet = desc.get.bind(input);
+    const nativeSet = desc.set.bind(input);
+    Object.defineProperty(input, 'value', {
+      configurable:true,
+      get(){ return nativeGet(); },
+      set(v){ nativeSet(v == null ? '' : String(v)); queueMicrotask(syncClassicInputPreview); }
+    });
+    input.dataset.valuePatched = '1';
+  }
+  inputPreview.addEventListener('input', () => {
+    const desc2 = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+    if(desc2 && desc2.set) desc2.set.call(input, renderedInputToText(inputPreview));
+    else input.value = renderedInputToText(inputPreview);
+    if(!isApplyingClassicExcerpt) classicActiveChunks = null;
+    transformText();
+    scheduleAutosave();
+  });
+  inputPreview.addEventListener('scroll', () => scheduleAutosave(), {passive:true});
+  syncClassicInputPreview();
+}
+
+(function applyFinalPatchNow(){
+  setupRenderedClassicInput();
+  ensureActiveChapterSettings();
+  syncResultPreview(output);
+  syncResultPreview(chatOutput);
+  refreshChapterViews();
+  requestAnimationFrame(syncActiveResultHeight);
+})();
+
+
+/* --- stability patch 2026-06-06: rendered inputs, file buttons, tab-local chapters --- */
+(function(){
+  const markerToken = (typeof ROFAN_CHAPTER_BREAK_TOKEN !== 'undefined') ? ROFAN_CHAPTER_BREAK_TOKEN : '⟦ROFAN_CHAPTER_BREAK⟧';
+  const markerStore = window.__rofanChapterMarkersByMode || (window.__rofanChapterMarkersByMode = {});
+  const chapterSettingStore = window.__chapterSettingsByMode || (window.__chapterSettingsByMode = {});
+  const modeKey = () => (typeof activeMode === 'string' && activeMode) ? activeMode : 'classic';
+  const normalizeText = v => String(v || '').replace(/\r/g, '').trim();
+  const getSep = () => (typeof chapterSeparatorEl !== 'undefined' && chapterSeparatorEl && chapterSeparatorEl.value.trim()) || '—————';
+  const tokenRe = () => new RegExp(markerToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+
+  function activeRawOutputElement(){
+    if(modeKey() === 'chat') return (typeof chatOutput !== 'undefined' ? chatOutput : null);
+    if(modeKey() === 'classic') return (typeof output !== 'undefined' ? output : null);
+    return null;
+  }
+  function getVisibleSourceText(){
+    if(modeKey() === 'epubedit') return (typeof epubEditEditor !== 'undefined' && epubEditEditor) ? (epubEditEditor.innerText || epubEditEditor.textContent || '') : '';
+    const out = activeRawOutputElement();
+    if(out && out.value) return out.value;
+    if(modeKey() === 'chat' && typeof chatPaste !== 'undefined' && chatPaste) return chatPaste.innerText || chatPaste.textContent || '';
+    if(modeKey() === 'classic'){
+      if(typeof input !== 'undefined' && input && input.value) return input.value;
+      if(typeof inputPreview !== 'undefined' && inputPreview) return inputPreview.innerText || inputPreview.textContent || '';
+    }
+    return '';
+  }
+  function paragraphsOf(text){
+    return String(text || '')
+      .replace(tokenRe(), '\n\n' + markerToken + '\n\n')
+      .replace(/\r/g, '')
+      .split(/\n\s*\n+/)
+      .map(p => p.trim())
+      .filter(Boolean);
+  }
+  function isSeparatorParagraph(p){
+    const raw = String(p || '');
+    if(raw.includes(markerToken)) return true;
+    const clean = raw.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, '').trim();
+    const sep = getSep().replace(/\s+/g, '').trim();
+    if(clean && sep && clean === sep) return true;
+    return /^[\-—―─━_]{3,}$/.test(clean) && /^[\-—―─━_]{3,}$/.test(sep || '—————');
+  }
+  function htmlRenderLimited(text){
+    if(typeof htmlFromResultText === 'function') return htmlFromResultText(text || '');
+    if(typeof escapeHTML === 'function') return escapeHTML(text || '');
+    const d=document.createElement('div'); d.textContent=text||''; return d.innerHTML;
+  }
+
+  // File buttons: label 기본 파일 선택 동작을 보존하고, 같은 파일을 다시 선택해도 change가 발생하도록 값만 초기화합니다.
+  document.addEventListener('pointerdown', function(ev){
+    const label = ev.target && ev.target.closest ? ev.target.closest('label.prettyFile, .fileControl') : null;
+    if(!label || (ev.target.matches && ev.target.matches('input[type="file"]'))) return;
+    const file = label.querySelector('input[type="file"]');
+    if(file) file.value = '';
+  }, true);
+
+  // 앱에서 만든 Markdown/HTML 주석은 입력창에서 숨기고, 색상/이름표는 렌더링해서 보여줍니다.
+  window.htmlFromInputText = htmlFromInputText = function(text){
+    const raw = String(text || '');
+    try{
+      if(/<!--\s*rofan:/i.test(raw) && typeof parseStructuredMarkdownToChunks === 'function' && typeof structuredItemsToHtml === 'function'){
+        const chunks = parseStructuredMarkdownToChunks(raw);
+        if(chunks && chunks.length){
+          return structuredItemsToHtml(chunks.map(c => ({blockId:c.blockId, owner:c.owner, kind:c.kind, text:c.text}))).replace(tokenRe(), '<hr class="chapter-editor-separator" data-chapter-separator="true">');
+        }
+      }
+    }catch(err){ console.warn('input structured render failed', err); }
+    return htmlRenderLimited(String(raw).replace(/<!--\s*rofan:[\s\S]*?-->/gi, '').replace(/\n{3,}/g, '\n\n').trim());
+  };
+
+  window.syncClassicInputPreview = syncClassicInputPreview = function(){
+    if(typeof input === 'undefined' || typeof inputPreview === 'undefined' || !input || !inputPreview) return;
+    const old = inputPreview.scrollTop;
+    const html = htmlFromInputText(input.value || '');
+    if(inputPreview.innerHTML !== html) inputPreview.innerHTML = html;
+    inputPreview.scrollTop = old;
+  };
+
+  // 결과창은 항상 코드 대신 렌더링된 화면으로 보여줍니다.
+  window.syncResultPreview = syncResultPreview = function(el){
+    if(typeof resultPreviewFor !== 'function') return;
+    const preview = resultPreviewFor(el);
+    if(!preview || !el) return;
+    const old = preview.scrollTop;
+    preview.innerHTML = htmlRenderLimited(el.value || '');
+    preview.dataset.placeholder = el.getAttribute('placeholder') || '변환 결과';
+    preview.scrollTop = old;
+  };
+  window.setResultOutput = setResultOutput = function(el, value){
+    if(!el) return;
+    el.value = value || '';
+    syncResultPreview(el);
+    requestAnimationFrame(() => { if(typeof syncActiveResultHeight === 'function') syncActiveResultHeight(); });
+  };
+
+  // 좌우 입력/결과 하단 정렬을 다시 계산합니다.
+  window.syncActiveResultHeight = syncActiveResultHeight = function(){
+    const key = modeKey();
+    const panel = key === 'chat' ? (typeof chatPanel !== 'undefined' ? chatPanel : null) : key === 'classic' ? (typeof classicPanel !== 'undefined' ? classicPanel : null) : null;
+    if(!panel || panel.classList.contains('hidden')) return;
+    const left = panel.querySelector('.editorGrid > .editorBox:not(.resultBox)');
+    const resultBox = panel.querySelector('.editorGrid > .editorBox.resultBox');
+    const preview = resultBox ? resultBox.querySelector('.richResultBox') : null;
+    const label = resultBox ? resultBox.querySelector('.editorLabel') : null;
+    if(!left || !resultBox || !preview) return;
+    if(window.matchMedia('(max-width: 860px)').matches){
+      resultBox.style.height=''; resultBox.style.minHeight=''; resultBox.style.overflow='';
+      preview.style.height='430px'; preview.style.maxHeight=''; preview.style.flex='';
+      return;
+    }
+    const h = Math.max(420, Math.ceil(left.getBoundingClientRect().height));
+    const lh = label ? Math.ceil(label.getBoundingClientRect().height) + 9 : 0;
+    resultBox.style.height = h + 'px';
+    resultBox.style.minHeight = h + 'px';
+    resultBox.style.overflow = 'hidden';
+    preview.style.height = Math.max(320, h - lh) + 'px';
+    preview.style.maxHeight = Math.max(320, h - lh) + 'px';
+    preview.style.flex = '0 0 auto';
+  };
+
+  // 변환이 실패하거나 빈 결과가 되는 경우를 방지하는 가드.
+  const baseTransform = (typeof transformText === 'function') ? transformText : null;
+  window.transformText = transformText = function(){
+    try{
+      if(modeKey() === 'classic' && typeof input !== 'undefined' && input && (!input.value || !input.value.trim()) && typeof inputPreview !== 'undefined' && inputPreview){
+        input.value = inputPreview.innerText || inputPreview.textContent || '';
+      }
+      if(baseTransform) baseTransform();
+      if(modeKey() === 'classic') syncClassicInputPreview();
+      if(typeof syncResultPreview === 'function'){
+        if(typeof output !== 'undefined') syncResultPreview(output);
+        if(typeof chatOutput !== 'undefined') syncResultPreview(chatOutput);
+      }
+      syncActiveResultHeight();
+    }catch(err){
+      console.error('transformText failed', err);
+      const target = activeRawOutputElement();
+      if(target && !target.value){
+        const src = getVisibleSourceText();
+        if(src) setResultOutput(target, src);
+      }
+      if(typeof showToast === 'function') showToast('변환 중 오류가 있어 원문 기준으로 표시했습니다.');
+    }
+  };
+
+  // 챕터는 문자열 장식선에 의존하지 않고 탭별 marker index로 관리합니다.
+  function getMarkerSet(){
+    const key = modeKey();
+    if(!markerStore[key]) markerStore[key] = [];
+    markerStore[key] = Array.from(new Set(markerStore[key].map(Number).filter(n => Number.isFinite(n) && n >= 0))).sort((a,b)=>a-b);
+    return markerStore[key];
+  }
+  function textWithoutMarkerParas(text){ return paragraphsOf(text).filter(p => !isSeparatorParagraph(p)); }
+  window.getChapterSearchMatches = getChapterSearchMatches = function(){
+    const q = String((typeof chapterKeywordQuery !== 'undefined' && chapterKeywordQuery) || '').trim().toLowerCase();
+    const order = String((typeof chapterOrderQuery !== 'undefined' && chapterOrderQuery) || '').trim();
+    let matches = textWithoutMarkerParas(getVisibleSourceText()).map((text, index) => ({text, index, start:index, end:index+1}));
+    if(q) matches = matches.filter(p => (typeof stripHTMLTags === 'function' ? stripHTMLTags(p.text) : p.text).toLowerCase().includes(q));
+    if(order){ const n = Number(order); if(Number.isFinite(n) && n > 0) matches = matches.filter(p => p.index + 1 === n); }
+    return matches;
+  };
+  window.updateChapterDividerPanel = updateChapterDividerPanel = function(){
+    if(typeof chapterDividerPanelEl === 'undefined' || !chapterDividerPanelEl) return;
+    const matches = getChapterSearchMatches();
+    currentChapterMatches = matches;
+    chapterMatchPage = Math.max(0, Math.min(Math.max(0, matches.length - 1), chapterMatchPage || 0));
+    const current = matches[chapterMatchPage];
+    const total = matches.length;
+    let html = `<div class="miniToolHead"><div><strong>구분선 삽입</strong><span>검색한 지문 위/아래를 새 챕터 시작점으로 지정합니다.</span></div><span class="smallMuted">${total ? `${chapterMatchPage+1}/${total}` : '0개'}</span></div>`;
+    if(!current){ html += `<div class="emptyState">키워드를 입력하면 해당 문단을 확인하고 구분선을 넣을 수 있습니다.</div>`; }
+    else{
+      html += `<div class="chapterMatchCard"><div class="dupeSummary withNav"><span><span class="pill">문단 ${current.index+1}</span><span class="pill">구분선 ${escapeHTML ? escapeHTML(getSep()) : getSep()}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-chapter-match-page="prev" ${chapterMatchPage<=0?'disabled':''}>‹</button><button type="button" class="navIconBtn" data-chapter-match-page="next" ${chapterMatchPage>=total-1?'disabled':''}>›</button></span></div><div class="previewText fullPreview">${typeof escapeHTML==='function'?escapeHTML(current.text):current.text}</div><div class="chapterInsertRow"><button type="button" class="btn primary" data-chapter-insert="1">현재 문단에 구분선 넣기</button></div></div>`;
+    }
+    chapterDividerPanelEl.innerHTML = html;
+  };
+  window.insertChapterDividerAtCurrentMatch = insertChapterDividerAtCurrentMatch = function(){
+    const matches = getChapterSearchMatches();
+    if(!matches.length){ if(typeof showToast === 'function') showToast('구분선을 넣을 문단을 찾지 못했습니다.'); return; }
+    const current = matches[Math.max(0, Math.min(matches.length - 1, chapterMatchPage || 0))];
+    const position = (typeof chapterPositionEl !== 'undefined' && chapterPositionEl) ? chapterPositionEl.value : 'before';
+    if(typeof chapterSplitModeEl !== 'undefined' && chapterSplitModeEl) chapterSplitModeEl.value = 'separator';
+    const idx = position === 'after' ? current.index + 1 : current.index;
+    const markers = getMarkerSet();
+    if(!markers.includes(idx)) markers.push(idx);
+    markerStore[modeKey()] = markers.sort((a,b)=>a-b);
+    if(modeKey() !== 'epubedit'){
+      const el = activeRawOutputElement();
+      const paras = textWithoutMarkerParas(getVisibleSourceText());
+      const visual = paras.slice();
+      Array.from(markerStore[modeKey()]).sort((a,b)=>b-a).forEach(i => visual.splice(Math.max(0, Math.min(i, visual.length)), 0, markerToken));
+      if(el) setResultOutput(el, visual.join('\n\n'));
+    }else if(typeof insertChapterDividerIntoEditor === 'function'){
+      insertChapterDividerIntoEditor(current, position, getSep());
+    }
+    if(typeof saveActiveChapterSettings === 'function') saveActiveChapterSettings();
+    if(typeof refreshChapterViews === 'function') refreshChapterViews(); else { if(typeof updateEpubPreview === 'function') updateEpubPreview(); updateChapterDividerPanel(); }
+    setTimeout(() => { if(typeof updateEpubPreview === 'function') updateEpubPreview(); updateChapterDividerPanel(); }, 50);
+    if(typeof scheduleAutosave === 'function') scheduleAutosave();
+    if(typeof showToast === 'function') showToast(position === 'after' ? '문단 아래를 새 챕터로 지정했습니다.' : '문단 위를 새 챕터로 지정했습니다.');
+  };
+
+  function splitByMarkers(paras, cfg){
+    const markers = cfg.chapterMode === 'separator' ? getMarkerSet().filter(i => i > 0 && i < paras.length) : [];
+    const starts = [0, ...markers].filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>a-b);
+    if(!starts.length) starts.push(0);
+    const chapters=[];
+    starts.forEach((s, idx) => {
+      const e = idx + 1 < starts.length ? starts[idx+1] : paras.length;
+      const body = paras.slice(s,e).join('\n\n').trim();
+      if(body) chapters.push({title: getChapterTitle(idx, cfg), body});
+    });
+    return chapters;
+  }
+  window.splitTextIntoChapters = splitTextIntoChapters = function(text){
+    const cfg = getEpubConfig();
+    let paras = paragraphsOf(text).filter(p => !isSeparatorParagraph(p));
+    if(!paras.length) return [];
+    if(cfg.chapterMode === 'separator') return splitByMarkers(paras, cfg);
+    const chapters=[];
+    if(cfg.chapterMode === 'paragraphs'){
+      for(let i=0;i<paras.length;i+=cfg.chapterSize){ chapters.push({title:getChapterTitle(chapters.length,cfg), body:paras.slice(i,i+cfg.chapterSize).join('\n\n')}); }
+    }else if(cfg.chapterMode === 'chars'){
+      let bucket=[], count=0;
+      paras.forEach(p => { if(bucket.length && count + p.length > cfg.chapterSize){ chapters.push({title:getChapterTitle(chapters.length,cfg), body:bucket.join('\n\n')}); bucket=[]; count=0; } bucket.push(p); count += p.length; });
+      if(bucket.length) chapters.push({title:getChapterTitle(chapters.length,cfg), body:bucket.join('\n\n')});
+    }else chapters.push({title:cfg.firstChapterTitle || cfg.title, body:paras.join('\n\n')});
+    return chapters;
+  };
+  window.getExportChapters = getExportChapters = function(markdownMode){
+    if(modeKey() === 'epubedit'){
+      const html = (typeof editorHtmlForExport === 'function') ? editorHtmlForExport() : ((typeof epubEditEditor !== 'undefined' && epubEditEditor) ? epubEditEditor.innerHTML : '');
+      if(markdownMode) return splitTextIntoChapters((typeof blockHtmlToText === 'function') ? blockHtmlToText(html) : html);
+      const cfg = getEpubConfig();
+      const blocks = (typeof editorHtmlToChapterBlocks === 'function') ? editorHtmlToChapterBlocks(html) : [];
+      if(cfg.chapterMode === 'separator' && blocks.length){
+        const chapters=[]; let bucket=[];
+        blocks.forEach(b => { if(b.sep){ if(bucket.length){ const h=bucket.join('\n'); chapters.push({title:getChapterTitle(chapters.length,cfg), bodyHtml:h, body:(typeof blockHtmlToText==='function'?blockHtmlToText(h):h)}); bucket=[]; } } else if(b.html) bucket.push(b.html); });
+        if(bucket.length){ const h=bucket.join('\n'); chapters.push({title:getChapterTitle(chapters.length,cfg), bodyHtml:h, body:(typeof blockHtmlToText==='function'?blockHtmlToText(h):h)}); }
+        if(chapters.length) return chapters;
+      }
+      return splitTextIntoChapters((typeof blockHtmlToText === 'function') ? blockHtmlToText(html) : html);
+    }
+    const raw = (typeof getPreparedOutputForExport === 'function') ? getPreparedOutputForExport() : getVisibleSourceText();
+    return splitTextIntoChapters(markdownMode && typeof stripHTMLTags === 'function' ? stripHTMLTags(raw) : raw);
+  };
+
+  window.updateEpubPreview = updateEpubPreview = function(){
+    const chapters = getExportChapters();
+    const cfg = getEpubConfig();
+    if(typeof chapterPreviewEl !== 'undefined' && chapterPreviewEl) chapterPreviewEl.innerHTML = renderChapterTocHtml(chapters, false);
+    if(typeof chapterTocInlineEl !== 'undefined' && chapterTocInlineEl) chapterTocInlineEl.innerHTML = renderChapterTocHtml(chapters, true);
+    if(typeof epubPreviewEl !== 'undefined' && epubPreviewEl){
+      const ch = chapters[0];
+      let body = '';
+      if(ch && ch.bodyHtml && typeof chapterBodyToXhtml === 'function') body = chapterBodyToXhtml(ch);
+      else if(ch && typeof splitTextIntoParagraphs === 'function') body = splitTextIntoParagraphs(ch.body || '').slice(0,12).map(paragraphToXhtml).join('\n');
+      epubPreviewEl.innerHTML = `<div class="previewMeta"><b>${escapeHTML(cfg.title)}</b>${cfg.author ? `<span>${escapeHTML(cfg.author)}</span>` : ''}<span>${chapters.length || 0}개 챕터</span></div><div class="bookPreview">${body || '<p class="mutedText">미리보기 없음</p>'}</div>`;
+    }
+  };
+
+  // 탭 전환 시 각 탭의 챕터 설정과 marker를 유지합니다.
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const next = tab.dataset.tab || 'classic';
+      if(typeof saveActiveChapterSettings === 'function') saveActiveChapterSettings();
+      setTimeout(() => {
+        if(!chapterSettingStore[next] && typeof captureChapterSettings === 'function') chapterSettingStore[next] = Object.assign({}, captureChapterSettings());
+        if(typeof applyChapterSettingsPack === 'function') applyChapterSettingsPack(chapterSettingStore[next]);
+        if(typeof updateEpubPreview === 'function') updateEpubPreview();
+        updateChapterDividerPanel();
+        syncActiveResultHeight();
+      }, 0);
+    }, true);
+  });
+
+  // 기존 직접 바인딩이 원본 transform을 가리키는 경우를 보강합니다.
+  ['input','change'].forEach(evName => {
+    document.addEventListener(evName, ev => {
+      const t = ev.target;
+      if(!t) return;
+      if(t.matches && t.matches('#inputTextPreview,#chatPaste,#inputText,.optionRow input,.optionRow select,.control input,.control select')){
+        setTimeout(() => { try{ if(typeof transformText === 'function') transformText(); }catch(e){ console.error(e); } }, 0);
+      }
+    }, true);
+  });
+
+
+
+  // 파일 input change가 누락되거나 기존 핸들러가 덮여도 각 탭 로더가 반드시 실행되도록 보강합니다.
+  function bindReliableFileLoader(inputId, loaderName, labelId){
+    const el = document.getElementById(inputId);
+    if(!el || el.dataset.reliableLoaderWired === '1') return;
+    el.dataset.reliableLoaderWired = '1';
+    const run = () => {
+      try{
+        const label = labelId ? document.getElementById(labelId) : null;
+        if(label && el.files && el.files[0]) label.textContent = el.files[0].name || '선택됨';
+        const fn = window[loaderName] || (typeof globalThis !== 'undefined' ? globalThis[loaderName] : null);
+        if(typeof fn === 'function') fn();
+      }catch(err){ console.error(loaderName + ' reliable loader failed', err); if(typeof showToast === 'function') showToast('파일을 읽지 못했습니다.'); }
+    };
+    el.addEventListener('change', run, true);
+    el.addEventListener('input', run, true);
+  }
+  bindReliableFileLoader('classicFileInput','loadClassicFile','classicFileName');
+  bindReliableFileLoader('chatFileInput','loadChatFile','chatFileName');
+  bindReliableFileLoader('epubEditFileInput','loadEpubEditFile','epubEditFileName');
+  bindReliableFileLoader('epubCoverInput','loadCoverFile','epubCoverFileName');
+  bindReliableFileLoader('epubFontInput','loadEpubFontFile','epubFontFileName');
+
+  // 초기 화면 동기화
+  setTimeout(() => {
+    try{
+      syncClassicInputPreview();
+      if(typeof transformText === 'function') transformText();
+      if(typeof updateEpubPreview === 'function') updateEpubPreview();
+      updateChapterDividerPanel();
+      syncActiveResultHeight();
+    }catch(err){ console.error('final hardening init failed', err); }
+  }, 0);
+})();
+
