@@ -63,6 +63,9 @@ let currentDuplicateGroups = [];
 let currentContainsItems = [];
 let currentOocItems = [];
 let duplicatePageByGroup = {};
+let duplicateGroupPage = 0;
+let duplicateFilterText = "";
+let duplicateOrderQuery = "";
 
 input.addEventListener("input", transformText);
 chatPaste.addEventListener("input", () => {
@@ -107,6 +110,8 @@ if(speakerLabelModeEl) speakerLabelModeEl.addEventListener("change", transformTe
 chatFileInput.addEventListener("change", loadChatFile);
 duplicateReviewPanel.addEventListener("change", handleDuplicateReviewChange);
 duplicateReviewPanel.addEventListener("click", handleDuplicateReviewClick);
+duplicateReviewPanel.addEventListener("input", handleDuplicateReviewInput);
+duplicateReviewPanel.addEventListener("keydown", handleDuplicateReviewKeydown);
 containsReviewPanel.addEventListener("change", handleContainsReviewChange);
 containsReviewPanel.addEventListener("click", handleContainsReviewClick);
 oocReviewPanel.addEventListener("change", handleOocReviewChange);
@@ -169,6 +174,9 @@ function resetReviewDecisions(){
   containsDecisions = {};
   oocDecisions = {};
   duplicatePageByGroup = {};
+  duplicateGroupPage = 0;
+  duplicateFilterText = "";
+  duplicateOrderQuery = "";
 }
 
 // ------------------ 기호/구분선 판정 ------------------
@@ -707,7 +715,10 @@ function hasSkippableAncestor(el, root){
 }
 function collectRofanContentBlocks(root){
   const blocks = [];
-  const candidates = Array.from(root.querySelectorAll("p, div.mt-1"));
+  // 기본 대화는 p / div.mt-1로 잡히지만, MHT 저장본의 첫 캐릭터 메시지는
+  // p로 감싸지지 않고 색상 span만 있는 경우가 있어 함께 후보에 넣습니다.
+  // 부모 p가 이미 잡힌 span은 아래 contains 검사로 중복 제거됩니다.
+  const candidates = Array.from(root.querySelectorAll("p, div.mt-1, span[style*=\"color\"], div[style*=\"color\"]"));
   candidates.forEach((el, index) => {
     if(blocks.some(b => b.el.contains(el))) return;
     if(isSkippableElement(el) || hasSkippableAncestor(el, root)) return;
@@ -716,6 +727,15 @@ function collectRofanContentBlocks(root){
     const color = getInlineColor(el);
     const owner = getElementOwnerHint(el, color);
     if(!owner) return;
+
+    // 같은 색상 span 안에 실제 문단 전체가 있고, 그 안에 장식용 작은 span이 다시 들어가는 구조가 많습니다.
+    // 이미 선택된 더 큰 메시지 후보 안의 요소는 건너뛰고, 반대로 현재 요소가 앞서 잡은 작은 조각을 포함하면
+    // 큰 메시지를 남기도록 작은 조각을 제거합니다.
+    for(let i=blocks.length-1; i>=0; i--){
+      if(el.contains(blocks[i].el)){
+        blocks.splice(i, 1);
+      }
+    }
     blocks.push({el, owner, index});
   });
   return blocks;
@@ -982,6 +1002,24 @@ function getDroppedBlockIdsFromDuplicateDecisions(groups){
   });
   return dropped;
 }
+function groupMatchesDuplicateFilter(group, idx){
+  const keyword = normalizeParagraphText(duplicateFilterText || "").toLowerCase();
+  const order = String(duplicateOrderQuery || "").trim();
+  if(order){
+    const n = Number(order);
+    if(Number.isFinite(n) && n > 0 && (idx + 1) !== n) return false;
+  }
+  if(!keyword) return true;
+  const hay = [group.promptText || ""];
+  (group.occurrences || []).forEach(occ => {
+    if(occ.promptBlock) hay.push(occ.promptBlock.text || "");
+    if(occ.answerBlock) hay.push(occ.answerBlock.text || "");
+  });
+  return hay.join("\n").toLowerCase().includes(keyword);
+}
+function getFilteredDuplicateGroups(){
+  return (currentDuplicateGroups || []).map((group, index) => ({group, index})).filter(item => groupMatchesDuplicateFilter(item.group, item.index));
+}
 function updateDuplicateReviewPanel(groups){
   currentDuplicateGroups = groups || [];
   if(activeMode !== "chat" || !reviewDuplicatesEl.checked){
@@ -995,27 +1033,50 @@ function updateDuplicateReviewPanel(groups){
     return;
   }
 
-  let html = `<div class="reviewHead"><div><div class="reviewTitle">중복 답변 확인</div><div class="reviewMeta">후보가 길어지지 않도록 묶음마다 하나씩 넘겨 보며 선택합니다. 선택하면 고른 답변과 연결된 유저 지문만 최종 결과에 남습니다.</div></div><div class="smallMuted">${currentDuplicateGroups.length}묶음</div></div>`;
-  currentDuplicateGroups.forEach((group, gIdx) => {
-    const selected = duplicateDecisions[group.key] || "all";
-    const current = Math.max(0, Math.min(group.occurrences.length - 1, duplicatePageByGroup[group.key] || 0));
-    duplicatePageByGroup[group.key] = current;
-    const occ = group.occurrences[current];
-    const answer = occ.answerBlock || occ.promptBlock;
-    const answerId = answer ? answer.id : "";
-    const title = group.type === "prompt" ? "같은 입력에 대한 답변 후보" : "반복된 답변 후보";
-    html += `<details class="reviewItem foldReview"><summary><span>${title}</span><span class="smallMuted">${gIdx + 1}/${currentDuplicateGroups.length} · 후보 ${group.occurrences.length}개</span></summary>`;
-    if(group.type === "prompt"){
-      html += `<div class="reviewBlock"><span class="pill">대표 입력</span><div class="previewText">${escapeHTML(previewText(group.promptText, 450))}</div></div>`;
-      html += `<div class="reviewBlock"><span class="pill">이 후보에 연결된 입력</span><div class="previewText">${escapeHTML(previewText(occ.promptBlock ? occ.promptBlock.text : "", 450))}</div></div>`;
-    }else if(occ.promptBlock){
-      html += `<div class="reviewBlock"><span class="pill">앞 입력</span><div class="previewText">${escapeHTML(previewText(occ.promptBlock.text, 450))}</div></div>`;
-    }
-    html += `<div class="reviewChoices">`;
-    html += `<label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="all" ${selected === "all" ? "checked" : ""}>모두 유지</label>`;
-    html += `<label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="${escapeAttr(answerId)}" ${selected === answerId ? "checked" : ""}>현재 후보만 유지<div class="reviewBlock"><span class="pill">${escapeHTML(ownerLabel(answer ? answer.owner : ""))}</span><span class="pill">답변 ${current + 1}/${group.occurrences.length}</span><div class="previewText">${escapeHTML(previewText(answer ? answer.text : "", 900))}</div></div></label>`;
-    html += `</div><div class="reviewNav"><div class="smallMuted">후보 ${current + 1} / ${group.occurrences.length}</div><div class="navButtons"><button type="button" data-dupe-page="prev" data-dupe-key="${escapeAttr(group.key)}">이전 후보</button><button type="button" data-dupe-page="next" data-dupe-key="${escapeAttr(group.key)}">다음 후보</button></div></div></details>`;
-  });
+  const filtered = getFilteredDuplicateGroups();
+  const total = currentDuplicateGroups.length;
+  const count = filtered.length;
+  duplicateGroupPage = Math.max(0, Math.min(Math.max(0, count - 1), duplicateGroupPage || 0));
+
+  let html = `<div class="reviewHead"><div><div class="reviewTitle">중복 답변 확인</div><div class="reviewMeta">한 묶음씩 넘겨 보며 선택합니다. 검색어를 넣으면 해당 문구가 들어간 후보만 볼 수 있습니다.</div></div><div class="smallMuted">${count}/${total}묶음</div></div>`;
+  html += `<div class="dupeToolbar"><input type="search" data-dupe-search="keyword" placeholder="후보 내용 검색" value="${escapeAttr(duplicateFilterText)}"><input type="number" min="1" data-dupe-search="order" placeholder="순서" value="${escapeAttr(duplicateOrderQuery)}"><button type="button" class="btn primary" data-dupe-search-apply="1">검색</button><button type="button" class="btn subtle" data-dupe-search-clear="1">초기화</button></div>`;
+
+  if(!count){
+    html += `<div class="emptyState">검색 조건에 맞는 중복 후보가 없습니다.</div>`;
+    duplicateReviewPanel.classList.remove("hidden");
+    duplicateReviewPanel.innerHTML = html;
+    return;
+  }
+
+  const wrap = filtered[duplicateGroupPage];
+  const group = wrap.group;
+  const gIdx = wrap.index;
+  const selected = duplicateDecisions[group.key] || "all";
+  const current = Math.max(0, Math.min(group.occurrences.length - 1, duplicatePageByGroup[group.key] || 0));
+  duplicatePageByGroup[group.key] = current;
+  const occ = group.occurrences[current];
+  const answer = occ.answerBlock || occ.promptBlock;
+  const answerId = answer ? answer.id : "";
+  const title = group.type === "prompt" ? "같은 입력에 대한 답변 후보" : "반복된 답변 후보";
+  const prevGroupDisabled = duplicateGroupPage <= 0 ? "disabled" : "";
+  const nextGroupDisabled = duplicateGroupPage >= count - 1 ? "disabled" : "";
+  const prevCandDisabled = current <= 0 ? "disabled" : "";
+  const nextCandDisabled = current >= group.occurrences.length - 1 ? "disabled" : "";
+
+  html += `<div class="dupeCard">`;
+  html += `<div class="reviewNav" style="margin-top:0"><div><div class="reviewTitle">${title}</div><div class="reviewMeta">전체 ${gIdx + 1}/${total} · 검색 결과 ${duplicateGroupPage + 1}/${count} · 후보 ${group.occurrences.length}개</div></div><div class="navButtons"><button type="button" class="navIconBtn" data-dupe-group-page="prev" ${prevGroupDisabled} aria-label="이전 묶음">‹</button><button type="button" class="navIconBtn" data-dupe-group-page="next" ${nextGroupDisabled} aria-label="다음 묶음">›</button></div></div>`;
+  if(group.type === "prompt"){
+    html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">대표 입력</span></div><div class="previewText">${escapeHTML(previewText(group.promptText, 450))}</div></div>`;
+    html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">이 후보에 연결된 입력</span><span class="pill">후보 ${current + 1}/${group.occurrences.length}</span></div><div class="previewText">${escapeHTML(previewText(occ.promptBlock ? occ.promptBlock.text : "", 450))}</div></div>`;
+  }else if(occ.promptBlock){
+    html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">앞 입력</span><span class="pill">후보 ${current + 1}/${group.occurrences.length}</span></div><div class="previewText">${escapeHTML(previewText(occ.promptBlock.text, 450))}</div></div>`;
+  }
+  html += `<div class="reviewChoices">`;
+  html += `<label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="all" ${selected === "all" ? "checked" : ""}>모두 유지</label>`;
+  html += `<label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="${escapeAttr(answerId)}" ${selected === answerId ? "checked" : ""}>현재 후보만 유지<div class="reviewBlock"><div class="dupeSummary"><span class="pill">${escapeHTML(ownerLabel(answer ? answer.owner : ""))}</span><span class="pill">답변 ${current + 1}/${group.occurrences.length}</span></div><div class="previewText">${escapeHTML(previewText(answer ? answer.text : "", 900))}</div></div></label>`;
+  html += `</div><div class="reviewNav"><div class="smallMuted">답변 후보 ${current + 1} / ${group.occurrences.length}</div><div class="navButtons"><button type="button" class="navIconBtn" data-dupe-page="prev" data-dupe-key="${escapeAttr(group.key)}" ${prevCandDisabled} aria-label="이전 후보">‹</button><button type="button" class="navIconBtn" data-dupe-page="next" data-dupe-key="${escapeAttr(group.key)}" ${nextCandDisabled} aria-label="다음 후보">›</button></div></div>`;
+  html += `</div>`;
+
   duplicateReviewPanel.classList.remove("hidden");
   duplicateReviewPanel.innerHTML = html;
 }
@@ -1026,14 +1087,52 @@ function handleDuplicateReviewChange(e){
   transformText();
 }
 function handleDuplicateReviewClick(e){
+  const apply = e.target.closest("button[data-dupe-search-apply]");
+  if(apply){
+    duplicateGroupPage = 0;
+    updateDuplicateReviewPanel(currentDuplicateGroups);
+    return;
+  }
+  const clear = e.target.closest("button[data-dupe-search-clear]");
+  if(clear){
+    duplicateFilterText = "";
+    duplicateOrderQuery = "";
+    duplicateGroupPage = 0;
+    updateDuplicateReviewPanel(currentDuplicateGroups);
+    return;
+  }
+  const groupButton = e.target.closest("button[data-dupe-group-page]");
+  if(groupButton && !groupButton.disabled){
+    const filtered = getFilteredDuplicateGroups();
+    const max = Math.max(0, filtered.length - 1);
+    duplicateGroupPage = groupButton.dataset.dupeGroupPage === "next" ? Math.min(max, duplicateGroupPage + 1) : Math.max(0, duplicateGroupPage - 1);
+    updateDuplicateReviewPanel(currentDuplicateGroups);
+    return;
+  }
   const button = e.target.closest("button[data-dupe-page]");
-  if(!button) return;
+  if(!button || button.disabled) return;
   const key = button.dataset.dupeKey;
   const group = currentDuplicateGroups.find(g => g.key === key);
   if(!group) return;
   const max = Math.max(0, group.occurrences.length - 1);
   const cur = Math.max(0, Math.min(max, duplicatePageByGroup[key] || 0));
   duplicatePageByGroup[key] = button.dataset.dupePage === "next" ? Math.min(max, cur + 1) : Math.max(0, cur - 1);
+  updateDuplicateReviewPanel(currentDuplicateGroups);
+}
+function handleDuplicateReviewInput(e){
+  const target = e.target;
+  if(!target) return;
+  if(target.matches('[data-dupe-search="keyword"]')){
+    duplicateFilterText = target.value || "";
+  }else if(target.matches('[data-dupe-search="order"]')){
+    duplicateOrderQuery = target.value || "";
+  }
+}
+function handleDuplicateReviewKeydown(e){
+  const target = e.target;
+  if(!target || !target.matches('[data-dupe-search]') || e.key !== "Enter") return;
+  e.preventDefault();
+  duplicateGroupPage = 0;
   updateDuplicateReviewPanel(currentDuplicateGroups);
 }
 function getChunkKey(chunk, index){
@@ -1526,6 +1625,9 @@ function appendDeleteKeyword(term){
 function resetDuplicateChoices(){
   duplicateDecisions = {};
   duplicatePageByGroup = {};
+  duplicateGroupPage = 0;
+  duplicateFilterText = "";
+  duplicateOrderQuery = "";
   transformText();
   showToast("중복 선택을 초기화했습니다.");
 }
