@@ -203,9 +203,15 @@ textarea[readonly]{background:#fafaf8;}
     <div class="panel hidden" id="chatPanel">
       <div class="grid">
         <div>
+          <div class="toolbar" style="margin-top:0;padding-top:0;">
+            <label>
+              로판Ai 저장 파일 불러오기
+              <input type="file" id="chatFileInput" accept=".mht,.mhtml,.html,.htm,text/html,message/rfc822">
+            </label>
+          </div>
           <div id="chatPaste" class="pastebox" contenteditable="true" spellcheck="false"
-            data-placeholder="로판Ai 전체 채팅방을 여기에 복붙하세요. 서식이 살아 있어야 기울임체/일반 문단을 구분할 수 있습니다."></div>
-          <div class="hint">브라우저 채팅방에서 바로 복사해 붙여넣으면 기울임체는 지문, 기울임이 아닌 문단은 대사로 처리됩니다. 메모장처럼 서식 없는 곳을 거치면 기울임 정보를 읽을 수 없습니다.</div>
+            data-placeholder="로판Ai 전체 채팅방을 여기에 복붙하거나, 위에서 .mht/.mhtml/.html 저장 파일을 불러오세요. 서식이 살아 있어야 기울임체/일반 문단을 구분할 수 있습니다."></div>
+          <div class="hint">브라우저 채팅방에서 바로 복사해 붙여넣거나, 페이지 저장으로 만든 MHT/MHTML/HTML 파일을 불러오면 기울임체는 지문, 기울임이 아닌 문단은 대사로 처리됩니다. 메모장처럼 서식 없는 곳을 거치면 기울임 정보를 읽을 수 없습니다.</div>
         </div>
         <textarea id="chatOutputText" readonly placeholder="변환 결과"></textarea>
       </div>
@@ -220,6 +226,7 @@ const input = document.getElementById("inputText");
 const output = document.getElementById("outputText");
 const chatPaste = document.getElementById("chatPaste");
 const chatOutput = document.getElementById("chatOutputText");
+const chatFileInput = document.getElementById("chatFileInput");
 
 const removeDetailsEl = document.getElementById("removeDetails");
 const removeEmptyLinesEl = document.getElementById("removeEmptyLines");
@@ -256,6 +263,7 @@ chatPaste.addEventListener("paste", handleRichPaste);
 // 텍스트 입력은 'input'으로 즉시 반영
 protectTokenEl.addEventListener("input", transformText);
 deleteContainsTokenEl.addEventListener("input", transformText);
+chatFileInput.addEventListener("change", loadChatFile);
 
 // 탭 전환
 document.querySelectorAll(".tab").forEach(tab => {
@@ -395,6 +403,112 @@ function isAlreadyQuoted(t){
   return pairs.some(([o,c])=>t.startsWith(o) && t.endsWith(c) && t.length>=2);
 }
 
+
+// ------------------ 로판Ai 저장 파일 불러오기 ------------------
+function activateChatTab(){
+  activeMode = "chat";
+  document.querySelectorAll(".tab").forEach(t => {
+    const on = t.dataset.tab === activeMode;
+    t.classList.toggle("active", on);
+    t.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  classicPanel.classList.add("hidden");
+  chatPanel.classList.remove("hidden");
+  chatOptions.classList.remove("hidden");
+}
+function loadChatFile(){
+  const file = chatFileInput.files && chatFileInput.files[0];
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const raw = String(reader.result || "");
+      const looksMHT = /\.(mht|mhtml)$/i.test(file.name) || /MIME-Version:\s*1\.0/i.test(raw) || /Content-Type:\s*multipart\/related/i.test(raw);
+      const html = looksMHT ? extractHTMLFromMHT(raw) : raw;
+      if(!html || !/<[a-z][\s\S]*>/i.test(html)){
+        showToast("HTML 내용을 찾지 못했습니다.");
+        return;
+      }
+      activateChatTab();
+      chatPaste.innerHTML = sanitizePastedHTML(extractLikelyChatHTML(html));
+      transformText();
+      showToast("파일을 불러왔습니다.");
+    }catch(err){
+      console.error(err);
+      showToast("파일을 읽지 못했습니다.");
+    }
+  };
+  reader.onerror = () => showToast("파일을 읽지 못했습니다.");
+  reader.readAsText(file, "utf-8");
+}
+function extractHTMLFromMHT(raw){
+  const text = String(raw || "");
+  const boundaryMatch = text.match(/boundary=(?:"([^"]+)"|([^;\r\n]+))/i);
+  if(boundaryMatch){
+    const boundary = (boundaryMatch[1] || boundaryMatch[2] || "").trim();
+    const parts = text.split("--" + boundary);
+    for(const part of parts){
+      const sepMatch = part.match(/\r?\n\r?\n/);
+      if(!sepMatch) continue;
+      const sepIndex = sepMatch.index;
+      const sepLength = sepMatch[0].length;
+      const headers = part.slice(0, sepIndex);
+      if(!/Content-Type:\s*text\/html\b/i.test(headers)) continue;
+      let body = part.slice(sepIndex + sepLength);
+      body = body.replace(/\r?\n--\s*$/g, "");
+      const encMatch = headers.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i);
+      const enc = encMatch ? encMatch[1].trim().toLowerCase() : "";
+      if(enc.includes("base64")) return decodeBase64UTF8(body);
+      if(enc.includes("quoted-printable")) return decodeQuotedPrintableUTF8(body);
+      return body;
+    }
+  }
+
+  const docMatch = text.match(/<!doctype html[\s\S]*$/i) || text.match(/<html[\s\S]*$/i);
+  return docMatch ? docMatch[0] : text;
+}
+function decodeBase64UTF8(str){
+  const cleaned = String(str || "").replace(/\s+/g, "");
+  const binary = atob(cleaned);
+  const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
+}
+function decodeQuotedPrintableUTF8(str){
+  const qp = String(str || "").replace(/=\r?\n/g, "");
+  const bytes = [];
+  for(let i=0; i<qp.length; i++){
+    if(qp[i] === "=" && /^[0-9a-fA-F]{2}$/.test(qp.slice(i+1, i+3))){
+      bytes.push(parseInt(qp.slice(i+1, i+3), 16));
+      i += 2;
+    }else{
+      const code = qp.charCodeAt(i);
+      if(code <= 0xff) bytes.push(code);
+      else{
+        const encoded = new TextEncoder().encode(qp[i]);
+        encoded.forEach(b => bytes.push(b));
+      }
+    }
+  }
+  return new TextDecoder("utf-8").decode(Uint8Array.from(bytes));
+}
+function extractLikelyChatHTML(html){
+  const doc = new DOMParser().parseFromString(html || "", "text/html");
+  const candidates = Array.from(doc.querySelectorAll("div"))
+    .filter(el => el.classList && el.classList.contains("overflow-y-auto"));
+  if(candidates.length){
+    candidates.sort((a,b) => (b.innerText || b.textContent || "").length - (a.innerText || a.textContent || "").length);
+    const container = candidates[0];
+    const children = Array.from(container.children || []);
+    if(children.length){
+      children.sort((a,b) => (b.innerText || b.textContent || "").length - (a.innerText || a.textContent || "").length);
+      return children[0].innerHTML || children[0].outerHTML;
+    }
+    return container.innerHTML;
+  }
+  return doc.body ? doc.body.innerHTML : html;
+}
+
 // ------------------ 로판Ai 전체 채팅방 붙여넣기 ------------------
 function handleRichPaste(e){
   const data = e.clipboardData || window.clipboardData;
@@ -466,6 +580,7 @@ function isItalicElement(el){
   if(!el || el.nodeType !== 1) return false;
   const tag = el.tagName;
   if(tag === "I" || tag === "EM" || tag === "CITE") return true;
+  if(String(el.getAttribute("data-narration") || "").toLowerCase() === "true") return true;
 
   const style = (el.getAttribute("style") || "").toLowerCase();
   if(/font-style\s*:\s*italic/.test(style)) return true;
@@ -500,14 +615,23 @@ function isTableElement(el){
   const role = (el.getAttribute("role") || "").toLowerCase();
   if(["table","grid","row","cell","columnheader","rowheader"].includes(role)) return true;
   const className = String(el.className || "").toLowerCase();
-  return /\b(table|grid)\b/.test(className);
+  if(/\btable\b|\bgrid\b/.test(className)) return true;
+  if(/\brounded-lg\b/.test(className) && /\boverflow-hidden\b/.test(className)) return true;
+  if(/\bfont-mono\b|\bwhitespace-pre-wrap\b/.test(className)) return true;
+  const text = (el.innerText || el.textContent || "").trim();
+  return text.startsWith("기록지") || text.startsWith("🩸 기록지");
 }
 function isSkippableElement(el){
   if(!el || el.nodeType !== 1) return false;
   if(["SCRIPT","STYLE","META","LINK","NOSCRIPT","IFRAME","OBJECT","EMBED","SVG","CANVAS","BUTTON","INPUT","TEXTAREA","SELECT","OPTION"].includes(el.tagName)) return true;
   const ariaHidden = (el.getAttribute("aria-hidden") || "").toLowerCase();
   const hidden = el.hasAttribute("hidden") || ariaHidden === "true";
-  return hidden;
+  if(hidden) return true;
+  const className = String(el.className || "").toLowerCase();
+  if(/(^|\s)select-none(\s|$)/.test(className)) return true;
+  const title = el.getAttribute("title") || "";
+  if(["북마크 추가", "분기 생성"].includes(title)) return true;
+  return false;
 }
 function normalizeParagraphText(text){
   return (text || "")
@@ -519,25 +643,22 @@ function normalizeParagraphText(text){
 function parseRofanChatChunks(root){
   const chunks = [];
   let buffer = "";
-  let italicChars = 0;
-  let totalChars = 0;
+  let bufferKind = null;
   let bufferFromTable = false;
   let bufferFromDetails = false;
 
   const flush = () => {
     const text = normalizeParagraphText(buffer);
     if(text){
-      const kind = italicChars > 0 && italicChars >= totalChars * 0.5 ? "scene" : "normal";
       chunks.push({
-        kind,
+        kind: bufferKind || "normal",
         text,
         fromTable: bufferFromTable,
         fromDetails: bufferFromDetails
       });
     }
     buffer = "";
-    italicChars = 0;
-    totalChars = 0;
+    bufferKind = null;
     bufferFromTable = false;
     bufferFromDetails = false;
   };
@@ -545,14 +666,14 @@ function parseRofanChatChunks(root){
   const addInlineText = (text, ctx) => {
     const raw = String(text || "").replace(/\r/g,"");
     if(!raw) return;
+    const kind = ctx.italic ? "scene" : "normal";
     const parts = raw.split("\n");
     parts.forEach((part, idx) => {
       const normalized = part.replace(/\u00a0/g," ").replace(/[ \t]+/g," ");
       if(normalized){
+        if(buffer && bufferKind && bufferKind !== kind) flush();
+        if(!bufferKind) bufferKind = kind;
         buffer += normalized;
-        const count = normalized.replace(/\s/g,"").length;
-        totalChars += count;
-        if(ctx.italic) italicChars += count;
         if(ctx.fromTable) bufferFromTable = true;
         if(ctx.fromDetails) bufferFromDetails = true;
       }
@@ -755,6 +876,7 @@ function clearAll(){
   if(activeMode === "chat"){
     chatPaste.innerHTML="";
     chatOutput.value="";
+    chatFileInput.value="";
   }else{
     input.value="";
     output.value="";
