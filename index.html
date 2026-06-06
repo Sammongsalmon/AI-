@@ -315,6 +315,23 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
   .previewText{font-size:14px;line-height:1.75;}
 }
 
+/* compact base-cleanup row and chapter separator safety note */
+.basicOptionsRow{flex-wrap:nowrap;overflow-x:auto;gap:7px;padding-bottom:4px;align-items:center;}
+.basicOptionsRow::-webkit-scrollbar{height:8px;}
+.basicOptionsRow::-webkit-scrollbar-thumb{background:#c8dde7;border-radius:999px;}
+.basicOptionsRow .compactToggle{min-height:32px;padding:7px 10px;font-size:12px;white-space:nowrap;border-radius:999px;flex:0 0 auto;}
+.basicOptionsRow .compactControl{min-height:32px;padding:6px 9px;font-size:12px;border-radius:999px;flex:0 0 auto;}
+.basicOptionsRow .compactControl input{width:120px;min-height:28px;padding:5px 7px;font-size:12px;border-radius:999px;}
+@media (min-width:1180px){
+  #optionsBoard .controlsGrid{grid-template-columns:1fr;}
+  #optionsBoard details.foldBlock:first-child .blockBody{overflow-x:auto;}
+}
+@media (max-width:720px){
+  .basicOptionsRow .compactToggle{min-height:30px;padding:6px 9px;font-size:11.5px;}
+  .basicOptionsRow .compactControl{font-size:11.5px;}
+  .basicOptionsRow .compactControl input{width:100px;font-size:11.5px;}
+}
+
 </style>
 </head>
 <body>
@@ -396,13 +413,14 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
       <div class="controlsGrid">
         <details class="foldBlock" open>
           <summary>기본 정리</summary>
-          <div class="blockBody"><div class="optionRow">
-            <label class="toggle"><input type="checkbox" id="removeDetails">접힘 토큰 제거</label>
-            <label class="toggle"><input type="checkbox" id="removeEmptyLines">빈 줄 정리</label>
-            <label class="toggle"><input type="checkbox" id="removeHTML">HTML 태그 제거</label>
-            <label class="toggle"><input type="checkbox" id="removeDecor">구분선/기호 줄 제거</label>
-            <label class="toggle"><input type="checkbox" id="protectEnabled">보호 키워드 사용</label>
-            <span class="control">보호어 <input id="protectToken" type="text" placeholder="예: 🧷, KEEP, ⚑"></span>
+          <div class="blockBody"><div class="optionRow basicOptionsRow">
+            <label class="toggle compactToggle"><input type="checkbox" id="removeDetails">접힘 토큰 제거</label>
+            <label class="toggle compactToggle"><input type="checkbox" id="removeEmptyLines">전체 빈 줄 정리</label>
+            <label class="toggle compactToggle"><input type="checkbox" id="removeCellEmptyLines">응답 안 빈 줄 정리</label>
+            <label class="toggle compactToggle"><input type="checkbox" id="removeHTML">HTML 태그 제거</label>
+            <label class="toggle compactToggle"><input type="checkbox" id="removeDecor">구분선/기호 줄 제거</label>
+            <label class="toggle compactToggle"><input type="checkbox" id="protectEnabled">보호어 사용</label>
+            <span class="control compactControl">보호어 <input id="protectToken" type="text" placeholder="예: KEEP"></span>
           </div></div>
         </details>
 
@@ -516,6 +534,7 @@ const chatFileInput = document.getElementById("chatFileInput");
 
 const removeDetailsEl = document.getElementById("removeDetails");
 const removeEmptyLinesEl = document.getElementById("removeEmptyLines");
+const removeCellEmptyLinesEl = document.getElementById("removeCellEmptyLines");
 const removeHTMLEl = document.getElementById("removeHTML");
 const removeDecorEl = document.getElementById("removeDecor");
 const protectEnabledEl = document.getElementById("protectEnabled");
@@ -602,6 +621,7 @@ chatPaste.addEventListener("paste", handleRichPaste);
 [
   removeDetailsEl,
   removeEmptyLinesEl,
+  removeCellEmptyLinesEl,
   removeHTMLEl,
   removeDecorEl,
   protectEnabledEl,
@@ -952,21 +972,43 @@ function resetReviewDecisions(){
 }
 
 // ------------------ 기호/구분선 판정 ------------------
-function isDecorOnlyLine(line){
+function getProtectedChapterSeparators(){
+  const out = new Set();
+  const sep = chapterSeparatorEl ? String(chapterSeparatorEl.value || "").trim() : "";
+  const mode = chapterSplitModeEl ? chapterSplitModeEl.value : "";
+  if(sep && mode === "separator") out.add(sep);
+  return out;
+}
+function isProtectedChapterSeparatorLine(line, preserveSet){
+  const s = (line || "").trim();
+  return !!(s && preserveSet && preserveSet.has(s));
+}
+function isDecorOnlyLine(line, preserveSet){
   const s=(line||"").trim();
   if(!s) return false;
+  if(isProtectedChapterSeparatorLine(s, preserveSet)) return false;
   if(/^[-*_—–]{3,}$/.test(s)) return true;
   if(/^[<>\[\]\(\){}|\\/·•….,:;'"`~!@#$%^&+=-]+$/.test(s)) return true;
   return false;
 }
-function isDecorOnlyParagraph(p){
+function isDecorOnlyParagraph(p, preserveSet){
   const lines=(p||"").split("\n").map(l=>l.trim()).filter(Boolean);
   if(!lines.length) return false;
-  return lines.every(isDecorOnlyLine);
+  if(lines.some(l => isProtectedChapterSeparatorLine(l, preserveSet))) return false;
+  return lines.every(l => isDecorOnlyLine(l, preserveSet));
 }
-function removeDecorLines(p){
-  const kept = (p||"").split("\n").filter(l => !isDecorOnlyLine(l));
+function removeDecorLines(p, preserveSet){
+  const kept = (p||"").split("\n").filter(l => !isDecorOnlyLine(l, preserveSet));
   return kept.join("\n").trim();
+}
+function shouldRemoveCellEmptyLines(){
+  return !!(removeCellEmptyLinesEl && removeCellEmptyLinesEl.checked);
+}
+function normalizeBlankLinesInsideCell(text){
+  if(removeEmptyLinesEl.checked || shouldRemoveCellEmptyLines()){
+    return String(text || "").replace(/\n\s*\n+/g,"\n");
+  }
+  return text;
 }
 function isTableLikeText(t){
   const s = (t || "").trim();
@@ -2216,26 +2258,27 @@ function renderChunks(chunks, options){
     }
 
     if(removeDecorEl.checked && !protectedHere){
-      if(isDecorOnlyParagraph(t)) return "";
-      t = removeDecorLines(t);
+      const preserveDecor = getProtectedChapterSeparators();
+      if(isDecorOnlyParagraph(t, preserveDecor)) return "";
+      t = removeDecorLines(t, preserveDecor);
       if(!t) return "";
     }
 
     if(protectedHere){
-      const kept = removeEmptyLinesEl.checked ? t.replace(/\n\s*\n+/g,"\n") : t;
+      const kept = normalizeBlankLinesInsideCell(t);
       const shouldLabel = allowSpeakerLabels && !labeledBlockIds.has(chunk.blockId);
       if(shouldLabel) labeledBlockIds.add(chunk.blockId);
       return labelChunk(kept, chunk, shouldLabel);
     }
 
     if(kind==="scene"){
-      const scene = removeEmptyLinesEl.checked ? t.replace(/\n\s*\n+/g,"\n") : t;
+      const scene = normalizeBlankLinesInsideCell(t);
       const shouldLabel = allowSpeakerLabels && !labeledBlockIds.has(chunk.blockId);
       if(shouldLabel) labeledBlockIds.add(chunk.blockId);
       return labelChunk(scene, chunk, shouldLabel);
     }
 
-    if(isDecorOnlyParagraph(t)) return t;
+    if(isDecorOnlyParagraph(t, getProtectedChapterSeparators())) return t;
 
     let dialogue = t;
     if(quoteStyle !== "none" && !isAlreadyQuoted(t)) dialogue = openQ + t + closeQ;
@@ -2867,7 +2910,7 @@ function createZipBlob(entries, type){
   return new Blob(chunks, {type:type || "application/zip"});
 }
 function collectPresetValues(){
-  const ids = ["removeDetails","removeEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode"];
+  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode"];
   const data = {};
   ids.forEach(id => {
     const el = document.getElementById(id);

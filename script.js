@@ -7,6 +7,7 @@ const chatFileInput = document.getElementById("chatFileInput");
 
 const removeDetailsEl = document.getElementById("removeDetails");
 const removeEmptyLinesEl = document.getElementById("removeEmptyLines");
+const removeCellEmptyLinesEl = document.getElementById("removeCellEmptyLines");
 const removeHTMLEl = document.getElementById("removeHTML");
 const removeDecorEl = document.getElementById("removeDecor");
 const protectEnabledEl = document.getElementById("protectEnabled");
@@ -93,6 +94,7 @@ chatPaste.addEventListener("paste", handleRichPaste);
 [
   removeDetailsEl,
   removeEmptyLinesEl,
+  removeCellEmptyLinesEl,
   removeHTMLEl,
   removeDecorEl,
   protectEnabledEl,
@@ -443,21 +445,43 @@ function resetReviewDecisions(){
 }
 
 // ------------------ 기호/구분선 판정 ------------------
-function isDecorOnlyLine(line){
+function getProtectedChapterSeparators(){
+  const out = new Set();
+  const sep = chapterSeparatorEl ? String(chapterSeparatorEl.value || "").trim() : "";
+  const mode = chapterSplitModeEl ? chapterSplitModeEl.value : "";
+  if(sep && mode === "separator") out.add(sep);
+  return out;
+}
+function isProtectedChapterSeparatorLine(line, preserveSet){
+  const s = (line || "").trim();
+  return !!(s && preserveSet && preserveSet.has(s));
+}
+function isDecorOnlyLine(line, preserveSet){
   const s=(line||"").trim();
   if(!s) return false;
+  if(isProtectedChapterSeparatorLine(s, preserveSet)) return false;
   if(/^[-*_—–]{3,}$/.test(s)) return true;
   if(/^[<>\[\]\(\){}|\\/·•….,:;'"`~!@#$%^&+=-]+$/.test(s)) return true;
   return false;
 }
-function isDecorOnlyParagraph(p){
+function isDecorOnlyParagraph(p, preserveSet){
   const lines=(p||"").split("\n").map(l=>l.trim()).filter(Boolean);
   if(!lines.length) return false;
-  return lines.every(isDecorOnlyLine);
+  if(lines.some(l => isProtectedChapterSeparatorLine(l, preserveSet))) return false;
+  return lines.every(l => isDecorOnlyLine(l, preserveSet));
 }
-function removeDecorLines(p){
-  const kept = (p||"").split("\n").filter(l => !isDecorOnlyLine(l));
+function removeDecorLines(p, preserveSet){
+  const kept = (p||"").split("\n").filter(l => !isDecorOnlyLine(l, preserveSet));
   return kept.join("\n").trim();
+}
+function shouldRemoveCellEmptyLines(){
+  return !!(removeCellEmptyLinesEl && removeCellEmptyLinesEl.checked);
+}
+function normalizeBlankLinesInsideCell(text){
+  if(removeEmptyLinesEl.checked || shouldRemoveCellEmptyLines()){
+    return String(text || "").replace(/\n\s*\n+/g,"\n");
+  }
+  return text;
 }
 function isTableLikeText(t){
   const s = (t || "").trim();
@@ -1707,26 +1731,27 @@ function renderChunks(chunks, options){
     }
 
     if(removeDecorEl.checked && !protectedHere){
-      if(isDecorOnlyParagraph(t)) return "";
-      t = removeDecorLines(t);
+      const preserveDecor = getProtectedChapterSeparators();
+      if(isDecorOnlyParagraph(t, preserveDecor)) return "";
+      t = removeDecorLines(t, preserveDecor);
       if(!t) return "";
     }
 
     if(protectedHere){
-      const kept = removeEmptyLinesEl.checked ? t.replace(/\n\s*\n+/g,"\n") : t;
+      const kept = normalizeBlankLinesInsideCell(t);
       const shouldLabel = allowSpeakerLabels && !labeledBlockIds.has(chunk.blockId);
       if(shouldLabel) labeledBlockIds.add(chunk.blockId);
       return labelChunk(kept, chunk, shouldLabel);
     }
 
     if(kind==="scene"){
-      const scene = removeEmptyLinesEl.checked ? t.replace(/\n\s*\n+/g,"\n") : t;
+      const scene = normalizeBlankLinesInsideCell(t);
       const shouldLabel = allowSpeakerLabels && !labeledBlockIds.has(chunk.blockId);
       if(shouldLabel) labeledBlockIds.add(chunk.blockId);
       return labelChunk(scene, chunk, shouldLabel);
     }
 
-    if(isDecorOnlyParagraph(t)) return t;
+    if(isDecorOnlyParagraph(t, getProtectedChapterSeparators())) return t;
 
     let dialogue = t;
     if(quoteStyle !== "none" && !isAlreadyQuoted(t)) dialogue = openQ + t + closeQ;
@@ -2358,7 +2383,7 @@ function createZipBlob(entries, type){
   return new Blob(chunks, {type:type || "application/zip"});
 }
 function collectPresetValues(){
-  const ids = ["removeDetails","removeEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode"];
+  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode"];
   const data = {};
   ids.forEach(id => {
     const el = document.getElementById(id);
