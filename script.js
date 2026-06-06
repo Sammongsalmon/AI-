@@ -13,6 +13,15 @@ const epubFindTextEl = document.getElementById("epubFindText");
 const epubReplaceTextEl = document.getElementById("epubReplaceText");
 const epubEditFontSizeEl = document.getElementById("epubEditFontSize");
 const epubEditTextColorEl = document.getElementById("epubEditTextColor");
+const epubEditTextColorREl = document.getElementById("epubEditTextColorR");
+const epubEditTextColorGEl = document.getElementById("epubEditTextColorG");
+const epubEditTextColorBEl = document.getElementById("epubEditTextColorB");
+const epubQuoteColorEl = document.getElementById("epubQuoteColor");
+const epubQuoteColorREl = document.getElementById("epubQuoteColorR");
+const epubQuoteColorGEl = document.getElementById("epubQuoteColorG");
+const epubQuoteColorBEl = document.getElementById("epubQuoteColorB");
+const quoteContextMenuEl = document.getElementById("quoteContextMenu");
+const quoteUnwrapBtnEl = document.getElementById("quoteUnwrapBtn");
 const epubFontInputEl = document.getElementById("epubFontInput");
 const classicFileNameEl = document.getElementById("classicFileName");
 const chatFileNameEl = document.getElementById("chatFileName");
@@ -116,6 +125,7 @@ let cachedEpubFontAsset = null;
 let downloadFileBaseName = "";
 let quoteLongPressTimer = null;
 let quoteLongPressMeta = null;
+let currentQuoteMenuTarget = null;
 
 
 function wirePrettyFileInputs(){
@@ -140,6 +150,50 @@ function wirePrettyFileInputs(){
 }
 wirePrettyFileInputs();
 
+function clampColorByte(v){
+  const n = parseInt(v, 10);
+  if(!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(255, n));
+}
+function componentToHex(v){ return clampColorByte(v).toString(16).padStart(2, "0"); }
+function rgbToHex(r,g,b){ return `#${componentToHex(r)}${componentToHex(g)}${componentToHex(b)}`; }
+function hexToRgb(hex){
+  const m = String(hex || "").trim().match(/^#?([0-9a-fA-F]{6})$/);
+  if(!m) return {r:0,g:0,b:0};
+  const n = parseInt(m[1], 16);
+  return {r:(n>>16)&255, g:(n>>8)&255, b:n&255};
+}
+function updateColorSwatch(colorInput){
+  if(!colorInput) return;
+  document.querySelectorAll(`[data-swatch="${colorInput.id}"]`).forEach(sw => sw.style.setProperty("--swatch", colorInput.value));
+  if(colorInput === epubQuoteColorEl) updateQuoteColorPreview();
+}
+function syncRgbFromColor(colorInput, rEl, gEl, bEl){
+  if(!colorInput) return;
+  const rgb = hexToRgb(colorInput.value);
+  if(rEl) rEl.value = rgb.r;
+  if(gEl) gEl.value = rgb.g;
+  if(bEl) bEl.value = rgb.b;
+  updateColorSwatch(colorInput);
+}
+function syncColorFromRgb(colorInput, rEl, gEl, bEl){
+  if(!colorInput) return;
+  colorInput.value = rgbToHex(rEl && rEl.value, gEl && gEl.value, bEl && bEl.value);
+  updateColorSwatch(colorInput);
+}
+function setupColorWidget(colorInput, rEl, gEl, bEl){
+  if(!colorInput) return;
+  colorInput.addEventListener("input", () => { syncRgbFromColor(colorInput, rEl, gEl, bEl); scheduleAutosave(); });
+  [rEl,gEl,bEl].forEach(el => { if(el) el.addEventListener("input", () => { syncColorFromRgb(colorInput, rEl, gEl, bEl); scheduleAutosave(); }); });
+  syncRgbFromColor(colorInput, rEl, gEl, bEl);
+}
+function updateQuoteColorPreview(){
+  const color = epubQuoteColorEl ? epubQuoteColorEl.value : "#4f8aa4";
+  document.querySelectorAll(".quotePresetList").forEach(el => el.style.setProperty("--quote-color", color));
+}
+setupColorWidget(epubEditTextColorEl, epubEditTextColorREl, epubEditTextColorGEl, epubEditTextColorBEl);
+setupColorWidget(epubQuoteColorEl, epubQuoteColorREl, epubQuoteColorGEl, epubQuoteColorBEl);
+
 input.addEventListener("input", () => {
   if(!isApplyingClassicExcerpt) classicActiveChunks = null;
   transformText();
@@ -157,8 +211,15 @@ if(epubEditEditor){
   epubEditEditor.addEventListener("input", () => { rememberEditorSelection(); scheduleAutosave(); updateEpubPreview(); });
   epubEditEditor.addEventListener("pointerdown", handleQuotePointerDown);
   epubEditEditor.addEventListener("pointermove", handleQuotePointerMove);
+  epubEditEditor.addEventListener("contextmenu", handleQuoteContextMenu);
   ["pointerup","pointercancel","pointerleave","scroll"].forEach(ev => epubEditEditor.addEventListener(ev, clearQuoteLongPressTimer));
 }
+if(quoteUnwrapBtnEl) quoteUnwrapBtnEl.addEventListener("click", () => {
+  if(currentQuoteMenuTarget && epubEditEditor && epubEditEditor.contains(currentQuoteMenuTarget)) unwrapQuoteBlock(currentQuoteMenuTarget);
+  hideQuoteContextMenu();
+});
+document.addEventListener("click", e => { if(quoteContextMenuEl && !quoteContextMenuEl.contains(e.target)) hideQuoteContextMenu(); });
+document.addEventListener("keydown", e => { if(e.key === "Escape") hideQuoteContextMenu(); });
 if(epubFontInputEl) epubFontInputEl.addEventListener("change", e => { updateFileNameLabel(epubFontInputEl, epubFontFileNameEl, "선택 없음"); loadEpubFontFile(); });
 downloadFileNameEls.forEach(el => {
   el.addEventListener("input", () => {
@@ -2626,7 +2687,7 @@ function textToXhtmlBody(text){
 function getEpubCss(){
   const preset = getEpubConfig().stylePreset;
   const fontFace = cachedEpubFontAsset ? `@font-face{font-family:"UploadedEpubFont";src:url("${escapeXML(cachedEpubFontAsset.epubName || cachedEpubFontAsset.name || "uploaded-font.woff")}");} body{font-family:"UploadedEpubFont",serif !important;}` : "";
-  const base = `body{line-height:1.82;word-break:keep-all;overflow-wrap:break-word;} p{margin:0 0 1em;} h1{font-size:1.45em;margin:0 0 1.2em;} .cover{text-align:center;} .cover img{max-width:100%;height:auto;} blockquote{margin:1em 0;} .quotePostype{padding:.9em 1.05em;border-left:4px solid #4f8aa4;background:#f3f9fc;border-radius:.75em;text-align:left;} .quoteBlog{padding:1em .5em;border-top:1px solid #bdd8e3;border-bottom:1px solid #bdd8e3;border-left:0;background:transparent;border-radius:0;text-align:center;} .quoteSoft{padding:1em 1.1em;border-left:0;background:#eaf5fa;border:1px solid #d4e9f1;border-radius:1em;text-align:center;} .rofan-block[data-owner]{margin:0 0 1em;} .rofan-block[data-kind="scene"]{font-style:normal;}`;
+  const base = `body{line-height:1.82;word-break:keep-all;overflow-wrap:break-word;} p{margin:0 0 1em;} h1{font-size:1.45em;margin:0 0 1.2em;} .cover{text-align:center;} .cover img{max-width:100%;height:auto;} blockquote{margin:1em 0;} .quoteLine{padding:.25em 0 .25em 1em;border-left:4px solid #4f8aa4;background:transparent;border-radius:0;text-align:left;} .quotePostype{padding:.9em 1.05em;border-left:4px solid #4f8aa4;background:#f3f9fc;border-radius:.75em;text-align:left;} .quoteBlog{padding:1em .5em;border-top:1px solid #bdd8e3;border-bottom:1px solid #bdd8e3;border-left:0;background:transparent;border-radius:0;text-align:center;} .quoteSoft{padding:1em 1.1em;border-left:0;background:#eaf5fa;border:1px solid #d4e9f1;border-radius:1em;text-align:center;} .rofan-block[data-owner]{margin:0 0 1em;} .rofan-block[data-kind="scene"]{font-style:normal;}`;
   if(preset === "paper") return fontFace + base + ` body{font-family:serif;} p{text-indent:1em;margin-bottom:.65em;}`;
   if(preset === "script") return fontFace + base + ` body{font-family:sans-serif;} p{margin-bottom:1.1em;} p:nth-child(odd){padding-left:.5em;border-left:2px solid #ddd;}`;
   if(preset === "backup") return fontFace + base + ` body{font-family:monospace;font-size:.92em;} p{white-space:pre-wrap;margin-bottom:1.2em;}`;
@@ -2972,7 +3033,7 @@ function createZipBlob(entries, type){
   return new Blob(chunks, {type:type || "application/zip"});
 }
 function collectPresetValues(){
-  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode"];
+  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode","epubEditTextColor","epubQuoteColor","epubEditTextColorR","epubEditTextColorG","epubEditTextColorB","epubQuoteColorR","epubQuoteColorG","epubQuoteColorB"];
   const data = {};
   ids.forEach(id => {
     const el = document.getElementById(id);
@@ -3141,7 +3202,7 @@ function sanitizeInlineStyle(style){
     if(!rawName || !rest.length) return;
     const name = rawName.trim().toLowerCase();
     const value = rest.join(":").trim();
-    if(!/^(color|font-size|font-family|background|background-color|border|border-left|border-top|border-bottom|border-radius|padding|margin|text-align|line-height|font-weight|font-style)$/.test(name)) return;
+    if(!/^(color|font-size|font-family|background|background-color|border|border-color|border-left|border-left-color|border-top|border-top-color|border-bottom|border-bottom-color|border-radius|padding|margin|text-align|line-height|font-weight|font-style)$/.test(name)) return;
     if(/url\s*\(|expression\s*\(|javascript:/i.test(value)) return;
     allowed.push(`${name}:${value}`);
   });
@@ -3297,17 +3358,45 @@ function clearQuoteLongPressTimer(){
   if(quoteLongPressTimer){ clearTimeout(quoteLongPressTimer); quoteLongPressTimer = null; }
   quoteLongPressMeta = null;
 }
+function closestEditorQuote(target){
+  const quote = target && target.closest ? target.closest("blockquote") : null;
+  return quote && epubEditEditor && epubEditEditor.contains(quote) ? quote : null;
+}
+function showQuoteContextMenu(quote, x, y){
+  if(!quoteContextMenuEl || !quote) return;
+  currentQuoteMenuTarget = quote;
+  quoteContextMenuEl.hidden = false;
+  quoteContextMenuEl.style.left = "0px";
+  quoteContextMenuEl.style.top = "0px";
+  const rect = quoteContextMenuEl.getBoundingClientRect();
+  const pad = 10;
+  const left = Math.max(pad, Math.min((x || pad), window.innerWidth - rect.width - pad));
+  const top = Math.max(pad, Math.min((y || pad), window.innerHeight - rect.height - pad));
+  quoteContextMenuEl.style.left = left + "px";
+  quoteContextMenuEl.style.top = top + "px";
+}
+function hideQuoteContextMenu(){
+  if(quoteContextMenuEl) quoteContextMenuEl.hidden = true;
+  currentQuoteMenuTarget = null;
+}
+function handleQuoteContextMenu(e){
+  const quote = closestEditorQuote(e.target);
+  if(!quote) return;
+  e.preventDefault();
+  clearQuoteLongPressTimer();
+  showQuoteContextMenu(quote, e.clientX, e.clientY);
+}
 function handleQuotePointerDown(e){
   if(activeMode !== "epubedit" || !epubEditEditor) return;
-  const quote = e.target && e.target.closest ? e.target.closest("blockquote") : null;
-  if(!quote || !epubEditEditor.contains(quote)) return;
+  const quote = closestEditorQuote(e.target);
+  if(!quote) return;
   clearQuoteLongPressTimer();
   quoteLongPressMeta = {quote, x:e.clientX || 0, y:e.clientY || 0};
   quoteLongPressTimer = setTimeout(() => {
-    const target = quoteLongPressMeta && quoteLongPressMeta.quote;
+    const meta = quoteLongPressMeta;
     clearQuoteLongPressTimer();
-    if(target && epubEditEditor.contains(target)) unwrapQuoteBlock(target);
-  }, 720);
+    if(meta && meta.quote && epubEditEditor.contains(meta.quote)) showQuoteContextMenu(meta.quote, meta.x, meta.y);
+  }, 650);
 }
 function handleQuotePointerMove(e){
   if(!quoteLongPressTimer || !quoteLongPressMeta) return;
@@ -3322,9 +3411,18 @@ function unwrapQuoteBlock(quote){
   updateEpubPreview(); scheduleAutosave();
   showToast("인용구를 해제했습니다.");
 }
+function getQuoteColor(){
+  return epubQuoteColorEl && /^#[0-9a-fA-F]{6}$/.test(epubQuoteColorEl.value) ? epubQuoteColorEl.value : "#4f8aa4";
+}
+function quoteStyleForType(type, color){
+  if(type === "blog") return `border-top-color:${color};border-bottom-color:${color};`;
+  if(type === "soft") return `border-color:${color};`;
+  return `border-left-color:${color};`;
+}
 function makeQuoteHtml(type, content){
-  const cls = type === "blog" ? "quoteBlog" : (type === "soft" ? "quoteSoft" : "quotePostype");
-  return `<blockquote class="${cls}">${content}</blockquote>`;
+  const cls = type === "blog" ? "quoteBlog" : (type === "soft" ? "quoteSoft" : (type === "postype" ? "quotePostype" : "quoteLine"));
+  const color = getQuoteColor();
+  return `<blockquote class="${cls}" style="${quoteStyleForType(type, color)}">${content}</blockquote>`;
 }
 function getCustomQuoteTemplate(){
   const el = document.getElementById("epubQuoteCustomTemplate");
@@ -3406,10 +3504,16 @@ async function loadEpubFontFile(){
 async function applyCachedEpubFont(){
   if(!cachedEpubFontAsset || !cachedEpubFontAsset.dataUrl) return;
   try{
-    const font = new FontFace("UploadedEpubFont", `url(${cachedEpubFontAsset.dataUrl})`);
-    await font.load(); document.fonts.add(font);
-    if(epubEditEditor) epubEditEditor.style.fontFamily = 'UploadedEpubFont, serif';
-  }catch(err){ console.warn(err); }
+    let styleEl = document.getElementById("uploadedEpubFontStyle");
+    if(!styleEl){ styleEl = document.createElement("style"); styleEl.id = "uploadedEpubFontStyle"; document.head.appendChild(styleEl); }
+    styleEl.textContent = `@font-face{font-family:"UploadedEpubFont";src:url("${cachedEpubFontAsset.dataUrl}");font-weight:normal;font-style:normal;}`;
+    if("FontFace" in window){
+      const font = new FontFace("UploadedEpubFont", `url(${cachedEpubFontAsset.dataUrl})`);
+      await font.load(); document.fonts.add(font);
+    }
+    if(epubEditEditor) epubEditEditor.style.setProperty("font-family", 'UploadedEpubFont, serif', "important");
+    updateEpubPreview();
+  }catch(err){ console.warn(err); showToast("이 브라우저에서 폰트 미리보기를 적용하지 못했습니다."); }
 }
 function editorHtmlForExport(){
   if(activeMode !== "epubedit" || !epubEditEditor) return "";
@@ -3482,3 +3586,5 @@ function chapterBodyToXhtml(ch){
 }
 
 restoreSavedWork();
+syncRgbFromColor(epubEditTextColorEl, epubEditTextColorREl, epubEditTextColorGEl, epubEditTextColorBEl);
+syncRgbFromColor(epubQuoteColorEl, epubQuoteColorREl, epubQuoteColorGEl, epubQuoteColorBEl);

@@ -456,7 +456,7 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
 .epubRichEditor{width:100%;min-height:560px;max-height:72vh;overflow:auto;overflow-wrap:anywhere;word-break:break-word;white-space:normal;border:1px solid var(--line);border-radius:18px;background:#fff;padding:22px;font-size:15px;line-height:1.85;outline:none;box-shadow:inset 0 1px 0 rgba(47,42,36,.04);}
 .epubRichEditor:empty:before{content:attr(data-placeholder);color:var(--muted);}
 .epubRichEditor p{margin:0 0 1em;}
-.epubRichEditor blockquote,.quoteBox{margin:1em 0;padding:12px 15px;border-left:3px solid var(--accent);background:var(--paper2);border-radius:12px;color:var(--ink);}
+.quoteBox{margin:1em 0;padding:12px 15px;border-left:3px solid var(--accent);background:var(--paper2);border-radius:12px;color:var(--ink);}
 .epubRichEditor .quotePostype{margin:1em 0;padding:12px 15px;border-left:3px solid var(--accent);background:var(--paper2);border-radius:12px;}
 .epubRichEditor .quoteBlog{margin:1em 0;padding:12px 8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center;}
 .epubRichEditor .quoteSoft{margin:1em 0;padding:12px 15px;background:#edf6fa;border-radius:14px;text-align:center;}
@@ -506,9 +506,43 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
 .epubToolStack input[type="text"],.epubToolStack input[type="search"],.epubToolStack input[type="number"],.epubToolStack textarea{font-family:inherit;width:100%;}
 @media(max-width:720px){.quotePresetBtn{min-height:66px;padding:12px}.fileNameText{max-width:130px}}
 
+
+/* rich color picker and quote menu */
+.richColorControl{
+  display:grid;
+  grid-template-columns:auto 44px repeat(3,minmax(52px,1fr));
+  gap:8px;
+  align-items:center;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#fff;
+  padding:9px 10px;
+  min-width:0;
+}
+.richColorTitle{font-size:12.5px;font-weight:720;color:var(--sub);white-space:nowrap;}
+.colorSwatchLabel{position:relative;width:42px;height:42px;border-radius:999px;border:1px solid var(--line);background:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 2px 8px rgba(63,107,128,.08);overflow:hidden;}
+.colorSwatchLabel input[type="color"]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;}
+.colorSwatch{width:30px;height:30px;border-radius:999px;background:var(--swatch,#4f8aa4);border:1px solid rgba(31,45,54,.12);box-shadow:inset 0 0 0 1px rgba(255,255,255,.55);}
+.rgbField{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px;align-items:center;border:1px solid var(--line2);border-radius:12px;background:#fafdff;padding:6px 7px;color:var(--muted);font-size:11px;font-weight:720;}
+.rgbField input{width:100%;border:0!important;background:transparent!important;padding:0!important;text-align:center;font-weight:720;color:var(--ink);outline:none;min-width:0;}
+.quoteColorRow{margin-bottom:12px;}
+.quotePresetList{--quote-color:#4f8aa4;}
+.quoteMini.lineMini{border-left:3px solid var(--quote-color);padding-left:12px;background:transparent;min-height:38px;}
+.quoteMini.postypeMini{border-left:3px solid var(--quote-color);background:#f3f9fc;border-radius:12px;padding:8px 10px;}
+.quoteMini.blogMini{border-top:1px solid var(--quote-color);border-bottom:1px solid var(--quote-color);justify-content:center;padding:10px 6px;}
+.quoteMini.softMini{background:#edf6fa;border:1px solid var(--quote-color);border-radius:13px;justify-content:center;padding:10px 12px;}
+.epubRichEditor blockquote.quoteLine{margin:1em 0;padding:.25em 0 .25em 1em;border-left:3px solid #4f8aa4;background:transparent;border-radius:0;color:var(--ink);}
+.epubRichEditor blockquote.quotePostype{margin:1em 0;padding:12px 15px;border-left:3px solid #4f8aa4;background:var(--paper2);border-radius:12px;text-align:left;}
+.epubRichEditor blockquote.quoteBlog{margin:1em 0;padding:14px 8px;border-left:0!important;border-top:1px solid #bdd8e3;border-bottom:1px solid #bdd8e3;background:#fff;text-align:center;border-radius:0;}
+.epubRichEditor blockquote.quoteSoft{margin:1em 0;padding:14px 16px;border-left:0!important;border:1px solid #d4e9f1;background:#edf6fa;text-align:center;border-radius:16px;}
+.quoteContextMenu{position:fixed;z-index:10000;min-width:128px;padding:6px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:0 18px 45px rgba(31,45,54,.18);}
+.quoteContextMenu button{width:100%;border:0;background:#f6fbfd;color:var(--ink);border-radius:10px;padding:10px 12px;font-weight:720;cursor:pointer;text-align:left;}
+.quoteContextMenu button:hover{background:var(--accentSoft);color:var(--accent);}
+@media(max-width:720px){.richColorControl{grid-template-columns:auto 38px repeat(3,minmax(40px,1fr));gap:6px;padding:7px}.colorSwatchLabel{width:36px;height:36px}.colorSwatch{width:26px;height:26px}.rgbField{font-size:10px;padding:5px}.quoteContextMenu button{font-size:12px;padding:9px 10px}}
+
 /* quote and chapter TOC refinements */
 .epubRichEditor blockquote{position:relative;transition:border-color .18s ease, background .18s ease;}
-.epubRichEditor blockquote:after{content:"길게 누르면 인용 해제";position:absolute;right:10px;top:8px;font-size:10px;color:rgba(75,111,128,.52);opacity:0;transition:opacity .18s ease;pointer-events:none;}
+.epubRichEditor blockquote:after{content:"길게 눌러 인용 해제";position:absolute;right:10px;top:8px;font-size:10px;color:rgba(75,111,128,.52);opacity:0;transition:opacity .18s ease;pointer-events:none;}
 .epubRichEditor blockquote:hover:after{opacity:1;}
 .epubRichEditor blockquote.quotePostype{border-left:4px solid #4f8aa4;background:#f3f9fc;text-align:left;border-top:0;border-bottom:0;border-radius:13px;}
 .epubRichEditor blockquote.quoteBlog{border-left:0!important;border-top:1px solid #bdd8e3;border-bottom:1px solid #bdd8e3;background:#fff;text-align:center;border-radius:0;padding:16px 8px;}
@@ -616,8 +650,16 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
               <div class="formatButtonRow"><button type="button" class="btn subtle" onclick="findInEpubEditor()">찾기</button><button type="button" class="btn subtle" onclick="replaceOneInEpubEditor()">하나 바꾸기</button><button type="button" class="btn subtle" onclick="replaceAllInEpubEditor()">모두 바꾸기</button></div>
             </div></details>
             <details class="foldBlock"><summary>인용구</summary><div class="blockBody">
+              <div class="richColorControl quoteColorRow" data-color-widget="quote">
+                <span class="richColorTitle">인용 색상</span>
+                <label class="colorSwatchLabel" title="인용 색상 선택"><input id="epubQuoteColor" type="color" value="#4f8aa4"><span class="colorSwatch" data-swatch="epubQuoteColor"></span></label>
+                <span class="rgbField">R <input id="epubQuoteColorR" type="number" min="0" max="255" value="79"></span>
+                <span class="rgbField">G <input id="epubQuoteColorG" type="number" min="0" max="255" value="138"></span>
+                <span class="rgbField">B <input id="epubQuoteColorB" type="number" min="0" max="255" value="164"></span>
+              </div>
               <div class="quotePresetList">
-                <button type="button" class="quotePresetBtn" onmousedown="event.preventDefault()" onclick="applyQuoteStyle('postype')"><span class="quoteMini postypeMini"><em></em><b>인용 문장 예시입니다.<br>왼쪽 선으로 강조됩니다.</b></span><small>선 강조</small></button>
+                <button type="button" class="quotePresetBtn" onmousedown="event.preventDefault()" onclick="applyQuoteStyle('line')"><span class="quoteMini lineMini"><b>인용 문장 예시입니다.<br>왼쪽 선만 표시됩니다.</b></span><small>왼쪽 선</small></button>
+                <button type="button" class="quotePresetBtn" onmousedown="event.preventDefault()" onclick="applyQuoteStyle('postype')"><span class="quoteMini postypeMini"><b>인용 문장 예시입니다.<br>연푸른 배경으로 강조됩니다.</b></span><small>선+배경</small></button>
                 <button type="button" class="quotePresetBtn" onmousedown="event.preventDefault()" onclick="applyQuoteStyle('blog')"><span class="quoteMini blogMini"><b>“ 인용 문장 예시입니다. ”</b></span><small>위아래 선</small></button>
                 <button type="button" class="quotePresetBtn" onmousedown="event.preventDefault()" onclick="applyQuoteStyle('soft')"><span class="quoteMini softMini"><b>인용 문장 예시입니다.</b></span><small>박스</small></button>
               </div>
@@ -628,7 +670,13 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
             <details class="foldBlock" open><summary>글자 서식</summary><div class="blockBody">
               <div class="compactToolGrid">
                 <span class="control sizeControl">크기 <span class="sizeStepper"><button type="button" class="sizeStepBtn" onmousedown="event.preventDefault()" onclick="adjustEpubFontSize(-1)">−</button><input id="epubEditFontSize" type="number" min="8" max="72" value="15"><button type="button" class="sizeStepBtn" onmousedown="event.preventDefault()" onclick="adjustEpubFontSize(1)">＋</button></span></span>
-                <span class="control">색상 <input id="epubEditTextColor" type="color" value="#1f2d36"></span>
+                <div class="richColorControl" data-color-widget="text">
+                  <span class="richColorTitle">글자색</span>
+                  <label class="colorSwatchLabel" title="글자색 선택"><input id="epubEditTextColor" type="color" value="#1f2d36"><span class="colorSwatch" data-swatch="epubEditTextColor"></span></label>
+                  <span class="rgbField">R <input id="epubEditTextColorR" type="number" min="0" max="255" value="31"></span>
+                  <span class="rgbField">G <input id="epubEditTextColorG" type="number" min="0" max="255" value="45"></span>
+                  <span class="rgbField">B <input id="epubEditTextColorB" type="number" min="0" max="255" value="54"></span>
+                </div>
                 <label class="fileControl"><span class="fileButtonText">폰트 불러오기</span><span class="fileNameText" id="epubFontFileName">선택 없음</span><input id="epubFontInput" type="file" accept=".ttf,.otf,.woff,.woff2"></label>
               </div>
               <div class="formatButtonRow"><button type="button" class="btn subtle" onmousedown="event.preventDefault()" onclick="applyEpubTextFormat()">선택/전체 적용</button><button type="button" class="btn subtle" onmousedown="event.preventDefault()" onclick="clearEpubInlineFormat()">서식 제거</button></div>
@@ -731,11 +779,11 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
         </div></div></details>
 
         <details class="foldBlock" open><summary>챕터와 목차</summary><div class="blockBody"><div class="optionRow">
+          <span class="control">첫 챕터 <input id="chapterFirstTitle" type="text" placeholder="첫 챕터명"></span>
+          <span class="control">챕터명 <input id="chapterTitlePrefix" type="text" value="Chapter"></span>
           <span class="control">나누기 <select id="chapterSplitMode"><option value="none" selected>나누지 않음</option><option value="chars">글자 수 기준</option><option value="paragraphs">문단 수 기준</option><option value="separator">구분선 기준</option></select></span>
           <span class="control">기준값 <input id="chapterSize" type="number" min="1" value="7000"></span>
           <span class="control">구분선 <input id="chapterSeparator" type="text" value="—————"></span>
-          <span class="control">챕터명 <input id="chapterTitlePrefix" type="text" value="Chapter"></span>
-          <span class="control">첫 챕터 <input id="chapterFirstTitle" type="text" placeholder="첫 챕터명"></span>
         </div><div class="hint">구분선과 같은 줄에서 챕터를 나눕니다.</div>
         <div class="chapterDividerTool">
           <div class="optionRow compactControls">
@@ -771,6 +819,7 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
 </div>
 
 <div id="toast">복사되었습니다.</div>
+<div id="quoteContextMenu" class="quoteContextMenu" hidden><button type="button" id="quoteUnwrapBtn">인용 해제</button></div>
 <script>
 const input = document.getElementById("inputText");
 const output = document.getElementById("outputText");
@@ -787,6 +836,15 @@ const epubFindTextEl = document.getElementById("epubFindText");
 const epubReplaceTextEl = document.getElementById("epubReplaceText");
 const epubEditFontSizeEl = document.getElementById("epubEditFontSize");
 const epubEditTextColorEl = document.getElementById("epubEditTextColor");
+const epubEditTextColorREl = document.getElementById("epubEditTextColorR");
+const epubEditTextColorGEl = document.getElementById("epubEditTextColorG");
+const epubEditTextColorBEl = document.getElementById("epubEditTextColorB");
+const epubQuoteColorEl = document.getElementById("epubQuoteColor");
+const epubQuoteColorREl = document.getElementById("epubQuoteColorR");
+const epubQuoteColorGEl = document.getElementById("epubQuoteColorG");
+const epubQuoteColorBEl = document.getElementById("epubQuoteColorB");
+const quoteContextMenuEl = document.getElementById("quoteContextMenu");
+const quoteUnwrapBtnEl = document.getElementById("quoteUnwrapBtn");
 const epubFontInputEl = document.getElementById("epubFontInput");
 const classicFileNameEl = document.getElementById("classicFileName");
 const chatFileNameEl = document.getElementById("chatFileName");
@@ -890,6 +948,7 @@ let cachedEpubFontAsset = null;
 let downloadFileBaseName = "";
 let quoteLongPressTimer = null;
 let quoteLongPressMeta = null;
+let currentQuoteMenuTarget = null;
 
 
 function wirePrettyFileInputs(){
@@ -914,6 +973,50 @@ function wirePrettyFileInputs(){
 }
 wirePrettyFileInputs();
 
+function clampColorByte(v){
+  const n = parseInt(v, 10);
+  if(!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(255, n));
+}
+function componentToHex(v){ return clampColorByte(v).toString(16).padStart(2, "0"); }
+function rgbToHex(r,g,b){ return `#${componentToHex(r)}${componentToHex(g)}${componentToHex(b)}`; }
+function hexToRgb(hex){
+  const m = String(hex || "").trim().match(/^#?([0-9a-fA-F]{6})$/);
+  if(!m) return {r:0,g:0,b:0};
+  const n = parseInt(m[1], 16);
+  return {r:(n>>16)&255, g:(n>>8)&255, b:n&255};
+}
+function updateColorSwatch(colorInput){
+  if(!colorInput) return;
+  document.querySelectorAll(`[data-swatch="${colorInput.id}"]`).forEach(sw => sw.style.setProperty("--swatch", colorInput.value));
+  if(colorInput === epubQuoteColorEl) updateQuoteColorPreview();
+}
+function syncRgbFromColor(colorInput, rEl, gEl, bEl){
+  if(!colorInput) return;
+  const rgb = hexToRgb(colorInput.value);
+  if(rEl) rEl.value = rgb.r;
+  if(gEl) gEl.value = rgb.g;
+  if(bEl) bEl.value = rgb.b;
+  updateColorSwatch(colorInput);
+}
+function syncColorFromRgb(colorInput, rEl, gEl, bEl){
+  if(!colorInput) return;
+  colorInput.value = rgbToHex(rEl && rEl.value, gEl && gEl.value, bEl && bEl.value);
+  updateColorSwatch(colorInput);
+}
+function setupColorWidget(colorInput, rEl, gEl, bEl){
+  if(!colorInput) return;
+  colorInput.addEventListener("input", () => { syncRgbFromColor(colorInput, rEl, gEl, bEl); scheduleAutosave(); });
+  [rEl,gEl,bEl].forEach(el => { if(el) el.addEventListener("input", () => { syncColorFromRgb(colorInput, rEl, gEl, bEl); scheduleAutosave(); }); });
+  syncRgbFromColor(colorInput, rEl, gEl, bEl);
+}
+function updateQuoteColorPreview(){
+  const color = epubQuoteColorEl ? epubQuoteColorEl.value : "#4f8aa4";
+  document.querySelectorAll(".quotePresetList").forEach(el => el.style.setProperty("--quote-color", color));
+}
+setupColorWidget(epubEditTextColorEl, epubEditTextColorREl, epubEditTextColorGEl, epubEditTextColorBEl);
+setupColorWidget(epubQuoteColorEl, epubQuoteColorREl, epubQuoteColorGEl, epubQuoteColorBEl);
+
 input.addEventListener("input", () => {
   if(!isApplyingClassicExcerpt) classicActiveChunks = null;
   transformText();
@@ -931,8 +1034,15 @@ if(epubEditEditor){
   epubEditEditor.addEventListener("input", () => { rememberEditorSelection(); scheduleAutosave(); updateEpubPreview(); });
   epubEditEditor.addEventListener("pointerdown", handleQuotePointerDown);
   epubEditEditor.addEventListener("pointermove", handleQuotePointerMove);
+  epubEditEditor.addEventListener("contextmenu", handleQuoteContextMenu);
   ["pointerup","pointercancel","pointerleave","scroll"].forEach(ev => epubEditEditor.addEventListener(ev, clearQuoteLongPressTimer));
 }
+if(quoteUnwrapBtnEl) quoteUnwrapBtnEl.addEventListener("click", () => {
+  if(currentQuoteMenuTarget && epubEditEditor && epubEditEditor.contains(currentQuoteMenuTarget)) unwrapQuoteBlock(currentQuoteMenuTarget);
+  hideQuoteContextMenu();
+});
+document.addEventListener("click", e => { if(quoteContextMenuEl && !quoteContextMenuEl.contains(e.target)) hideQuoteContextMenu(); });
+document.addEventListener("keydown", e => { if(e.key === "Escape") hideQuoteContextMenu(); });
 if(epubFontInputEl) epubFontInputEl.addEventListener("change", e => { updateFileNameLabel(epubFontInputEl, epubFontFileNameEl, "선택 없음"); loadEpubFontFile(); });
 downloadFileNameEls.forEach(el => {
   el.addEventListener("input", () => {
@@ -3400,7 +3510,7 @@ function textToXhtmlBody(text){
 function getEpubCss(){
   const preset = getEpubConfig().stylePreset;
   const fontFace = cachedEpubFontAsset ? `@font-face{font-family:"UploadedEpubFont";src:url("${escapeXML(cachedEpubFontAsset.epubName || cachedEpubFontAsset.name || "uploaded-font.woff")}");} body{font-family:"UploadedEpubFont",serif !important;}` : "";
-  const base = `body{line-height:1.82;word-break:keep-all;overflow-wrap:break-word;} p{margin:0 0 1em;} h1{font-size:1.45em;margin:0 0 1.2em;} .cover{text-align:center;} .cover img{max-width:100%;height:auto;} blockquote{margin:1em 0;} .quotePostype{padding:.9em 1.05em;border-left:4px solid #4f8aa4;background:#f3f9fc;border-radius:.75em;text-align:left;} .quoteBlog{padding:1em .5em;border-top:1px solid #bdd8e3;border-bottom:1px solid #bdd8e3;border-left:0;background:transparent;border-radius:0;text-align:center;} .quoteSoft{padding:1em 1.1em;border-left:0;background:#eaf5fa;border:1px solid #d4e9f1;border-radius:1em;text-align:center;} .rofan-block[data-owner]{margin:0 0 1em;} .rofan-block[data-kind="scene"]{font-style:normal;}`;
+  const base = `body{line-height:1.82;word-break:keep-all;overflow-wrap:break-word;} p{margin:0 0 1em;} h1{font-size:1.45em;margin:0 0 1.2em;} .cover{text-align:center;} .cover img{max-width:100%;height:auto;} blockquote{margin:1em 0;} .quoteLine{padding:.25em 0 .25em 1em;border-left:4px solid #4f8aa4;background:transparent;border-radius:0;text-align:left;} .quotePostype{padding:.9em 1.05em;border-left:4px solid #4f8aa4;background:#f3f9fc;border-radius:.75em;text-align:left;} .quoteBlog{padding:1em .5em;border-top:1px solid #bdd8e3;border-bottom:1px solid #bdd8e3;border-left:0;background:transparent;border-radius:0;text-align:center;} .quoteSoft{padding:1em 1.1em;border-left:0;background:#eaf5fa;border:1px solid #d4e9f1;border-radius:1em;text-align:center;} .rofan-block[data-owner]{margin:0 0 1em;} .rofan-block[data-kind="scene"]{font-style:normal;}`;
   if(preset === "paper") return fontFace + base + ` body{font-family:serif;} p{text-indent:1em;margin-bottom:.65em;}`;
   if(preset === "script") return fontFace + base + ` body{font-family:sans-serif;} p{margin-bottom:1.1em;} p:nth-child(odd){padding-left:.5em;border-left:2px solid #ddd;}`;
   if(preset === "backup") return fontFace + base + ` body{font-family:monospace;font-size:.92em;} p{white-space:pre-wrap;margin-bottom:1.2em;}`;
@@ -3746,7 +3856,7 @@ function createZipBlob(entries, type){
   return new Blob(chunks, {type:type || "application/zip"});
 }
 function collectPresetValues(){
-  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode"];
+  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode","epubEditTextColor","epubQuoteColor","epubEditTextColorR","epubEditTextColorG","epubEditTextColorB","epubQuoteColorR","epubQuoteColorG","epubQuoteColorB"];
   const data = {};
   ids.forEach(id => {
     const el = document.getElementById(id);
@@ -3915,7 +4025,7 @@ function sanitizeInlineStyle(style){
     if(!rawName || !rest.length) return;
     const name = rawName.trim().toLowerCase();
     const value = rest.join(":").trim();
-    if(!/^(color|font-size|font-family|background|background-color|border|border-left|border-top|border-bottom|border-radius|padding|margin|text-align|line-height|font-weight|font-style)$/.test(name)) return;
+    if(!/^(color|font-size|font-family|background|background-color|border|border-color|border-left|border-left-color|border-top|border-top-color|border-bottom|border-bottom-color|border-radius|padding|margin|text-align|line-height|font-weight|font-style)$/.test(name)) return;
     if(/url\s*\(|expression\s*\(|javascript:/i.test(value)) return;
     allowed.push(`${name}:${value}`);
   });
@@ -4071,17 +4181,45 @@ function clearQuoteLongPressTimer(){
   if(quoteLongPressTimer){ clearTimeout(quoteLongPressTimer); quoteLongPressTimer = null; }
   quoteLongPressMeta = null;
 }
+function closestEditorQuote(target){
+  const quote = target && target.closest ? target.closest("blockquote") : null;
+  return quote && epubEditEditor && epubEditEditor.contains(quote) ? quote : null;
+}
+function showQuoteContextMenu(quote, x, y){
+  if(!quoteContextMenuEl || !quote) return;
+  currentQuoteMenuTarget = quote;
+  quoteContextMenuEl.hidden = false;
+  quoteContextMenuEl.style.left = "0px";
+  quoteContextMenuEl.style.top = "0px";
+  const rect = quoteContextMenuEl.getBoundingClientRect();
+  const pad = 10;
+  const left = Math.max(pad, Math.min((x || pad), window.innerWidth - rect.width - pad));
+  const top = Math.max(pad, Math.min((y || pad), window.innerHeight - rect.height - pad));
+  quoteContextMenuEl.style.left = left + "px";
+  quoteContextMenuEl.style.top = top + "px";
+}
+function hideQuoteContextMenu(){
+  if(quoteContextMenuEl) quoteContextMenuEl.hidden = true;
+  currentQuoteMenuTarget = null;
+}
+function handleQuoteContextMenu(e){
+  const quote = closestEditorQuote(e.target);
+  if(!quote) return;
+  e.preventDefault();
+  clearQuoteLongPressTimer();
+  showQuoteContextMenu(quote, e.clientX, e.clientY);
+}
 function handleQuotePointerDown(e){
   if(activeMode !== "epubedit" || !epubEditEditor) return;
-  const quote = e.target && e.target.closest ? e.target.closest("blockquote") : null;
-  if(!quote || !epubEditEditor.contains(quote)) return;
+  const quote = closestEditorQuote(e.target);
+  if(!quote) return;
   clearQuoteLongPressTimer();
   quoteLongPressMeta = {quote, x:e.clientX || 0, y:e.clientY || 0};
   quoteLongPressTimer = setTimeout(() => {
-    const target = quoteLongPressMeta && quoteLongPressMeta.quote;
+    const meta = quoteLongPressMeta;
     clearQuoteLongPressTimer();
-    if(target && epubEditEditor.contains(target)) unwrapQuoteBlock(target);
-  }, 720);
+    if(meta && meta.quote && epubEditEditor.contains(meta.quote)) showQuoteContextMenu(meta.quote, meta.x, meta.y);
+  }, 650);
 }
 function handleQuotePointerMove(e){
   if(!quoteLongPressTimer || !quoteLongPressMeta) return;
@@ -4096,9 +4234,18 @@ function unwrapQuoteBlock(quote){
   updateEpubPreview(); scheduleAutosave();
   showToast("인용구를 해제했습니다.");
 }
+function getQuoteColor(){
+  return epubQuoteColorEl && /^#[0-9a-fA-F]{6}$/.test(epubQuoteColorEl.value) ? epubQuoteColorEl.value : "#4f8aa4";
+}
+function quoteStyleForType(type, color){
+  if(type === "blog") return `border-top-color:${color};border-bottom-color:${color};`;
+  if(type === "soft") return `border-color:${color};`;
+  return `border-left-color:${color};`;
+}
 function makeQuoteHtml(type, content){
-  const cls = type === "blog" ? "quoteBlog" : (type === "soft" ? "quoteSoft" : "quotePostype");
-  return `<blockquote class="${cls}">${content}</blockquote>`;
+  const cls = type === "blog" ? "quoteBlog" : (type === "soft" ? "quoteSoft" : (type === "postype" ? "quotePostype" : "quoteLine"));
+  const color = getQuoteColor();
+  return `<blockquote class="${cls}" style="${quoteStyleForType(type, color)}">${content}</blockquote>`;
 }
 function getCustomQuoteTemplate(){
   const el = document.getElementById("epubQuoteCustomTemplate");
@@ -4180,10 +4327,16 @@ async function loadEpubFontFile(){
 async function applyCachedEpubFont(){
   if(!cachedEpubFontAsset || !cachedEpubFontAsset.dataUrl) return;
   try{
-    const font = new FontFace("UploadedEpubFont", `url(${cachedEpubFontAsset.dataUrl})`);
-    await font.load(); document.fonts.add(font);
-    if(epubEditEditor) epubEditEditor.style.fontFamily = 'UploadedEpubFont, serif';
-  }catch(err){ console.warn(err); }
+    let styleEl = document.getElementById("uploadedEpubFontStyle");
+    if(!styleEl){ styleEl = document.createElement("style"); styleEl.id = "uploadedEpubFontStyle"; document.head.appendChild(styleEl); }
+    styleEl.textContent = `@font-face{font-family:"UploadedEpubFont";src:url("${cachedEpubFontAsset.dataUrl}");font-weight:normal;font-style:normal;}`;
+    if("FontFace" in window){
+      const font = new FontFace("UploadedEpubFont", `url(${cachedEpubFontAsset.dataUrl})`);
+      await font.load(); document.fonts.add(font);
+    }
+    if(epubEditEditor) epubEditEditor.style.setProperty("font-family", 'UploadedEpubFont, serif', "important");
+    updateEpubPreview();
+  }catch(err){ console.warn(err); showToast("이 브라우저에서 폰트 미리보기를 적용하지 못했습니다."); }
 }
 function editorHtmlForExport(){
   if(activeMode !== "epubedit" || !epubEditEditor) return "";
@@ -4256,6 +4409,8 @@ function chapterBodyToXhtml(ch){
 }
 
 restoreSavedWork();
+syncRgbFromColor(epubEditTextColorEl, epubEditTextColorREl, epubEditTextColorGEl, epubEditTextColorBEl);
+syncRgbFromColor(epubQuoteColorEl, epubQuoteColorREl, epubQuoteColorGEl, epubQuoteColorBEl);
 </script>
 </body>
 </html>
