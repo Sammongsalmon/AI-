@@ -66,6 +66,9 @@ let duplicatePageByGroup = {};
 let duplicateGroupPage = 0;
 let duplicateFilterText = "";
 let duplicateOrderQuery = "";
+let oocGroupPage = 0;
+let oocFilterText = "";
+let oocOrderQuery = "";
 
 input.addEventListener("input", transformText);
 chatPaste.addEventListener("input", () => {
@@ -116,6 +119,8 @@ containsReviewPanel.addEventListener("change", handleContainsReviewChange);
 containsReviewPanel.addEventListener("click", handleContainsReviewClick);
 oocReviewPanel.addEventListener("change", handleOocReviewChange);
 oocReviewPanel.addEventListener("click", handleOocReviewClick);
+oocReviewPanel.addEventListener("input", handleOocReviewInput);
+oocReviewPanel.addEventListener("keydown", handleOocReviewKeydown);
 
 
 function updateModeVisibility(){
@@ -177,6 +182,9 @@ function resetReviewDecisions(){
   duplicateGroupPage = 0;
   duplicateFilterText = "";
   duplicateOrderQuery = "";
+  oocGroupPage = 0;
+  oocFilterText = "";
+  oocOrderQuery = "";
 }
 
 // ------------------ 기호/구분선 판정 ------------------
@@ -1038,8 +1046,8 @@ function updateDuplicateReviewPanel(groups){
   const count = filtered.length;
   duplicateGroupPage = Math.max(0, Math.min(Math.max(0, count - 1), duplicateGroupPage || 0));
 
-  let html = `<div class="reviewHead"><div><div class="reviewTitle">중복 답변 확인</div><div class="reviewMeta">한 묶음씩 넘겨 보며 선택합니다. 검색어를 넣으면 해당 문구가 들어간 후보만 볼 수 있습니다.</div></div><div class="smallMuted">${count}/${total}묶음</div></div>`;
-  html += `<div class="dupeToolbar"><input type="search" data-dupe-search="keyword" placeholder="후보 내용 검색" value="${escapeAttr(duplicateFilterText)}"><input type="number" min="1" data-dupe-search="order" placeholder="순서" value="${escapeAttr(duplicateOrderQuery)}"><button type="button" class="btn primary" data-dupe-search-apply="1">검색</button><button type="button" class="btn subtle" data-dupe-search-clear="1">초기화</button></div>`;
+  let html = `<div class="reviewHead"><div><div class="reviewTitle">중복 답변 확인</div><div class="reviewMeta">한 묶음씩 넘겨 보며 선택합니다.</div></div><div class="smallMuted">${count}/${total}묶음</div></div>`;
+  html += `<div class="reviewSearchBar"><input type="search" data-dupe-search="keyword" placeholder="후보 내용 검색" value="${escapeAttr(duplicateFilterText)}"><input type="number" min="1" data-dupe-search="order" placeholder="순서" value="${escapeAttr(duplicateOrderQuery)}"><button type="button" class="btn primary" data-dupe-search-apply="1">검색</button><button type="button" class="btn subtle" data-dupe-search-clear="1">초기화</button></div>`;
 
   if(!count){
     html += `<div class="emptyState">검색 조건에 맞는 중복 후보가 없습니다.</div>`;
@@ -1064,17 +1072,13 @@ function updateDuplicateReviewPanel(groups){
   const nextCandDisabled = current >= group.occurrences.length - 1 ? "disabled" : "";
 
   html += `<div class="dupeCard">`;
-  html += `<div class="reviewNav" style="margin-top:0"><div><div class="reviewTitle">${title}</div><div class="reviewMeta">전체 ${gIdx + 1}/${total} · 검색 결과 ${duplicateGroupPage + 1}/${count} · 후보 ${group.occurrences.length}개</div></div><div class="navButtons"><button type="button" class="navIconBtn" data-dupe-group-page="prev" ${prevGroupDisabled} aria-label="이전 묶음">‹</button><button type="button" class="navIconBtn" data-dupe-group-page="next" ${nextGroupDisabled} aria-label="다음 묶음">›</button></div></div>`;
-  if(group.type === "prompt"){
-    html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">대표 입력</span></div><div class="previewText">${escapeHTML(previewText(group.promptText, 450))}</div></div>`;
-    html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">이 후보에 연결된 입력</span><span class="pill">후보 ${current + 1}/${group.occurrences.length}</span></div><div class="previewText">${escapeHTML(previewText(occ.promptBlock ? occ.promptBlock.text : "", 450))}</div></div>`;
-  }else if(occ.promptBlock){
-    html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">앞 입력</span><span class="pill">후보 ${current + 1}/${group.occurrences.length}</span></div><div class="previewText">${escapeHTML(previewText(occ.promptBlock.text, 450))}</div></div>`;
-  }
-  html += `<div class="reviewChoices">`;
-  html += `<label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="all" ${selected === "all" ? "checked" : ""}>모두 유지</label>`;
-  html += `<label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="${escapeAttr(answerId)}" ${selected === answerId ? "checked" : ""}>현재 후보만 유지<div class="reviewBlock"><div class="dupeSummary"><span class="pill">${escapeHTML(ownerLabel(answer ? answer.owner : ""))}</span><span class="pill">답변 ${current + 1}/${group.occurrences.length}</span></div><div class="previewText">${escapeHTML(previewText(answer ? answer.text : "", 900))}</div></div></label>`;
-  html += `</div><div class="reviewNav"><div class="smallMuted">답변 후보 ${current + 1} / ${group.occurrences.length}</div><div class="navButtons"><button type="button" class="navIconBtn" data-dupe-page="prev" data-dupe-key="${escapeAttr(group.key)}" ${prevCandDisabled} aria-label="이전 후보">‹</button><button type="button" class="navIconBtn" data-dupe-page="next" data-dupe-key="${escapeAttr(group.key)}" ${nextCandDisabled} aria-label="다음 후보">›</button></div></div>`;
+  html += `<div class="reviewNav"><div><div class="reviewTitle">${title}</div><div class="reviewMeta">전체 ${gIdx + 1}/${total} · 검색 결과 ${duplicateGroupPage + 1}/${count} · 후보 ${group.occurrences.length}개</div></div><div class="navButtons"><button type="button" class="navIconBtn" data-dupe-group-page="prev" ${prevGroupDisabled} aria-label="이전 묶음">‹</button><button type="button" class="navIconBtn" data-dupe-group-page="next" ${nextGroupDisabled} aria-label="다음 묶음">›</button></div></div>`;
+  html += `<div class="candidateToolbar"><span class="smallMuted">답변 후보 ${current + 1} / ${group.occurrences.length}</span><div class="navButtons"><button type="button" class="navIconBtn" data-dupe-page="prev" data-dupe-key="${escapeAttr(group.key)}" ${prevCandDisabled} aria-label="이전 후보">‹</button><button type="button" class="navIconBtn" data-dupe-page="next" data-dupe-key="${escapeAttr(group.key)}" ${nextCandDisabled} aria-label="다음 후보">›</button></div></div>`;
+  html += `<div class="dupeCompareGrid">`;
+  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">연결 지문</span><span class="pill">${current + 1}/${group.occurrences.length}</span></div><div class="previewText">${escapeHTML(previewText(occ.promptBlock ? occ.promptBlock.text : "", 1200))}</div></div>`;
+  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">${escapeHTML(ownerLabel(answer ? answer.owner : ""))}</span><span class="pill">답변 후보</span></div><div class="previewText">${escapeHTML(previewText(answer ? answer.text : "", 1600))}</div></div>`;
+  html += `</div>`;
+  html += `<div class="reviewChoices choiceRow"><label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="all" ${selected === "all" ? "checked" : ""}>모두 유지</label><label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="${escapeAttr(answerId)}" ${selected === answerId ? "checked" : ""}>현재 후보만 유지</label></div>`;
   html += `</div>`;
 
   duplicateReviewPanel.classList.remove("hidden");
@@ -1211,6 +1215,23 @@ function isTrivialContinuationPrompt(text){
   if(/이어|이어서|계속|계속해서|다음|출력|응답/.test(t) && countSimpleSentences(t) <= 1 && t.length <= 90) return true;
   return false;
 }
+function stripBracketedOocText(text){
+  let t = String(text || "");
+  const stripInline = value => String(value || "")
+    .replace(/\[[^\]]*ooc[^\]]*\]/gi, "")
+    .replace(/<[^>]*ooc[^>]*>/gi, "")
+    .replace(/\*\*[^*]*ooc[^*]*\*\*/gi, "")
+    .replace(/\([^)]*ooc[^)]*\)/gi, "")
+    .replace(/【[^】]*ooc[^】]*】/gi, "")
+    .replace(/「[^」]*ooc[^」]*」/gi, "");
+  t = stripInline(t);
+  const paragraphs = t.split(/\n\s*\n/).map(part => {
+    const cleaned = stripInline(part).trim();
+    if(/ooc/i.test(cleaned)) return "";
+    return cleaned;
+  }).filter(Boolean);
+  return paragraphs.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+}
 function getOocReviewKey(block){
   return "ooc-" + (block && block.id ? block.id : hashString(block ? block.text : ""));
 }
@@ -1245,6 +1266,20 @@ function buildOocReviewItems(blocks, alreadyDropped){
   }
   return items.slice(0, 120);
 }
+function oocItemMatchesFilter(item, idx){
+  const keyword = normalizeParagraphText(oocFilterText || "").toLowerCase();
+  const order = String(oocOrderQuery || "").trim();
+  if(order){
+    const n = Number(order);
+    if(Number.isFinite(n) && n > 0 && (idx + 1) !== n) return false;
+  }
+  if(!keyword) return true;
+  const hay = [item.promptBlock ? item.promptBlock.text : ""].concat((item.answerBlocks || []).map(b => b.text || "")).join("\n").toLowerCase();
+  return hay.includes(keyword);
+}
+function getFilteredOocItems(){
+  return (currentOocItems || []).map((item, index) => ({item, index})).filter(w => oocItemMatchesFilter(w.item, w.index));
+}
 function updateOocReviewPanel(items){
   currentOocItems = items || [];
   if(activeMode !== "chat" || !reviewOocPairsEl || !reviewOocPairsEl.checked){
@@ -1257,20 +1292,35 @@ function updateOocReviewPanel(items){
     oocReviewPanel.innerHTML = `<div class="reviewHead"><div><div class="reviewTitle">OOC 응답 검토</div><div class="reviewMeta">OOC가 들어간 유저 지문을 찾지 못했습니다.</div></div></div>`;
     return;
   }
-  let html = `<div class="reviewHead"><div><div class="reviewTitle">OOC 응답 검토</div><div class="reviewMeta">OOC 유저 지문은 제거됩니다. 연결된 캐릭터 응답을 남길지 삭제할지 고르세요.</div></div><div><button type="button" data-ooc-bulk="keep">응답 모두 남김</button> <button type="button" data-ooc-bulk="delete">응답 모두 삭제</button></div></div>`;
-  currentOocItems.forEach((item, idx) => {
-    const decision = oocDecisions[item.key] || "keep";
-    const answerCount = item.answerBlocks.length;
-    const answersText = item.answerBlocks.map((b, n) => `응답 ${n + 1}\n${b.text}`).join("\n\n");
-    html += `<details class="reviewItem foldReview"><summary><span>OOC 지문 ${idx + 1}</span><span class="smallMuted">연결 응답 ${answerCount}개</span></summary>`;
-    html += `<div class="reviewBlock"><span class="pill">OOC 내용</span><div class="previewText compactPreview">${escapeHTML(item.promptBlock.text)}</div></div>`;
-    if(answerCount){
-      html += `<div class="reviewBlock"><span class="pill">연결된 캐릭터 응답</span><div class="previewText compactPreview">${escapeHTML(answersText)}</div></div>`;
-    }else{
-      html += `<div class="emptyState">연결된 캐릭터 응답이 없습니다.</div>`;
-    }
-    html += `<div class="field reviewRadioRow"><label><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="keep" ${decision !== "delete" ? "checked" : ""}>OOC만 삭제</label><label><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="delete" ${decision === "delete" ? "checked" : ""}>응답까지 삭제</label></div></details>`;
-  });
+  const filtered = getFilteredOocItems();
+  const total = currentOocItems.length;
+  const count = filtered.length;
+  oocGroupPage = Math.max(0, Math.min(Math.max(0, count - 1), oocGroupPage || 0));
+
+  let html = `<div class="reviewHead"><div><div class="reviewTitle">OOC 응답 검토</div><div class="reviewMeta">OOC가 포함된 지문을 한 개씩 확인합니다.</div></div><div class="bulkButtons"><button type="button" class="btn subtle" data-ooc-bulk="keepPrompt">전체 지문만 삭제</button><button type="button" class="btn subtle" data-ooc-bulk="delete">전체 응답까지 삭제</button></div></div>`;
+  html += `<div class="reviewSearchBar"><input type="search" data-ooc-search="keyword" placeholder="OOC/응답 내용 검색" value="${escapeAttr(oocFilterText)}"><input type="number" min="1" data-ooc-search="order" placeholder="순서" value="${escapeAttr(oocOrderQuery)}"><button type="button" class="btn primary" data-ooc-search-apply="1">검색</button><button type="button" class="btn subtle" data-ooc-search-clear="1">초기화</button></div>`;
+  if(!count){
+    html += `<div class="emptyState">검색 조건에 맞는 OOC 지문이 없습니다.</div>`;
+    oocReviewPanel.classList.remove("hidden");
+    oocReviewPanel.innerHTML = html;
+    return;
+  }
+  const wrap = filtered[oocGroupPage];
+  const item = wrap.item;
+  const idx = wrap.index;
+  const decision = oocDecisions[item.key] || "strip";
+  const answerCount = item.answerBlocks.length;
+  const answersText = item.answerBlocks.map((b, n) => `응답 ${n + 1}\n${b.text}`).join("\n\n");
+  const prevDisabled = oocGroupPage <= 0 ? "disabled" : "";
+  const nextDisabled = oocGroupPage >= count - 1 ? "disabled" : "";
+  html += `<div class="dupeCard oocCard">`;
+  html += `<div class="reviewNav"><div><div class="reviewTitle">OOC 지문 ${idx + 1}</div><div class="reviewMeta">전체 ${idx + 1}/${total} · 검색 결과 ${oocGroupPage + 1}/${count} · 연결 응답 ${answerCount}개</div></div><div class="navButtons"><button type="button" class="navIconBtn" data-ooc-page="prev" ${prevDisabled} aria-label="이전 OOC">‹</button><button type="button" class="navIconBtn" data-ooc-page="next" ${nextDisabled} aria-label="다음 OOC">›</button></div></div>`;
+  html += `<div class="dupeCompareGrid">`;
+  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">OOC 포함 지문</span></div><div class="previewText">${escapeHTML(previewText(item.promptBlock.text, 1600))}</div></div>`;
+  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">연결 캐릭터 응답</span><span class="pill">${answerCount}개</span></div>${answerCount ? `<div class="previewText">${escapeHTML(previewText(answersText, 1800))}</div>` : `<div class="emptyState">연결된 캐릭터 응답이 없습니다.</div>`}</div>`;
+  html += `</div>`;
+  html += `<div class="reviewChoices choiceRow threeChoices"><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="strip" ${decision === "strip" ? "checked" : ""}>OOC 문단만 삭제</label><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="prompt" ${decision === "prompt" ? "checked" : ""}>전체 유저 지문 삭제</label><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="delete" ${decision === "delete" ? "checked" : ""}>응답까지 삭제</label></div>`;
+  html += `</div>`;
   oocReviewPanel.classList.remove("hidden");
   oocReviewPanel.innerHTML = html;
 }
@@ -1281,21 +1331,66 @@ function handleOocReviewChange(e){
   transformText();
 }
 function handleOocReviewClick(e){
-  const button = e.target.closest("button[data-ooc-bulk]");
-  if(!button) return;
-  const value = button.dataset.oocBulk === "delete" ? "delete" : "keep";
-  currentOocItems.forEach(item => { oocDecisions[item.key] = value; });
-  transformText();
+  const bulk = e.target.closest("button[data-ooc-bulk]");
+  if(bulk){
+    const value = bulk.dataset.oocBulk === "delete" ? "delete" : "prompt";
+    currentOocItems.forEach(item => { oocDecisions[item.key] = value; });
+    transformText();
+    return;
+  }
+  const pageBtn = e.target.closest("button[data-ooc-page]");
+  if(pageBtn){
+    const filtered = getFilteredOocItems();
+    const max = Math.max(0, filtered.length - 1);
+    oocGroupPage = pageBtn.dataset.oocPage === "next" ? Math.min(max, oocGroupPage + 1) : Math.max(0, oocGroupPage - 1);
+    updateOocReviewPanel(currentOocItems);
+  }
+  if(e.target.closest("button[data-ooc-search-apply]")){
+    oocGroupPage = 0;
+    updateOocReviewPanel(currentOocItems);
+    return;
+  }
+  if(e.target.closest("button[data-ooc-search-clear]")){
+    oocFilterText = "";
+    oocOrderQuery = "";
+    oocGroupPage = 0;
+    updateOocReviewPanel(currentOocItems);
+  }
+}
+function handleOocReviewInput(e){
+  const target = e.target;
+  if(!target) return;
+  if(target.matches('[data-ooc-search="keyword"]')) oocFilterText = target.value || "";
+  if(target.matches('[data-ooc-search="order"]')) oocOrderQuery = target.value || "";
+}
+function handleOocReviewKeydown(e){
+  if(e.key !== "Enter") return;
+  if(e.target && e.target.matches('[data-ooc-search]')){
+    e.preventDefault();
+    oocGroupPage = 0;
+    updateOocReviewPanel(currentOocItems);
+  }
 }
 function getDroppedBlockIdsFromOocDecisions(items){
   const dropped = new Set();
   (items || []).forEach(item => {
-    if(item.promptBlock) dropped.add(item.promptBlock.id);
-    if((oocDecisions[item.key] || "keep") === "delete"){
+    const decision = oocDecisions[item.key] || "strip";
+    if(decision === "prompt" || decision === "delete"){
+      if(item.promptBlock) dropped.add(item.promptBlock.id);
+    }
+    if(decision === "delete"){
       item.answerBlocks.forEach(b => dropped.add(b.id));
     }
   });
   return dropped;
+}
+function getOocStripMap(items){
+  const map = new Map();
+  (items || []).forEach(item => {
+    const decision = oocDecisions[item.key] || "strip";
+    if(decision === "strip" && item.promptBlock) map.set(item.promptBlock.id, true);
+  });
+  return map;
 }
 function mergeSets(){
   const merged = new Set();
@@ -1320,6 +1415,9 @@ function renderChunks(chunks, options){
     const {kind, text: raw, fromTable, fromDetails} = chunk;
     if(dropBlockIds.has(chunk.blockId)) return "";
     let t = (raw || "").trim();
+    if(options.oocStripMap && options.oocStripMap.has(chunk.blockId)){
+      t = stripBracketedOocText(t);
+    }
     if(!t) return "";
 
     if(removeHTMLEl.checked){
@@ -1405,6 +1503,7 @@ function transformText(){
     const oocItems = buildOocReviewItems(parsed.blocks, duplicateDropBlockIds);
     updateOocReviewPanel(oocItems);
     const oocDropBlockIds = getDroppedBlockIdsFromOocDecisions(oocItems);
+    const oocStripMap = getOocStripMap(oocItems);
     const dropBlockIds = mergeSets(duplicateDropBlockIds, oocDropBlockIds);
 
     const deleteTokens = getDeleteContainsTokens();
@@ -1417,6 +1516,7 @@ function transformText(){
       deleteContainsMode: deleteContainsModeEl.value,
       containsDecisions,
       dropBlockIds,
+      oocStripMap,
       labelSpeakers: shouldRenderSpeakerLabels()
     });
     chatOutput.value = rendered;
@@ -1628,6 +1728,9 @@ function resetDuplicateChoices(){
   duplicateGroupPage = 0;
   duplicateFilterText = "";
   duplicateOrderQuery = "";
+  oocGroupPage = 0;
+  oocFilterText = "";
+  oocOrderQuery = "";
   transformText();
   showToast("중복 선택을 초기화했습니다.");
 }
