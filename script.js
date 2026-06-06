@@ -74,6 +74,7 @@ const chatOptions = document.getElementById("chatOptions");
 const classicPanel = document.getElementById("classicPanel");
 const chatPanel = document.getElementById("chatPanel");
 const speakerOnlyEls = document.querySelectorAll(".speakerOnly");
+const downloadFileNameEls = document.querySelectorAll(".downloadFileNameInput");
 
 let activeMode = "classic";
 let duplicateDecisions = {};
@@ -105,6 +106,7 @@ let currentChapterMatches = [];
 let classicLoadedFileText = "";
 let cachedEpubEditFileName = "";
 let cachedEpubFontAsset = null;
+let downloadFileBaseName = "";
 
 input.addEventListener("input", () => { transformText(); scheduleAutosave(); });
 if(classicFileInput) classicFileInput.addEventListener("change", e => { updateFileNameLabel(classicFileInput, classicFileNameEl); loadClassicFile(); });
@@ -118,6 +120,13 @@ if(epubEditEditor){
   epubEditEditor.addEventListener("input", () => { rememberEditorSelection(); scheduleAutosave(); updateEpubPreview(); });
 }
 if(epubFontInputEl) epubFontInputEl.addEventListener("change", e => { updateFileNameLabel(epubFontInputEl, epubFontFileNameEl, "선택 없음"); loadEpubFontFile(); });
+downloadFileNameEls.forEach(el => {
+  el.addEventListener("input", () => {
+    downloadFileBaseName = el.value || "";
+    syncDownloadFileNameInputs(el);
+    scheduleAutosave();
+  });
+});
 chatPaste.addEventListener("input", () => {
   resetReviewDecisions();
   transformText();
@@ -256,6 +265,7 @@ function collectWorkValues(){
     epubEditScroll: epubEditEditor ? epubEditEditor.scrollTop : 0,
     cachedEpubEditFileName,
     cachedEpubFontAsset,
+    downloadFileBaseName,
     classicOutput: output ? output.value : "",
     classicOutputScroll: output ? output.scrollTop : 0,
     chatHTML: chatPaste ? chatPaste.innerHTML : "",
@@ -363,6 +373,8 @@ async function restoreSavedWork(){
       if(epubEditEditor) epubEditEditor.innerHTML = state.epubEditHTML || "";
       cachedEpubEditFileName = state.cachedEpubEditFileName || "";
       cachedEpubFontAsset = state.cachedEpubFontAsset || null;
+      downloadFileBaseName = state.downloadFileBaseName || "";
+      syncDownloadFileNameInputs();
       if(cachedEpubFontAsset) applyCachedEpubFont();
       if(chatPaste) chatPaste.innerHTML = state.chatHTML || "";
       cachedChatFileName = state.cachedChatFileName || "";
@@ -2106,12 +2118,29 @@ function showToast(msg){
   t.style.opacity = "1";
   setTimeout(()=>{ t.style.opacity = "0"; }, 1600);
 }
+function syncDownloadFileNameInputs(source){
+  downloadFileNameEls.forEach(el => {
+    if(el !== source) el.value = downloadFileBaseName || "";
+  });
+}
+function currentDownloadBaseName(fallback){
+  let typed = downloadFileBaseName || "";
+  downloadFileNameEls.forEach(el => {
+    if(!typed && el.value) typed = el.value;
+  });
+  typed = String(typed || fallback || "download").trim();
+  return typed || "download";
+}
+function safeDownloadFileName(ext, fallback){
+  return safeFileName(currentDownloadBaseName(fallback), ext);
+}
 function downloadTxt(){
   const blob=new Blob([getActiveOutputValue()],{type:"text/plain;charset=utf-8"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
   a.href=url;
-  a.download=activeMode === "chat" ? "cleaned_rofan_chat.txt" : (activeMode === "epubedit" ? "edited_epub_text.txt" : "cleaned_log.txt");
+  const fallback = activeMode === "chat" ? "cleaned_rofan_chat" : (activeMode === "epubedit" ? "edited_epub_text" : "cleaned_log");
+  a.download=safeDownloadFileName(".txt", fallback);
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -2522,7 +2551,7 @@ function buildStandaloneHTML(){
 }
 function downloadHtml(){
   const cfg = getEpubConfig();
-  downloadBlob(new Blob([buildStandaloneHTML()], {type:"text/html;charset=utf-8"}), safeFileName(cfg.title, ".html"));
+  downloadBlob(new Blob([buildStandaloneHTML()], {type:"text/html;charset=utf-8"}), safeDownloadFileName(".html", cfg.title));
 }
 function downloadMarkdown(){
   const cfg = getEpubConfig();
@@ -2538,12 +2567,12 @@ function downloadMarkdown(){
   }else{
     chapters.forEach(ch => { md += `## ${ch.title}\n\n${ch.body}\n\n`; });
   }
-  downloadBlob(new Blob([md], {type:"text/markdown;charset=utf-8"}), safeFileName(cfg.title, ".md"));
+  downloadBlob(new Blob([md], {type:"text/markdown;charset=utf-8"}), safeDownloadFileName(".md", cfg.title));
 }
 function downloadDoc(){
   const cfg = getEpubConfig();
   const html = buildStandaloneHTML();
-  downloadBlob(new Blob([html], {type:"application/msword;charset=utf-8"}), safeFileName(cfg.title, ".doc"));
+  downloadBlob(new Blob([html], {type:"application/msword;charset=utf-8"}), safeDownloadFileName(".doc", cfg.title));
 }
 function makeXhtmlDoc(title, body){
   return `<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="${escapeXML(getEpubConfig().language)}" xml:lang="${escapeXML(getEpubConfig().language)}"><head><meta charset="utf-8"/><title>${escapeXML(title)}</title><link rel="stylesheet" type="text/css" href="styles.css"/></head><body>${body}</body></html>`;
@@ -2615,7 +2644,7 @@ async function downloadEpub(){
   const opf = `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="pub-id" xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/"><metadata>${metaTags}</metadata><manifest>${manifest}</manifest><spine>${spine}</spine></package>`;
   entries.push({name:"OEBPS/content.opf", data:opf});
   const blob = createZipBlob(entries, "application/epub+zip");
-  downloadBlob(blob, safeFileName(cfg.title, ".epub"));
+  downloadBlob(blob, safeDownloadFileName(".epub", cfg.title));
 }
 let CRC_TABLE = null;
 function getCRCTable(){
