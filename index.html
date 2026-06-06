@@ -15,7 +15,9 @@
   --line:#e7e7e2;
   --accent:#17181c;
   --soft:#f4f4f2;
-  --radius:18px;
+  --radius:22px;
+  --shadow:0 18px 45px rgba(23,24,28,.06);
+  --shadowSoft:0 8px 24px rgba(23,24,28,.05);
 }
 *{box-sizing:border-box;}
 body{
@@ -35,23 +37,28 @@ h1{margin:0 0 8px 0;font-size:22px;}
   background:var(--paper);
   border:1px solid var(--line);
   border-radius:var(--radius);
-  padding:18px;
+  padding:20px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
 }
 .tabs{
-  display:flex;
-  gap:8px;
-  margin-bottom:16px;
-  border-bottom:1px solid var(--line);
-  padding-bottom:12px;
+  display:inline-flex;
+  gap:6px;
+  margin-bottom:18px;
+  padding:5px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:#f7f7f4;
 }
 .tab{
-  padding:9px 14px;
+  padding:10px 16px;
   border-radius:999px;
-  border:1px solid var(--line);
-  background:#fff;
+  border:0;
+  background:transparent;
   color:var(--sub);
   cursor:pointer;
   font-size:13px;
+  font-weight:700;
 }
 .tab.active{
   background:var(--accent);
@@ -68,17 +75,28 @@ h1{margin:0 0 8px 0;font-size:22px;}
 .optionGroup{
   width:100%;
   border:1px solid var(--line);
-  border-radius:16px;
-  background:#fff;
-  padding:12px;
-  margin:10px 0 12px;
+  border-radius:18px;
+  background:linear-gradient(180deg,#fff,#fdfdfb);
+  padding:16px;
+  margin:12px 0;
+  box-shadow:var(--shadowSoft);
 }
 .optionGroupTitle{
-  font-size:12px;
-  font-weight:700;
-  color:var(--sub);
-  margin:0 0 9px;
-  letter-spacing:-0.01em;
+  font-size:13px;
+  font-weight:800;
+  color:var(--ink);
+  margin:0 0 12px;
+  letter-spacing:-0.02em;
+}
+.optionGroupTitle::before{
+  content:"";
+  display:inline-block;
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:var(--accent);
+  margin-right:7px;
+  vertical-align:1px;
 }
 .optionRow{
   display:flex;
@@ -90,13 +108,14 @@ h1{margin:0 0 8px 0;font-size:22px;}
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  min-height:36px;
-  padding:8px 12px;
+  min-height:38px;
+  padding:9px 13px;
   border:1px solid var(--line);
   border-radius:999px;
   background:#fff;
   color:var(--sub);
   font-size:13px;
+  font-weight:700;
   cursor:pointer;
   user-select:none;
   transition:background .15s ease,color .15s ease,border-color .15s ease,box-shadow .15s ease;
@@ -112,14 +131,15 @@ h1{margin:0 0 8px 0;font-size:22px;}
 .control{
   display:inline-flex;
   align-items:center;
-  gap:7px;
-  min-height:36px;
-  padding:6px 10px;
+  gap:8px;
+  min-height:38px;
+  padding:7px 11px;
   border:1px solid var(--line);
-  border-radius:12px;
+  border-radius:14px;
   background:#fff;
   color:var(--sub);
   font-size:13px;
+  white-space:nowrap;
 }
 .control input[type="text"]{min-width:160px;}
 .control input[type="color"]{
@@ -142,11 +162,12 @@ h1{margin:0 0 8px 0;font-size:22px;}
 }
 .filePicker{
   width:100%;
-  padding:12px;
+  padding:14px;
   border:1px solid var(--line);
-  border-radius:14px;
+  border-radius:16px;
   background:#fafaf8;
-  margin:0 0 10px;
+  margin:0 0 12px;
+  overflow:hidden;
 }
 .filePicker label{
   display:flex;
@@ -165,41 +186,53 @@ h1{margin:0 0 8px 0;font-size:22px;}
 label{font-size:13px;color:var(--sub);}
 select,input[type="text"]{
   padding:6px 8px;
-  border-radius:10px;
+  border-radius:12px;
   border:1px solid var(--line);
   background:#fff;
+  max-width:100%;
 }
 button{
   padding:8px 12px;
-  border-radius:10px;
+  border-radius:12px;
   border:1px solid var(--line);
   background:#fff;
   cursor:pointer;
+  font-weight:700;
 }
 button:hover{background:var(--soft);}
 .grid{
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  gap:16px;
+  gap:18px;
+  width:100%;
+  overflow:hidden;
 }
 .grid > *{min-width:0;}
 textarea,.pastebox{
   width:100%;
-  min-height:420px;
+  width:100%;
+  max-width:100%;
+  min-height:440px;
   border:1px solid var(--line);
-  border-radius:14px;
-  padding:12px;
+  border-radius:18px;
+  padding:16px;
   font-size:14px;
-  line-height:1.7;
+  line-height:1.75;
+  overflow-x:hidden;
+  box-shadow:inset 0 1px 0 rgba(23,24,28,.03);
 }
 textarea{
-  height:420px;
+  height:440px;
   resize:none;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  word-break:break-word;
 }
 textarea[readonly]{background:#fafaf8;}
 .pastebox{
-  height:420px;
-  overflow:auto;
+  height:440px;
+  overflow-y:auto;
+  overflow-x:hidden;
   outline:none;
   background:#fff;
   white-space:pre-wrap;
@@ -336,7 +369,7 @@ textarea[readonly]{background:#fafaf8;}
 <body>
 <div class="wrap">
   <h1>✍️ 로그 다듬기</h1>
-  <div class="sub">지문(*) 처리 · 로판Ai 채팅방 서식 읽기 · 대사 따옴표 · 검토 삭제 · 이름표 · 구분선 정리</div>
+  <div class="sub">지문/대사 변환 · 로판Ai 저장 파일 읽기 · 중복/삭제 검토 · 이름표 출력</div>
 
   <div class="card">
     <div class="tabs" role="tablist" aria-label="다듬기 모드">
@@ -345,7 +378,7 @@ textarea[readonly]{background:#fafaf8;}
     </div>
 
     <div class="optionGroup">
-      <div class="optionGroupTitle">기본 정리</div>
+      <div class="optionGroupTitle">1. 기본 정리</div>
       <div class="optionRow">
         <label class="toggle"><input type="checkbox" id="removeDetails">접힘 토큰 제거</label>
         <label class="toggle"><input type="checkbox" id="removeEmptyLines">빈 줄 정리</label>
@@ -357,7 +390,7 @@ textarea[readonly]{background:#fafaf8;}
     </div>
 
     <div class="optionGroup">
-      <div class="optionGroupTitle">출력</div>
+      <div class="optionGroupTitle">2. 출력 형식</div>
       <div class="optionRow">
         <span class="control">따옴표
           <select id="quoteStyle">
@@ -371,7 +404,7 @@ textarea[readonly]{background:#fafaf8;}
     </div>
 
     <div class="optionGroup hidden" id="chatOptions">
-      <div class="optionGroupTitle">로판Ai 전용</div>
+      <div class="optionGroupTitle">3. 로판Ai 검토</div>
       <div class="optionRow">
         <label class="toggle"><input type="checkbox" id="deleteContainsEnabled">특정 글자 포함 문단</label>
         <span class="control">키워드 <input id="deleteContainsToken" type="text" placeholder="예: [시스템], OOC, ⚠"></span>
@@ -384,11 +417,11 @@ textarea[readonly]{background:#fafaf8;}
         <label class="toggle"><input type="checkbox" id="removeTables">블록/표 제거</label>
         <label class="toggle"><input type="checkbox" id="reviewDuplicates">중복 답변 검토</label>
       </div>
-      <div class="optionGroupTitle" style="margin-top:12px;">이름표</div>
+      <div class="optionGroupTitle" style="margin-top:14px;">4. 이름표</div>
       <div class="optionRow">
         <label class="toggle"><input type="checkbox" id="labelSpeakers">이름으로 구분</label>
         <span class="control">내 이름 <input id="userName" type="text" placeholder="예: 산야"></span>
-        <span class="control">캐릭터 이름 <input id="characterName" type="text" placeholder="예: 마오타이"></span>
+        <span class="control">캐릭터 이름 <input id="characterName" type="text" placeholder="예: 귀인"></span>
         <span class="control">표시
           <select id="speakerMarkerPreset">
             <option value="none">이름만</option>
@@ -682,7 +715,8 @@ function makeSpeakerLabel(chunk){
   if(colorTarget === "all") return wrapColorHTML(label, color);
   return label;
 }
-function labelChunk(text, chunk, isDialogue){
+function labelChunk(text, chunk, shouldLabel){
+  if(!shouldLabel) return text;
   const label = makeSpeakerLabel(chunk);
   if(!label) return text;
   return label + "\n" + text;
@@ -1072,8 +1106,14 @@ function getElementOwnerHint(el, color){
   if(/assistant|ai|character|bot|캐릭터/.test(author)) return "character";
   const className = String(el.className || "");
   if(/(^|\s)mt-1(\s|$)/.test(className)) return "character";
+
+  // 로판Ai 저장본은 같은 p 태그 안에서도 글자색으로 유저/캐릭터 시점이 갈립니다.
+  // 그래서 p 태그를 무조건 유저로 보지 않고, 색상 단서를 먼저 믿습니다.
+  const byColor = ownerFromColor(color, className);
+  if(byColor) return byColor;
+
   if(el.tagName === "P") return "user";
-  return ownerFromColor(color, className);
+  return "";
 }
 function isUiOnlyText(text){
   const s = normalizeParagraphText(text);
@@ -1220,7 +1260,27 @@ function parseRofanChatChunks(root){
     pushChunksFromElement(root, "");
   }
 
+  preserveLeadingCharacterBlocks(blocks, chunks);
   return {chunks, blocks};
+}
+
+function preserveLeadingCharacterBlocks(blocks, chunks){
+  // 채팅방 맨 앞의 인트로/첫 답변은 캐릭터 발화인 경우가 많습니다.
+  // 색상이나 구조 때문에 유저 p로 들어온 선행 블록은 첫 실제 유저 입력 전 캐릭터 블록으로 보정합니다.
+  if(!blocks || !blocks.length) return;
+  const firstCharacterIndex = blocks.findIndex(b => b.owner === "character");
+  if(firstCharacterIndex <= 0) return;
+  for(let i=0; i<firstCharacterIndex; i++){
+    const block = blocks[i];
+    if(block.owner !== "user") continue;
+    const slice = chunks.slice(block.startChunk, block.endChunk);
+    const hasCharacterColor = slice.some(c => ownerFromColor(c.color, "") === "character");
+    const allScene = slice.length && slice.every(c => c.kind === "scene");
+    if(hasCharacterColor || allScene){
+      block.owner = "character";
+      slice.forEach(c => { c.owner = "character"; });
+    }
+  }
 }
 
 // ------------------ 중복/삭제 확인 패널 ------------------
@@ -1396,6 +1456,7 @@ function renderChunks(chunks, options){
   const dropBlockIds = options.dropBlockIds || new Set();
   const quoteStyle = quoteStyleEl.value;
   const [openQ, closeQ] = getQuotes(quoteStyle);
+  const labeledBlockIds = new Set();
 
   const result = chunks.map((chunk, index) => {
     const {kind, text: raw, fromTable, fromDetails} = chunk;
@@ -1439,19 +1500,25 @@ function renderChunks(chunks, options){
 
     if(protectedHere){
       const kept = removeEmptyLinesEl.checked ? t.replace(/\n\s*\n+/g,"\n") : t;
-      return labelChunk(kept, chunk, false);
+      const shouldLabel = activeMode === "chat" && !labeledBlockIds.has(chunk.blockId);
+      if(shouldLabel) labeledBlockIds.add(chunk.blockId);
+      return labelChunk(kept, chunk, shouldLabel);
     }
 
     if(kind==="scene"){
       const scene = removeEmptyLinesEl.checked ? t.replace(/\n\s*\n+/g,"\n") : t;
-      return labelChunk(scene, chunk, false);
+      const shouldLabel = activeMode === "chat" && !labeledBlockIds.has(chunk.blockId);
+      if(shouldLabel) labeledBlockIds.add(chunk.blockId);
+      return labelChunk(scene, chunk, shouldLabel);
     }
 
     if(isDecorOnlyParagraph(t)) return t;
 
     let dialogue = t;
     if(quoteStyle !== "none" && !isAlreadyQuoted(t)) dialogue = openQ + t + closeQ;
-    return labelChunk(dialogue, chunk, true);
+    const shouldLabel = activeMode === "chat" && !labeledBlockIds.has(chunk.blockId);
+    if(shouldLabel) labeledBlockIds.add(chunk.blockId);
+    return labelChunk(dialogue, chunk, shouldLabel);
   }).filter(Boolean);
 
   const joiner = removeEmptyLinesEl.checked ? "\n" : "\n\n";
