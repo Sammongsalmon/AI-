@@ -404,6 +404,16 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
 @media(max-width:1180px){.epubEditGrid{grid-template-columns:1fr}.epubToolStack{display:grid;grid-template-columns:1fr 1fr}.epubRichEditor{min-height:480px;}}
 @media(max-width:720px){.epubToolStack,.compactToolGrid{grid-template-columns:1fr}.epubRichEditor{min-height:420px;font-size:13.5px;padding:16px}.formatButtonRow .btn{font-size:12px;min-height:32px;padding:7px 9px}}
 
+/* duplicate review next-user fold */
+.nextPromptFold{margin-top:10px;border:1px solid var(--line2);border-radius:14px;background:var(--paper2);overflow:hidden;}
+.nextPromptFold summary{cursor:pointer;list-style:none;padding:9px 11px;color:rgba(31,45,54,.68);font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:space-between;}
+.nextPromptFold summary::-webkit-details-marker{display:none;}
+.nextPromptFold summary::after{content:"펼치기";font-size:11px;color:var(--muted);font-weight:500;}
+.nextPromptFold[open] summary::after{content:"접기";}
+.nextPromptFold .previewText,.nextPromptFold .emptyState{margin:0;border-top:1px solid var(--line2);border-radius:0;background:#fff;}
+.nextPromptFold .nextPreview{max-height:220px;}
+@media(max-width:640px){.nextPromptFold summary{font-size:12px;padding:8px 10px}.nextPromptFold summary::after{font-size:10px}}
+
 </style>
 </head>
 <body>
@@ -714,6 +724,7 @@ let duplicateDecisions = {};
 let containsDecisions = {};
 let oocDecisions = {};
 let currentDuplicateGroups = [];
+let currentParsedBlocks = [];
 let currentContainsItems = [];
 let containsOpenGroups = new Set();
 let containsOpenTouched = false;
@@ -1902,6 +1913,15 @@ function findNextAnswerBlock(blocks, index){
   }
   return null;
 }
+function findNextUserBlockAfter(blocks, block){
+  if(!block) return null;
+  const index = blocks.findIndex(b => b && b.id === block.id);
+  if(index < 0) return null;
+  for(let i=index + 1; i<blocks.length; i++){
+    if(blocks[i].owner === "user") return blocks[i];
+  }
+  return null;
+}
 function findPrevUserBlock(blocks, index){
   for(let i=index - 1; i>=0; i--){
     if(blocks[i].owner === "user") return blocks[i];
@@ -1967,7 +1987,7 @@ function buildDuplicateAnswerGroups(blocks){
     .filter(list => list.length > 1)
     .map(list => {
       const keySeed = list.map(o => o.promptBlock.id).join("|");
-      return {key:"prompt-" + hashString(keySeed), type:"prompt", promptText:promptRepresentative(list.map(o => o.promptBlock)), occurrences:list};
+      return {key:"prompt-" + hashString(keySeed), type:"prompt", promptText:promptRepresentative(list.map(o => o.promptBlock)), occurrences:list.map(o => ({...o, nextUserBlock: findNextUserBlockAfter(blocks, o.answerBlock)}))};
     });
 
   const coveredAnswerIds = new Set();
@@ -1980,7 +2000,7 @@ function buildDuplicateAnswerGroups(blocks){
     if(norm.length < 80) return;
     const key = "answer-" + hashString(norm);
     if(!answerGroups.has(key)) answerGroups.set(key, {key, type:"answer", promptText:block.text, occurrences:[]});
-    answerGroups.get(key).occurrences.push({promptBlock:findPrevUserBlock(blocks, index), answerBlock:block});
+    answerGroups.get(key).occurrences.push({promptBlock:findPrevUserBlock(blocks, index), answerBlock:block, nextUserBlock:findNextUserBlockAfter(blocks, block)});
   });
 
   return promptGroups.concat(Array.from(answerGroups.values()).filter(g => g.occurrences.length > 1)).slice(0, 80);
@@ -2062,8 +2082,12 @@ function updateDuplicateReviewPanel(groups){
 
   html += `<div class="dupeCard">`;
   html += `<div class="reviewNav"><div><div class="reviewTitle">${title}</div><div class="reviewMeta">전체 ${gIdx + 1}/${total} · 검색 결과 ${duplicateGroupPage + 1}/${count} · 후보 ${group.occurrences.length}개</div></div><div class="navButtons"><button type="button" class="navIconBtn" data-dupe-group-page="prev" ${prevGroupDisabled} aria-label="이전 묶음">‹</button><button type="button" class="navIconBtn" data-dupe-group-page="next" ${nextGroupDisabled} aria-label="다음 묶음">›</button></div></div>`;
+  const nextUser = occ.nextUserBlock || findNextUserBlockAfter((currentParsedBlocks || []), answer);
+  const nextUserHtml = nextUser
+    ? `<details class="nextPromptFold"><summary>》유저 다음 지문</summary><div class="previewText fullPreview nextPreview">${escapeHTML(nextUser.text || "")}</div></details>`
+    : `<details class="nextPromptFold"><summary>》유저 다음 지문</summary><div class="emptyState">다음 유저 지문이 없습니다.</div></details>`;
   html += `<div class="dupeCompareGrid">`;
-  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">연결 지문</span><span class="pill">${current + 1}/${group.occurrences.length}</span></div><div class="previewText fullPreview">${escapeHTML(occ.promptBlock ? occ.promptBlock.text : "")}</div></div>`;
+  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">연결 유저 지문</span><span class="pill">${current + 1}/${group.occurrences.length}</span></div><div class="previewText fullPreview">${escapeHTML(occ.promptBlock ? occ.promptBlock.text : "")}</div>${nextUserHtml}</div>`;
   html += `<div class="reviewBlock"><div class="dupeSummary withNav"><span><span class="pill">${escapeHTML(ownerLabel(answer ? answer.owner : ""))}</span><span class="pill">답변 후보 ${current + 1}/${group.occurrences.length}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-dupe-page="prev" data-dupe-key="${escapeAttr(group.key)}" ${prevCandDisabled} aria-label="이전 후보">‹</button><button type="button" class="navIconBtn" data-dupe-page="next" data-dupe-key="${escapeAttr(group.key)}" ${nextCandDisabled} aria-label="다음 후보">›</button></span></div><div class="previewText fullPreview">${escapeHTML(answer ? answer.text : "")}</div></div>`;
   html += `</div>`;
   html += `<div class="reviewChoices choiceRow"><label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="all" ${selected === "all" ? "checked" : ""}>모두 유지</label><label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="${escapeAttr(answerId)}" ${selected === answerId ? "checked" : ""}>현재 후보만 유지</label></div>`;
@@ -2601,6 +2625,7 @@ function transformText(){
     cachedEpubEditFileName = "";
   }else if(activeMode === "chat"){
     const parsed = parseRofanChatChunks(chatPaste);
+    currentParsedBlocks = parsed.blocks || [];
     const duplicateGroups = reviewDuplicatesEl.checked ? buildDuplicateAnswerGroups(parsed.blocks) : [];
     const duplicateDropBlockIds = getDroppedBlockIdsFromDuplicateDecisions(duplicateGroups);
     updateDuplicateReviewPanel(duplicateGroups);
