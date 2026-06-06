@@ -206,7 +206,7 @@ function idbDelete(key){
 }
 function collectWorkValues(){
   return {
-    version: 3,
+    version: 4,
     savedAt: new Date().toISOString(),
     activeMode,
     classicInput: input ? input.value : "",
@@ -296,7 +296,9 @@ async function restoreSavedWork(){
   }
   if(state){
     try{
-      applyPresetValues(state.options || {});
+      const restoredOptions = Object.assign({}, state.options || {});
+      if((!state.version || state.version < 4) && restoredOptions.chapterSeparator === "---") restoredOptions.chapterSeparator = "—————";
+      applyPresetValues(restoredOptions);
       if(input) input.value = state.classicInput || "";
       if(chatPaste) chatPaste.innerHTML = state.chatHTML || "";
       cachedChatFileName = state.cachedChatFileName || "";
@@ -1692,9 +1694,9 @@ function renderChunks(chunks, options){
   const labeledBlockIds = new Set();
   const allowSpeakerLabels = !!options.labelSpeakers;
 
-  const result = chunks.map((chunk, index) => {
+  const renderedItems = chunks.map((chunk, index) => {
     const {kind, text: raw, fromTable, fromDetails} = chunk;
-    if(dropBlockIds.has(chunk.blockId)) return "";
+    if(dropBlockIds.has(chunk.blockId)) return null;
     let t = (raw || "").trim();
     if(options.oocStripMap && options.oocStripMap.has(chunk.blockId)){
       t = stripBracketedOocText(t);
@@ -1741,27 +1743,36 @@ function renderChunks(chunks, options){
       const kept = normalizeBlankLinesInsideCell(t);
       const shouldLabel = allowSpeakerLabels && !labeledBlockIds.has(chunk.blockId);
       if(shouldLabel) labeledBlockIds.add(chunk.blockId);
-      return labelChunk(kept, chunk, shouldLabel);
+      return { text: labelChunk(kept, chunk, shouldLabel), blockId: chunk.blockId };
     }
 
     if(kind==="scene"){
       const scene = normalizeBlankLinesInsideCell(t);
       const shouldLabel = allowSpeakerLabels && !labeledBlockIds.has(chunk.blockId);
       if(shouldLabel) labeledBlockIds.add(chunk.blockId);
-      return labelChunk(scene, chunk, shouldLabel);
+      return { text: labelChunk(scene, chunk, shouldLabel), blockId: chunk.blockId };
     }
 
-    if(isDecorOnlyParagraph(t, getProtectedChapterSeparators())) return t;
+    if(isDecorOnlyParagraph(t, getProtectedChapterSeparators())) return { text: t, blockId: chunk.blockId };
 
     let dialogue = t;
     if(quoteStyle !== "none" && !isAlreadyQuoted(t)) dialogue = openQ + t + closeQ;
     const shouldLabel = allowSpeakerLabels && !labeledBlockIds.has(chunk.blockId);
     if(shouldLabel) labeledBlockIds.add(chunk.blockId);
-    return labelChunk(dialogue, chunk, shouldLabel);
-  }).filter(Boolean);
+    return { text: labelChunk(dialogue, chunk, shouldLabel), blockId: chunk.blockId };
+  }).filter(item => item && item.text);
 
-  const joiner = removeEmptyLinesEl.checked ? "\n" : "\n\n";
-  return result.join(joiner).trim();
+  if(removeEmptyLinesEl.checked){
+    return renderedItems.map(item => item.text).join("\n").trim();
+  }
+  if(shouldRemoveCellEmptyLines()){
+    return renderedItems.map((item, idx) => {
+      if(idx === 0) return item.text;
+      const prev = renderedItems[idx - 1];
+      return (prev && prev.blockId === item.blockId ? "\n" : "\n\n") + item.text;
+    }).join("").trim();
+  }
+  return renderedItems.map(item => item.text).join("\n\n").trim();
 }
 
 // ------------------ 메인 변환 ------------------
@@ -2077,7 +2088,7 @@ function getChapterSearchMatches(){
 }
 function updateChapterDividerPanel(){
   if(!chapterDividerPanelEl) return;
-  const separator = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "---";
+  const separator = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "—————";
   const useSeparatorMode = chapterSplitModeEl && chapterSplitModeEl.value === "separator";
   currentChapterMatches = getChapterSearchMatches();
   const total = currentChapterMatches.length;
@@ -2097,7 +2108,7 @@ function insertChapterDividerAtCurrentMatch(){
   const matches = getChapterSearchMatches();
   if(!matches.length){ showToast("구분선을 넣을 문단을 찾지 못했습니다."); return; }
   const current = matches[Math.max(0, Math.min(matches.length - 1, chapterMatchPage || 0))];
-  const separator = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "---";
+  const separator = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "—————";
   const position = chapterPositionEl ? chapterPositionEl.value : "before";
   const text = getActiveOutputValue();
   const paras = splitOutputParagraphsWithOffsets(text).map(p => p.text);
@@ -2131,7 +2142,7 @@ function getEpubConfig(){
     language: (epubLanguageEl && epubLanguageEl.value.trim()) || "ko",
     chapterMode: chapterSplitModeEl ? chapterSplitModeEl.value : "none",
     chapterSize: Math.max(1, parseInt(chapterSizeEl ? chapterSizeEl.value : "7000", 10) || 7000),
-    separator: (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "---",
+    separator: (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "—————",
     chapterPrefix: (chapterTitlePrefixEl && chapterTitlePrefixEl.value.trim()) || "Chapter",
     stylePreset: epubStylePresetEl ? epubStylePresetEl.value : "novel"
   };
