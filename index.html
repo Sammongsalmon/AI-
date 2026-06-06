@@ -11,7 +11,10 @@
   --paper:#ffffff;
   --ink:#17181c;
   --sub:#5a5f6b;
+  --muted:#8c929d;
   --line:#e7e7e2;
+  --accent:#17181c;
+  --soft:#f4f4f2;
   --radius:18px;
 }
 *{box-sizing:border-box;}
@@ -34,18 +37,47 @@ h1{margin:0 0 8px 0;font-size:22px;}
   border-radius:var(--radius);
   padding:18px;
 }
+.tabs{
+  display:flex;
+  gap:8px;
+  margin-bottom:16px;
+  border-bottom:1px solid var(--line);
+  padding-bottom:12px;
+}
+.tab{
+  padding:9px 14px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:#fff;
+  color:var(--sub);
+  cursor:pointer;
+  font-size:13px;
+}
+.tab.active{
+  background:var(--accent);
+  border-color:var(--accent);
+  color:#fff;
+}
 .toolbar{
   display:flex;
   flex-wrap:wrap;
   gap:12px;
-  margin-bottom:18px;
+  margin-bottom:14px;
   align-items:center;
+}
+.toolbar.extra{
+  margin-top:-4px;
+  padding:12px;
+  border:1px dashed var(--line);
+  border-radius:14px;
+  background:#fafaf8;
 }
 label{font-size:13px;color:var(--sub);}
 select,input[type="text"]{
   padding:6px 8px;
   border-radius:10px;
   border:1px solid var(--line);
+  background:#fff;
 }
 button{
   padding:8px 12px;
@@ -54,24 +86,45 @@ button{
   background:#fff;
   cursor:pointer;
 }
-button:hover{background:#f4f4f2;}
+button:hover{background:var(--soft);}
 .grid{
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:16px;
 }
-textarea{
+textarea,.pastebox{
   width:100%;
-  height:420px;
+  min-height:420px;
   border:1px solid var(--line);
   border-radius:14px;
   padding:12px;
-  resize:none;
   font-size:14px;
   line-height:1.7;
 }
+textarea{
+  height:420px;
+  resize:none;
+}
 textarea[readonly]{background:#fafaf8;}
-@media(max-width:900px){.grid{grid-template-columns:1fr;}}
+.pastebox{
+  height:420px;
+  overflow:auto;
+  outline:none;
+  background:#fff;
+  white-space:pre-wrap;
+}
+.pastebox:empty::before{
+  content:attr(data-placeholder);
+  color:var(--muted);
+}
+.hint{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.6;
+  margin-top:8px;
+}
+.hidden{display:none !important;}
+.panel.hidden{display:none !important;}
 #toast{
   position: fixed;
   left: 50%;
@@ -87,17 +140,26 @@ textarea[readonly]{background:#fafaf8;}
   pointer-events: none;
   z-index: 9999;
 }
+@media(max-width:900px){
+  .grid{grid-template-columns:1fr;}
+  .tabs{flex-wrap:wrap;}
+}
 </style>
 </head>
 
 <body>
 <div class="wrap">
   <h1>✍️ 로그 다듬기</h1>
-  <div class="sub">지문(*) 처리 · 대사 따옴표 · HTML 제거 · 보호 키워드 · 구분선 정리</div>
+  <div class="sub">지문(*) 처리 · 로판Ai 채팅방 서식 읽기 · 대사 따옴표 · HTML 제거 · 보호 키워드 · 구분선 정리</div>
 
   <div class="card">
+    <div class="tabs" role="tablist" aria-label="다듬기 모드">
+      <button type="button" class="tab active" data-tab="classic" role="tab" aria-selected="true">기존 로그 다듬기</button>
+      <button type="button" class="tab" data-tab="chat" role="tab" aria-selected="false">로판Ai 전체 채팅방</button>
+    </div>
+
     <div class="toolbar">
-      <label><input type="checkbox" id="removeDetails"> &lt;details&gt; 제거</label>
+      <label><input type="checkbox" id="removeDetails"> 접힘 토큰(&lt;details&gt;) 제거</label>
       <label><input type="checkbox" id="removeEmptyLines"> 문단 빈 줄 제거</label>
       <label><input type="checkbox" id="removeHTML"> HTML 태그 제거</label>
       <label><input type="checkbox" id="removeDecor"> 구분선/기호만 줄 제거</label>
@@ -111,20 +173,42 @@ textarea[readonly]{background:#fafaf8;}
         따옴표
         <select id="quoteStyle">
           <option value="none">넣지 않음</option>
-          <option value="straight">" "</option>
+          <option value="straight">&quot; &quot;</option>
           <option value="doubleCurly" selected>“ ”</option>
           <option value="singleCurly">‘ ’</option>
         </select>
       </label>
 
-      <button onclick="copyResult()">결과 복사</button>
-      <button onclick="downloadTxt()">TXT 다운로드</button>
-      <button onclick="clearAll()">초기화</button>
+      <button type="button" onclick="copyResult()">결과 복사</button>
+      <button type="button" onclick="downloadTxt()">TXT 다운로드</button>
+      <button type="button" onclick="clearAll()">초기화</button>
     </div>
 
-    <div class="grid">
-      <textarea id="inputText" placeholder="여기에 로그를 붙여 넣으세요"></textarea>
-      <textarea id="outputText" readonly placeholder="변환 결과"></textarea>
+    <div class="toolbar extra hidden" id="chatOptions">
+      <label><input type="checkbox" id="deleteContainsEnabled"> 특정 글자 포함 문단 삭제</label>
+      <input id="deleteContainsToken" type="text"
+        placeholder="예: [시스템], OOC, ⚠  (콤마로 구분)"
+        style="min-width:260px;">
+      <label><input type="checkbox" id="removeTables"> 블록/표 제거</label>
+      <span class="hint">로판Ai 탭은 붙여넣은 HTML 서식에서 <i>기울임체</i>를 지문, 기울임이 아닌 문단을 대사로 읽습니다.</span>
+    </div>
+
+    <div class="panel" id="classicPanel">
+      <div class="grid">
+        <textarea id="inputText" placeholder="여기에 로그를 붙여 넣으세요"></textarea>
+        <textarea id="outputText" readonly placeholder="변환 결과"></textarea>
+      </div>
+    </div>
+
+    <div class="panel hidden" id="chatPanel">
+      <div class="grid">
+        <div>
+          <div id="chatPaste" class="pastebox" contenteditable="true" spellcheck="false"
+            data-placeholder="로판Ai 전체 채팅방을 여기에 복붙하세요. 서식이 살아 있어야 기울임체/일반 문단을 구분할 수 있습니다."></div>
+          <div class="hint">브라우저 채팅방에서 바로 복사해 붙여넣으면 기울임체는 지문, 기울임이 아닌 문단은 대사로 처리됩니다. 메모장처럼 서식 없는 곳을 거치면 기울임 정보를 읽을 수 없습니다.</div>
+        </div>
+        <textarea id="chatOutputText" readonly placeholder="변환 결과"></textarea>
+      </div>
     </div>
   </div>
 </div>
@@ -134,6 +218,8 @@ textarea[readonly]{background:#fafaf8;}
 <script>
 const input = document.getElementById("inputText");
 const output = document.getElementById("outputText");
+const chatPaste = document.getElementById("chatPaste");
+const chatOutput = document.getElementById("chatOutputText");
 
 const removeDetailsEl = document.getElementById("removeDetails");
 const removeEmptyLinesEl = document.getElementById("removeEmptyLines");
@@ -142,24 +228,71 @@ const removeDecorEl = document.getElementById("removeDecor");
 const protectEnabledEl = document.getElementById("protectEnabled");
 const protectTokenEl = document.getElementById("protectToken");
 const quoteStyleEl = document.getElementById("quoteStyle");
+const deleteContainsEnabledEl = document.getElementById("deleteContainsEnabled");
+const deleteContainsTokenEl = document.getElementById("deleteContainsToken");
+const removeTablesEl = document.getElementById("removeTables");
+const chatOptions = document.getElementById("chatOptions");
+const classicPanel = document.getElementById("classicPanel");
+const chatPanel = document.getElementById("chatPanel");
+
+let activeMode = "classic";
 
 input.addEventListener("input", transformText);
+chatPaste.addEventListener("input", transformText);
+chatPaste.addEventListener("paste", handleRichPaste);
 
 // change 이벤트(체크/셀렉트)
-[removeDetailsEl, removeEmptyLinesEl, removeHTMLEl, removeDecorEl, protectEnabledEl, quoteStyleEl]
-  .forEach(el => el.addEventListener("change", transformText));
+[
+  removeDetailsEl,
+  removeEmptyLinesEl,
+  removeHTMLEl,
+  removeDecorEl,
+  protectEnabledEl,
+  quoteStyleEl,
+  deleteContainsEnabledEl,
+  removeTablesEl
+].forEach(el => el.addEventListener("change", transformText));
 
-// ✅ 보호 키워드 입력은 'input'으로 즉시 반영 (여기가 핵심!)
+// 텍스트 입력은 'input'으로 즉시 반영
 protectTokenEl.addEventListener("input", transformText);
+deleteContainsTokenEl.addEventListener("input", transformText);
 
-// ------------------ 보호 키워드(콤마 여러 개) ------------------
+// 탭 전환
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    activeMode = tab.dataset.tab;
+    document.querySelectorAll(".tab").forEach(t => {
+      const on = t.dataset.tab === activeMode;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    classicPanel.classList.toggle("hidden", activeMode !== "classic");
+    chatPanel.classList.toggle("hidden", activeMode !== "chat");
+    chatOptions.classList.toggle("hidden", activeMode !== "chat");
+    transformText();
+  });
+});
+
+// ------------------ 공통 토큰 ------------------
+function splitTokens(raw){
+  return (raw || "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+}
 function getProtectTokens(){
   if (!protectEnabledEl.checked) return [];
-  const raw = (protectTokenEl.value || "").trim();
-  if (!raw) return [];
-  return raw.split(",").map(s => s.trim()).filter(Boolean);
+  return splitTokens(protectTokenEl.value || "");
 }
 function isProtectedText(t, tokens){
+  if (!t || !tokens || tokens.length === 0) return false;
+  return tokens.some(tok => tok && t.includes(tok));
+}
+function getDeleteContainsTokens(){
+  if (activeMode !== "chat" || !deleteContainsEnabledEl.checked) return [];
+  return splitTokens(deleteContainsTokenEl.value || "");
+}
+function shouldDeleteByContains(t, tokens){
   if (!t || !tokens || tokens.length === 0) return false;
   return tokens.some(tok => tok && t.includes(tok));
 }
@@ -181,8 +314,16 @@ function removeDecorLines(p){
   const kept = (p||"").split("\n").filter(l => !isDecorOnlyLine(l));
   return kept.join("\n").trim();
 }
+function isTableLikeText(t){
+  const s = (t || "").trim();
+  if (!s) return false;
+  const pipeCount = (s.match(/\|/g) || []).length;
+  if (pipeCount >= 2) return true;
+  if (/^[\s|:.-]{3,}$/.test(s) && s.includes("|")) return true;
+  return false;
+}
 
-// ------------------ details 제거 (보호 키워드 예외) ------------------
+// ------------------ details 제거 (기존 로그용, 보호 키워드 예외) ------------------
 function filterDetailsByProtection(text, tokens){
   return (text || "").replace(/<details\b[\s\S]*?<\/details>/gi, (block) => {
     // 보호 토큰이 없으면 details 통째 삭제
@@ -204,7 +345,7 @@ function filterDetailsByProtection(text, tokens){
   .replace(/^\s*<summary.*?>.*?<\/summary>\s*$/gim, "");
 }
 
-// ------------------ 별표 지문 파서 ------------------
+// ------------------ 별표 지문 파서(기존 로그용) ------------------
 function parseChunks(text){
   const s=(text||"").replace(/\r/g,"");
   const out=[];
@@ -213,7 +354,7 @@ function parseChunks(text){
   const flush=()=>{
     if(!normal) return;
     normal.split(/\n\s*\n+/).map(p=>p.trim()).filter(Boolean)
-      .forEach(p=>out.push({kind:"normal", text:p}));
+      .forEach(p=>out.push({kind:"normal", text:p, fromTable:false, fromDetails:false}));
     normal="";
   };
 
@@ -229,7 +370,7 @@ function parseChunks(text){
     // 닫는 * 있으면 소비, 없으면 파일 끝(그래도 지문)
     if(i<s.length && s[i]==="*") i++;
 
-    out.push({kind:"scene", text:content.trim()});
+    out.push({kind:"scene", text:content.trim(), fromTable:false, fromDetails:false});
 
     // 지문 뒤 공백/개행은 경계로 취급
     while(i<s.length && (s[i]===" " || s[i]==="\t" || s[i]==="\n")){
@@ -254,8 +395,290 @@ function isAlreadyQuoted(t){
   return pairs.some(([o,c])=>t.startsWith(o) && t.endsWith(c) && t.length>=2);
 }
 
+// ------------------ 로판Ai 전체 채팅방 붙여넣기 ------------------
+function handleRichPaste(e){
+  const data = e.clipboardData || window.clipboardData;
+  if(!data) return;
+
+  const html = data.getData("text/html");
+  const text = data.getData("text/plain");
+
+  // HTML이 있으면 직접 삽입해 기울임체/표/details 정보를 최대한 보존한다.
+  if(html){
+    e.preventDefault();
+    insertHtmlAtCursor(sanitizePastedHTML(html));
+    transformText();
+    return;
+  }
+
+  if(text){
+    e.preventDefault();
+    insertHtmlAtCursor(escapeHTML(text).replace(/\n/g,"<br>"));
+    transformText();
+  }
+}
+function sanitizePastedHTML(html){
+  const doc = new DOMParser().parseFromString(html || "", "text/html");
+  doc.querySelectorAll("script,style,meta,link,iframe,object,embed").forEach(n => n.remove());
+  doc.body.querySelectorAll("*").forEach(el => {
+    [...el.attributes].forEach(attr => {
+      const name = attr.name.toLowerCase();
+      const value = String(attr.value || "").trim().toLowerCase();
+      if(name.startsWith("on")) el.removeAttribute(attr.name);
+      if((name === "href" || name === "src") && value.startsWith("javascript:")) el.removeAttribute(attr.name);
+    });
+  });
+  return doc.body.innerHTML;
+}
+function insertHtmlAtCursor(html){
+  chatPaste.focus();
+  const selection = window.getSelection();
+  if(!selection || selection.rangeCount === 0){
+    chatPaste.insertAdjacentHTML("beforeend", html);
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  const temp = document.createElement("div");
+  temp.innerHTML = html;
+  const frag = document.createDocumentFragment();
+  let node, lastNode = null;
+  while((node = temp.firstChild)){
+    lastNode = frag.appendChild(node);
+  }
+  range.insertNode(frag);
+  if(lastNode){
+    range.setStartAfter(lastNode);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+}
+function escapeHTML(str){
+  return String(str || "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+}
+function isItalicElement(el){
+  if(!el || el.nodeType !== 1) return false;
+  const tag = el.tagName;
+  if(tag === "I" || tag === "EM" || tag === "CITE") return true;
+
+  const style = (el.getAttribute("style") || "").toLowerCase();
+  if(/font-style\s*:\s*italic/.test(style)) return true;
+  if(/font-style\s*:\s*oblique/.test(style)) return true;
+
+  const className = String(el.className || "").toLowerCase();
+  if(/\b(italic|italics|emphasis)\b/.test(className)) return true;
+
+  // 붙여넣은 HTML이 class 기반 스타일을 유지하는 경우를 보완한다.
+  try{
+    const computed = window.getComputedStyle(el);
+    if(computed && (computed.fontStyle === "italic" || computed.fontStyle === "oblique")) return true;
+  }catch(_err){}
+
+  return false;
+}
+function isBlockElement(el){
+  if(!el || el.nodeType !== 1) return false;
+  const blockTags = new Set([
+    "ADDRESS","ARTICLE","ASIDE","BLOCKQUOTE","DD","DETAILS","DIALOG","DIV","DL","DT",
+    "FIELDSET","FIGCAPTION","FIGURE","FOOTER","FORM","H1","H2","H3","H4","H5","H6",
+    "HEADER","HR","LI","MAIN","NAV","OL","P","PRE","SECTION","SUMMARY","TABLE","TBODY",
+    "TD","TFOOT","TH","THEAD","TR","UL"
+  ]);
+  if(blockTags.has(el.tagName)) return true;
+  const role = (el.getAttribute("role") || "").toLowerCase();
+  return ["article","paragraph","row","table","grid","list","listitem"].includes(role);
+}
+function isTableElement(el){
+  if(!el || el.nodeType !== 1) return false;
+  if(["TABLE","TBODY","TFOOT","THEAD","TR","TD","TH","CAPTION","COL","COLGROUP"].includes(el.tagName)) return true;
+  const role = (el.getAttribute("role") || "").toLowerCase();
+  if(["table","grid","row","cell","columnheader","rowheader"].includes(role)) return true;
+  const className = String(el.className || "").toLowerCase();
+  return /\b(table|grid)\b/.test(className);
+}
+function isSkippableElement(el){
+  if(!el || el.nodeType !== 1) return false;
+  if(["SCRIPT","STYLE","META","LINK","NOSCRIPT","IFRAME","OBJECT","EMBED","SVG","CANVAS","BUTTON","INPUT","TEXTAREA","SELECT","OPTION"].includes(el.tagName)) return true;
+  const ariaHidden = (el.getAttribute("aria-hidden") || "").toLowerCase();
+  const hidden = el.hasAttribute("hidden") || ariaHidden === "true";
+  return hidden;
+}
+function normalizeParagraphText(text){
+  return (text || "")
+    .replace(/\u00a0/g," ")
+    .replace(/[ \t]+/g," ")
+    .replace(/\s+([,.!?;:])/g,"$1")
+    .trim();
+}
+function parseRofanChatChunks(root){
+  const chunks = [];
+  let buffer = "";
+  let italicChars = 0;
+  let totalChars = 0;
+  let bufferFromTable = false;
+  let bufferFromDetails = false;
+
+  const flush = () => {
+    const text = normalizeParagraphText(buffer);
+    if(text){
+      const kind = italicChars > 0 && italicChars >= totalChars * 0.5 ? "scene" : "normal";
+      chunks.push({
+        kind,
+        text,
+        fromTable: bufferFromTable,
+        fromDetails: bufferFromDetails
+      });
+    }
+    buffer = "";
+    italicChars = 0;
+    totalChars = 0;
+    bufferFromTable = false;
+    bufferFromDetails = false;
+  };
+
+  const addInlineText = (text, ctx) => {
+    const raw = String(text || "").replace(/\r/g,"");
+    if(!raw) return;
+    const parts = raw.split("\n");
+    parts.forEach((part, idx) => {
+      const normalized = part.replace(/\u00a0/g," ").replace(/[ \t]+/g," ");
+      if(normalized){
+        buffer += normalized;
+        const count = normalized.replace(/\s/g,"").length;
+        totalChars += count;
+        if(ctx.italic) italicChars += count;
+        if(ctx.fromTable) bufferFromTable = true;
+        if(ctx.fromDetails) bufferFromDetails = true;
+      }
+      if(idx < parts.length - 1) flush();
+    });
+  };
+
+  const walk = (node, ctx) => {
+    if(!node) return;
+
+    if(node.nodeType === Node.TEXT_NODE){
+      addInlineText(node.nodeValue, ctx);
+      return;
+    }
+
+    if(node.nodeType !== Node.ELEMENT_NODE) return;
+
+    const el = node;
+    if(isSkippableElement(el)) return;
+
+    if(el.tagName === "BR"){
+      flush();
+      return;
+    }
+
+    const nextCtx = {
+      italic: ctx.italic || isItalicElement(el),
+      fromTable: ctx.fromTable || isTableElement(el),
+      fromDetails: ctx.fromDetails || el.tagName === "DETAILS"
+    };
+
+    const block = isBlockElement(el);
+    if(block) flush();
+    Array.from(el.childNodes).forEach(child => walk(child, nextCtx));
+    if(block) flush();
+  };
+
+  Array.from(root.childNodes).forEach(child => walk(child, {italic:false, fromTable:false, fromDetails:false}));
+  flush();
+  return chunks;
+}
+
+// ------------------ 출력 공통 렌더러 ------------------
+function renderChunks(chunks, options){
+  const tokens = getProtectTokens();
+  const deleteTokens = options.deleteTokens || [];
+  const quoteStyle = quoteStyleEl.value;
+  const [openQ, closeQ] = getQuotes(quoteStyle);
+
+  const result = chunks.map(({kind, text: raw, fromTable, fromDetails}) => {
+    let t = (raw || "").trim();
+    if(!t) return "";
+
+    // HTML 제거 옵션은 최종 텍스트 안에 남아 있는 깨진 태그 문자열까지 정리한다.
+    if(removeHTMLEl.checked){
+      t = t.replace(/<script[\s\S]*?<\/script>/gi,"");
+      t = t.replace(/<style[\s\S]*?<\/style>/gi,"");
+      t = t.replace(/<br\s*\/?>/gi,"\n");
+      t = t.replace(/<\/p>/gi,"\n");
+      t = t.replace(/<[^>]+>/g,"");
+      t = t.replace(/<[^>\n]*/g,"");
+      t = t.trim();
+      if(!t) return "";
+    }
+
+    // 마크다운 굵게 제거
+    t = t.replace(/\*\*(.*?)\*\*/g,"$1");
+    t = t.replace(/__(.*?)__/g,"$1");
+
+    const protectedHere = isProtectedText(t, tokens);
+
+    // 접힘 토큰(details)은 보호 키워드가 있는 문단만 예외로 살린다.
+    if(removeDetailsEl.checked && fromDetails && !protectedHere) return "";
+
+    // 로판Ai 탭의 표/블록 삭제 옵션
+    if(options.removeTables && !protectedHere && (fromTable || isTableLikeText(t))) return "";
+
+    // 로판Ai 탭의 특정 글자 포함 문단 삭제 옵션. 보호 키워드가 켜진 문단은 예외.
+    if(shouldDeleteByContains(t, deleteTokens) && !protectedHere) return "";
+
+    // (선택) 구분선/기호만 줄 제거: 보호된 문단은 예외
+    if(removeDecorEl.checked && !protectedHere){
+      if(isDecorOnlyParagraph(t)) return "";
+      t = removeDecorLines(t);
+      if(!t) return "";
+    }
+
+    // 보호된 문단은 무조건 지문 처리 (따옴표 금지)
+    if(protectedHere){
+      if(removeEmptyLinesEl.checked) return t.replace(/\n\s*\n+/g,"\n");
+      return t;
+    }
+
+    // 지문(scene) 따옴표 금지 + scene 내부 빈 줄 제거 옵션 반영
+    if(kind==="scene"){
+      if(removeEmptyLinesEl.checked) return t.replace(/\n\s*\n+/g,"\n");
+      return t;
+    }
+
+    // 기호-only 문단은 옵션 꺼도 대사 취급 안 함 (따옴표 금지)
+    if(isDecorOnlyParagraph(t)) return t;
+
+    // 따옴표 없음
+    if(quoteStyle==="none") return t;
+
+    // 이미 따옴표면 유지
+    if(isAlreadyQuoted(t)) return t;
+
+    return openQ + t + closeQ;
+  }).filter(Boolean);
+
+  const joiner = removeEmptyLinesEl.checked ? "\n" : "\n\n";
+  return result.join(joiner).trim();
+}
+
 // ------------------ 메인 변환 ------------------
 function transformText(){
+  if(activeMode === "chat"){
+    const chunks = parseRofanChatChunks(chatPaste);
+    chatOutput.value = renderChunks(chunks, {
+      removeTables: removeTablesEl.checked,
+      deleteTokens: getDeleteContainsTokens()
+    });
+    return;
+  }
+
   let text = input.value || "";
   const tokens = getProtectTokens();
 
@@ -281,53 +704,36 @@ function transformText(){
   text = text.replace(/__(.*?)__/g,"$1");
 
   const chunks = parseChunks(text);
-  const quoteStyle = quoteStyleEl.value;
-  const [openQ, closeQ] = getQuotes(quoteStyle);
-
-  const result = chunks.map(({kind, text: raw}) => {
-    let t = (raw || "").trim();
-    if(!t) return "";
-
-    const protectedHere = isProtectedText(t, tokens);
-
-    // (선택) 구분선/기호만 줄 제거: 보호된 문단은 예외
-    if(removeDecorEl.checked && !protectedHere){
-      if(isDecorOnlyParagraph(t)) return "";
-      t = removeDecorLines(t);
-      if(!t) return "";
-    }
-
-    // ✅ 보호된 문단은 무조건 지문 처리 (따옴표 금지)
-    if(protectedHere){
-      if(removeEmptyLinesEl.checked) return t.replace(/\n\s*\n+/g,"\n");
-      return t;
-    }
-
-    // ✅ 지문(scene) 따옴표 금지 + scene 내부 빈 줄 제거 옵션 반영
-    if(kind==="scene"){
-      if(removeEmptyLinesEl.checked) return t.replace(/\n\s*\n+/g,"\n");
-      return t;
-    }
-
-    // ✅ 기호-only 문단은 옵션 꺼도 대사 취급 안 함 (따옴표 금지)
-    if(isDecorOnlyParagraph(t)) return t;
-
-    // 따옴표 없음
-    if(quoteStyle==="none") return t;
-
-    // 이미 따옴표면 유지
-    if(isAlreadyQuoted(t)) return t;
-
-    return openQ + t + closeQ;
-  }).filter(Boolean);
-
-  const joiner = removeEmptyLinesEl.checked ? "\n" : "\n\n";
-  output.value = result.join(joiner).trim();
+  output.value = renderChunks(chunks, {
+    removeTables: false,
+    deleteTokens: []
+  });
 }
 
 // ------------------ UI ------------------
+function getActiveOutput(){
+  return activeMode === "chat" ? chatOutput : output;
+}
 function copyResult(){
-  navigator.clipboard.writeText(output.value);
+  const value = getActiveOutput().value || "";
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(value)
+      .then(() => showToast("복사되었습니다."))
+      .catch(() => fallbackCopy(value));
+    return;
+  }
+  fallbackCopy(value);
+}
+function fallbackCopy(value){
+  const temp = document.createElement("textarea");
+  temp.value = value;
+  temp.setAttribute("readonly", "");
+  temp.style.position = "fixed";
+  temp.style.left = "-9999px";
+  document.body.appendChild(temp);
+  temp.select();
+  document.execCommand("copy");
+  document.body.removeChild(temp);
   showToast("복사되었습니다.");
 }
 function showToast(msg){
@@ -337,16 +743,22 @@ function showToast(msg){
   setTimeout(()=>{ t.style.opacity = "0"; }, 1200);
 }
 function downloadTxt(){
-  const blob=new Blob([output.value],{type:"text/plain;charset=utf-8"});
+  const blob=new Blob([getActiveOutput().value],{type:"text/plain;charset=utf-8"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
-  a.href=url; a.download="cleaned_log.txt";
+  a.href=url;
+  a.download=activeMode === "chat" ? "cleaned_rofan_chat.txt" : "cleaned_log.txt";
   a.click();
   URL.revokeObjectURL(url);
 }
 function clearAll(){
-  input.value="";
-  output.value="";
+  if(activeMode === "chat"){
+    chatPaste.innerHTML="";
+    chatOutput.value="";
+  }else{
+    input.value="";
+    output.value="";
+  }
   transformText();
 }
 
