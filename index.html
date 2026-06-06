@@ -123,6 +123,86 @@ textarea[readonly]{background:#fafaf8;}
   line-height:1.6;
   margin-top:8px;
 }
+.field{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.reviewArea{
+  margin:0 0 14px 0;
+}
+.reviewPanel{
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#fff;
+  padding:12px;
+  margin-bottom:12px;
+}
+.reviewHead{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  align-items:flex-start;
+  margin-bottom:10px;
+}
+.reviewTitle{
+  font-weight:700;
+  font-size:14px;
+  color:var(--ink);
+}
+.reviewMeta{
+  font-size:12px;
+  color:var(--muted);
+  line-height:1.5;
+}
+.reviewItem{
+  border-top:1px dashed var(--line);
+  padding-top:12px;
+  margin-top:12px;
+}
+.reviewBlock{
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:10px;
+  background:#fafaf8;
+  margin-top:8px;
+}
+.reviewChoices{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.reviewChoice{
+  display:block;
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:10px;
+  background:#fff;
+}
+.reviewChoice input{margin-right:6px;}
+.previewText{
+  white-space:pre-wrap;
+  max-height:170px;
+  overflow:auto;
+  line-height:1.6;
+  font-size:13px;
+  color:var(--ink);
+}
+.smallMuted{
+  font-size:12px;
+  color:var(--muted);
+}
+.pill{
+  display:inline-block;
+  padding:2px 7px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:#fff;
+  font-size:12px;
+  color:var(--sub);
+  margin-right:4px;
+}
 .hidden{display:none !important;}
 .panel.hidden{display:none !important;}
 #toast{
@@ -189,8 +269,19 @@ textarea[readonly]{background:#fafaf8;}
       <input id="deleteContainsToken" type="text"
         placeholder="예: [시스템], OOC, ⚠  (콤마로 구분)"
         style="min-width:260px;">
+      <label>
+        처리
+        <select id="deleteContainsMode">
+          <option value="auto" selected>바로 삭제</option>
+          <option value="review">확인 후 선택</option>
+        </select>
+      </label>
       <label><input type="checkbox" id="removeTables"> 블록/표 제거</label>
-      <span class="hint">로판Ai 탭은 붙여넣은 HTML 서식에서 <i>기울임체</i>를 지문, 기울임이 아닌 문단을 대사로 읽습니다.</span>
+      <label><input type="checkbox" id="labelSpeakers"> 이름으로 구분</label>
+      <input id="userName" type="text" placeholder="내 캐릭터/유저 이름" style="min-width:150px;">
+      <input id="characterName" type="text" placeholder="플레이 캐릭터 이름" style="min-width:150px;">
+      <label><input type="checkbox" id="reviewDuplicates"> 중복 답변 확인 후 선택</label>
+      <span class="hint">로판Ai 탭은 붙여넣은 HTML 서식에서 <i>기울임체</i>를 지문, 기울임이 아닌 문단을 대사로 읽습니다. 이름 구분을 켜면 로판Ai의 입력/답변 구간과 글자색을 이용해 유저/캐릭터 문단을 나눕니다.</span>
     </div>
 
     <div class="panel" id="classicPanel">
@@ -201,12 +292,16 @@ textarea[readonly]{background:#fafaf8;}
     </div>
 
     <div class="panel hidden" id="chatPanel">
+      <div class="reviewArea">
+        <div id="duplicateReviewPanel" class="reviewPanel hidden"></div>
+        <div id="containsReviewPanel" class="reviewPanel hidden"></div>
+      </div>
       <div class="grid">
         <div>
           <div class="toolbar" style="margin-top:0;padding-top:0;">
             <label>
               로판Ai 저장 파일 불러오기
-              <input type="file" id="chatFileInput" accept=".mht,.mhtml,.html,.htm,text/html,message/rfc822">
+              <input type="file" id="chatFileInput" accept=".mht,.mhtml,.html,.htm">
             </label>
           </div>
           <div id="chatPaste" class="pastebox" contenteditable="true" spellcheck="false"
@@ -237,18 +332,31 @@ const protectTokenEl = document.getElementById("protectToken");
 const quoteStyleEl = document.getElementById("quoteStyle");
 const deleteContainsEnabledEl = document.getElementById("deleteContainsEnabled");
 const deleteContainsTokenEl = document.getElementById("deleteContainsToken");
+const deleteContainsModeEl = document.getElementById("deleteContainsMode");
 const removeTablesEl = document.getElementById("removeTables");
+const labelSpeakersEl = document.getElementById("labelSpeakers");
+const userNameEl = document.getElementById("userName");
+const characterNameEl = document.getElementById("characterName");
+const reviewDuplicatesEl = document.getElementById("reviewDuplicates");
+const duplicateReviewPanel = document.getElementById("duplicateReviewPanel");
+const containsReviewPanel = document.getElementById("containsReviewPanel");
 const chatOptions = document.getElementById("chatOptions");
 const classicPanel = document.getElementById("classicPanel");
 const chatPanel = document.getElementById("chatPanel");
 
 let activeMode = "classic";
+let duplicateDecisions = {};
+let containsDecisions = {};
+let currentDuplicateGroups = [];
+let currentContainsItems = [];
 
 input.addEventListener("input", transformText);
-chatPaste.addEventListener("input", transformText);
+chatPaste.addEventListener("input", () => {
+  resetReviewDecisions();
+  transformText();
+});
 chatPaste.addEventListener("paste", handleRichPaste);
 
-// change 이벤트(체크/셀렉트)
 [
   removeDetailsEl,
   removeEmptyLinesEl,
@@ -257,13 +365,20 @@ chatPaste.addEventListener("paste", handleRichPaste);
   protectEnabledEl,
   quoteStyleEl,
   deleteContainsEnabledEl,
-  removeTablesEl
+  deleteContainsModeEl,
+  removeTablesEl,
+  labelSpeakersEl,
+  reviewDuplicatesEl
 ].forEach(el => el.addEventListener("change", transformText));
 
-// 텍스트 입력은 'input'으로 즉시 반영
 protectTokenEl.addEventListener("input", transformText);
 deleteContainsTokenEl.addEventListener("input", transformText);
+userNameEl.addEventListener("input", transformText);
+characterNameEl.addEventListener("input", transformText);
 chatFileInput.addEventListener("change", loadChatFile);
+duplicateReviewPanel.addEventListener("change", handleDuplicateReviewChange);
+containsReviewPanel.addEventListener("change", handleContainsReviewChange);
+containsReviewPanel.addEventListener("click", handleContainsReviewClick);
 
 // 탭 전환
 document.querySelectorAll(".tab").forEach(tab => {
@@ -304,12 +419,16 @@ function shouldDeleteByContains(t, tokens){
   if (!t || !tokens || tokens.length === 0) return false;
   return tokens.some(tok => tok && t.includes(tok));
 }
+function resetReviewDecisions(){
+  duplicateDecisions = {};
+  containsDecisions = {};
+}
 
 // ------------------ 기호/구분선 판정 ------------------
 function isDecorOnlyLine(line){
   const s=(line||"").trim();
   if(!s) return false;
-  if(/^[-*_—–]{3,}$/.test(s)) return true; // --- *** ___ ——
+  if(/^[-*_—–]{3,}$/.test(s)) return true;
   if(/^[<>\[\]\(\){}|\\/·•….,:;'"`~!@#$%^&+=-]+$/.test(s)) return true;
   return false;
 }
@@ -334,18 +453,12 @@ function isTableLikeText(t){
 // ------------------ details 제거 (기존 로그용, 보호 키워드 예외) ------------------
 function filterDetailsByProtection(text, tokens){
   return (text || "").replace(/<details\b[\s\S]*?<\/details>/gi, (block) => {
-    // 보호 토큰이 없으면 details 통째 삭제
     if (!tokens || tokens.length === 0) return "";
-
-    // summary 제거 + details 태그 제거
     let inner = block
       .replace(/<summary[\s\S]*?<\/summary>/gi, "")
       .replace(/<\/?details[^>]*>/gi, "");
-
-    // 문단 분리 후 보호 토큰 있는 문단만 남김
     const paras = inner.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
     const kept = paras.filter(p => isProtectedText(p, tokens));
-
     if (kept.length === 0) return "";
     return "\n\n" + kept.join("\n\n") + "\n\n";
   })
@@ -362,7 +475,7 @@ function parseChunks(text){
   const flush=()=>{
     if(!normal) return;
     normal.split(/\n\s*\n+/).map(p=>p.trim()).filter(Boolean)
-      .forEach(p=>out.push({kind:"normal", text:p, fromTable:false, fromDetails:false}));
+      .forEach((p, idx)=>out.push({id:"classic-" + out.length + "-" + idx, kind:"normal", text:p, owner:"", color:"", fromTable:false, fromDetails:false, blockId:"classic"}));
     normal="";
   };
 
@@ -370,17 +483,14 @@ function parseChunks(text){
     if(s[i]!=="*"){ normal+=s[i++]; continue; }
 
     flush();
-    i++; // consume starting *
+    i++;
 
     let content="";
     while(i<s.length && s[i]!=="*"){ content+=s[i++]; }
-
-    // 닫는 * 있으면 소비, 없으면 파일 끝(그래도 지문)
     if(i<s.length && s[i]==="*") i++;
 
-    out.push({kind:"scene", text:content.trim(), fromTable:false, fromDetails:false});
+    out.push({id:"classic-" + out.length, kind:"scene", text:content.trim(), owner:"", color:"", fromTable:false, fromDetails:false, blockId:"classic"});
 
-    // 지문 뒤 공백/개행은 경계로 취급
     while(i<s.length && (s[i]===" " || s[i]==="\t" || s[i]==="\n")){
       i++;
       if(i<s.length && s[i]==="*") break;
@@ -402,7 +512,18 @@ function isAlreadyQuoted(t){
   const pairs=[['"','"'],['“','”'],['‘','’']];
   return pairs.some(([o,c])=>t.startsWith(o) && t.endsWith(c) && t.length>=2);
 }
-
+function getSpeakerName(owner){
+  if(owner === "user") return (userNameEl.value || "").trim() || "유저";
+  if(owner === "character") return (characterNameEl.value || "").trim() || "캐릭터";
+  return "";
+}
+function labelChunk(text, chunk, isDialogue){
+  if(activeMode !== "chat" || !labelSpeakersEl.checked || !chunk.owner) return text;
+  const name = getSpeakerName(chunk.owner);
+  if(!name) return text;
+  if(isDialogue) return name + ": " + text;
+  return "[" + name + " 지문] " + text;
+}
 
 // ------------------ 로판Ai 저장 파일 불러오기 ------------------
 function activateChatTab(){
@@ -416,31 +537,85 @@ function activateChatTab(){
   chatPanel.classList.remove("hidden");
   chatOptions.classList.remove("hidden");
 }
-function loadChatFile(){
+function readFileAsArrayBuffer(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("file read error"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+function isZipBytes(bytes){
+  return bytes && bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
+}
+function decodeBytesSmart(bytes){
+  if(bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe){
+    return new TextDecoder("utf-16le").decode(bytes);
+  }
+  if(bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff){
+    return new TextDecoder("utf-16be").decode(bytes);
+  }
+  let text = new TextDecoder("utf-8").decode(bytes);
+  const replacementCount = (text.match(/�/g) || []).length;
+  if(replacementCount > Math.max(20, text.length * 0.01)){
+    try{
+      const alt = new TextDecoder("windows-949").decode(bytes);
+      if((alt.match(/�/g) || []).length < replacementCount) text = alt;
+    }catch(_err){}
+  }
+  return text.replace(/^\uFEFF/, "");
+}
+async function loadChatFile(){
   const file = chatFileInput.files && chatFileInput.files[0];
   if(!file) return;
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    try{
-      const raw = String(reader.result || "");
-      const looksMHT = /\.(mht|mhtml)$/i.test(file.name) || /MIME-Version:\s*1\.0/i.test(raw) || /Content-Type:\s*multipart\/related/i.test(raw);
-      const html = looksMHT ? extractHTMLFromMHT(raw) : raw;
-      if(!html || !/<[a-z][\s\S]*>/i.test(html)){
-        showToast("HTML 내용을 찾지 못했습니다.");
-        return;
-      }
-      activateChatTab();
-      chatPaste.innerHTML = sanitizePastedHTML(extractLikelyChatHTML(html));
-      transformText();
-      showToast("파일을 불러왔습니다.");
-    }catch(err){
-      console.error(err);
-      showToast("파일을 읽지 못했습니다.");
+  try{
+    const buffer = await readFileAsArrayBuffer(file);
+    const bytes = new Uint8Array(buffer);
+    const lowerName = (file.name || "").toLowerCase();
+
+    if(isZipBytes(bytes) || /\.zip$/i.test(lowerName)){
+      chatFileInput.value = "";
+      showToast("ZIP 파일은 변환 대상이 아닙니다. 로판Ai 저장 파일(.mht/.mhtml/.html)을 선택해 주세요.");
+      return;
     }
-  };
-  reader.onerror = () => showToast("파일을 읽지 못했습니다.");
-  reader.readAsText(file, "utf-8");
+
+    const raw = decodeBytesSmart(bytes);
+    const looksMHT = /\.(mht|mhtml)$/i.test(lowerName) || /MIME-Version:\s*1\.0/i.test(raw) || /Content-Type:\s*multipart\/related/i.test(raw);
+    const looksHTML = /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span)\b/i.test(raw);
+    const allowedExt = /\.(mht|mhtml|html|htm)$/i.test(lowerName);
+
+    if(!allowedExt && !looksMHT && !looksHTML){
+      chatFileInput.value = "";
+      showToast("지원하지 않는 파일입니다. .mht/.mhtml/.html 파일을 선택해 주세요.");
+      return;
+    }
+
+    const html = looksMHT ? extractHTMLFromMHT(raw) : raw;
+    if(!html || !looksLikeHTML(html)){
+      showToast("파일 안에서 HTML 채팅 내용을 찾지 못했습니다.");
+      return;
+    }
+
+    const likely = extractLikelyChatHTML(html);
+    const sanitized = sanitizePastedHTML(likely);
+    if(!htmlToPlainText(sanitized)){
+      showToast("불러온 HTML에서 변환할 텍스트를 찾지 못했습니다.");
+      return;
+    }
+
+    activateChatTab();
+    resetReviewDecisions();
+    chatPaste.innerHTML = sanitized;
+    transformText();
+    showToast("파일을 불러왔습니다.");
+  }catch(err){
+    console.error(err);
+    showToast("파일을 읽지 못했습니다.");
+  }
+}
+function looksLikeHTML(text){
+  return /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span|br|i|em|details|table)\b/i.test(String(text || ""));
 }
 function extractHTMLFromMHT(raw){
   const text = String(raw || "");
@@ -448,6 +623,7 @@ function extractHTMLFromMHT(raw){
   if(boundaryMatch){
     const boundary = (boundaryMatch[1] || boundaryMatch[2] || "").trim();
     const parts = text.split("--" + boundary);
+    const htmlParts = [];
     for(const part of parts){
       const sepMatch = part.match(/\r?\n\r?\n/);
       if(!sepMatch) continue;
@@ -459,14 +635,26 @@ function extractHTMLFromMHT(raw){
       body = body.replace(/\r?\n--\s*$/g, "");
       const encMatch = headers.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i);
       const enc = encMatch ? encMatch[1].trim().toLowerCase() : "";
-      if(enc.includes("base64")) return decodeBase64UTF8(body);
-      if(enc.includes("quoted-printable")) return decodeQuotedPrintableUTF8(body);
-      return body;
+      if(enc.includes("base64")) body = decodeBase64UTF8(body);
+      else if(enc.includes("quoted-printable")) body = decodeQuotedPrintableUTF8(body);
+      htmlParts.push(body);
+    }
+    if(htmlParts.length){
+      htmlParts.sort((a,b) => scoreHTMLPart(b) - scoreHTMLPart(a));
+      return htmlParts[0];
     }
   }
 
-  const docMatch = text.match(/<!doctype html[\s\S]*$/i) || text.match(/<html[\s\S]*$/i);
+  const docMatch = text.match(/<!doctype\s+html[\s\S]*$/i) || text.match(/<html[\s\S]*$/i) || text.match(/<body[\s\S]*$/i);
   return docMatch ? docMatch[0] : text;
+}
+function scoreHTMLPart(part){
+  const s = String(part || "");
+  let score = Math.min(s.length, 500000);
+  if(/<!doctype\s+html|<html\b/i.test(s)) score += 500000;
+  score += (s.match(/data-narration/gi) || []).length * 1000;
+  score += (s.match(/class=["'][^"']*mt-1/gi) || []).length * 1000;
+  return score;
 }
 function decodeBase64UTF8(str){
   const cleaned = String(str || "").replace(/\s+/g, "");
@@ -494,19 +682,38 @@ function decodeQuotedPrintableUTF8(str){
 }
 function extractLikelyChatHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
-  const candidates = Array.from(doc.querySelectorAll("div"))
-    .filter(el => el.classList && el.classList.contains("overflow-y-auto"));
-  if(candidates.length){
-    candidates.sort((a,b) => (b.innerText || b.textContent || "").length - (a.innerText || a.textContent || "").length);
-    const container = candidates[0];
-    const children = Array.from(container.children || []);
+  const scoreContainer = (el) => {
+    if(!el) return 0;
+    const textLen = (el.innerText || el.textContent || "").length;
+    const pCount = el.querySelectorAll ? el.querySelectorAll("p").length : 0;
+    const replyCount = el.querySelectorAll ? el.querySelectorAll("div.mt-1").length : 0;
+    const narrationCount = el.querySelectorAll ? el.querySelectorAll("[data-narration]").length : 0;
+    return replyCount * 100000 + narrationCount * 20000 + pCount * 1000 + Math.min(textLen, 100000);
+  };
+
+  const overflowCandidates = Array.from(doc.querySelectorAll("div"))
+    .filter(el => /overflow-y-auto/.test(String(el.className || "")));
+  if(overflowCandidates.length){
+    overflowCandidates.sort((a,b) => scoreContainer(b) - scoreContainer(a));
+    const container = overflowCandidates[0];
+    const children = Array.from(container.children || []).filter(el => scoreContainer(el) > 0);
     if(children.length){
-      children.sort((a,b) => (b.innerText || b.textContent || "").length - (a.innerText || a.textContent || "").length);
+      children.sort((a,b) => scoreContainer(b) - scoreContainer(a));
       return children[0].innerHTML || children[0].outerHTML;
     }
     return container.innerHTML;
   }
-  return doc.body ? doc.body.innerHTML : html;
+
+  const candidates = Array.from(doc.querySelectorAll("main, section, article, div"));
+  candidates.push(doc.body);
+  candidates.sort((a,b) => scoreContainer(b) - scoreContainer(a));
+  const best = candidates.find(el => scoreContainer(el) > 0) || doc.body;
+  return best ? best.innerHTML : html;
+}
+function htmlToPlainText(html){
+  const temp = document.createElement("div");
+  temp.innerHTML = html || "";
+  return (temp.innerText || temp.textContent || "").trim();
 }
 
 // ------------------ 로판Ai 전체 채팅방 붙여넣기 ------------------
@@ -517,9 +724,9 @@ function handleRichPaste(e){
   const html = data.getData("text/html");
   const text = data.getData("text/plain");
 
-  // HTML이 있으면 직접 삽입해 기울임체/표/details 정보를 최대한 보존한다.
   if(html){
     e.preventDefault();
+    resetReviewDecisions();
     insertHtmlAtCursor(sanitizePastedHTML(html));
     transformText();
     return;
@@ -527,6 +734,7 @@ function handleRichPaste(e){
 
   if(text){
     e.preventDefault();
+    resetReviewDecisions();
     insertHtmlAtCursor(escapeHTML(text).replace(/\n/g,"<br>"));
     transformText();
   }
@@ -576,6 +784,9 @@ function escapeHTML(str){
     .replace(/"/g,"&quot;")
     .replace(/'/g,"&#039;");
 }
+function escapeAttr(str){
+  return escapeHTML(str).replace(/`/g,"&#096;");
+}
 function isItalicElement(el){
   if(!el || el.nodeType !== 1) return false;
   const tag = el.tagName;
@@ -589,7 +800,6 @@ function isItalicElement(el){
   const className = String(el.className || "").toLowerCase();
   if(/\b(italic|italics|emphasis)\b/.test(className)) return true;
 
-  // 붙여넣은 HTML이 class 기반 스타일을 유지하는 경우를 보완한다.
   try{
     const computed = window.getComputedStyle(el);
     if(computed && (computed.fontStyle === "italic" || computed.fontStyle === "oblique")) return true;
@@ -628,7 +838,9 @@ function isSkippableElement(el){
   const hidden = el.hasAttribute("hidden") || ariaHidden === "true";
   if(hidden) return true;
   const className = String(el.className || "").toLowerCase();
-  if(/(^|\s)select-none(\s|$)/.test(className)) return true;
+  if(/(^|\s)(select-none|sr-only|hidden|invisible)(\s|$)/.test(className)) return true;
+  const style = String(el.getAttribute("style") || "").toLowerCase().replace(/\s+/g, "");
+  if(/display:none/.test(style) || /visibility:hidden/.test(style)) return true;
   const title = el.getAttribute("title") || "";
   if(["북마크 추가", "분기 생성"].includes(title)) return true;
   return false;
@@ -640,94 +852,394 @@ function normalizeParagraphText(text){
     .replace(/\s+([,.!?;:])/g,"$1")
     .trim();
 }
+function normalizeColorValue(value){
+  let v = String(value || "").trim().replace(/!important/ig, "");
+  if(!v) return "";
+  const hex = v.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
+  if(hex){
+    let h = hex[1];
+    if(h.length === 3) h = h.split("").map(ch => ch + ch).join("");
+    if(h.length === 8) h = h.slice(0,6);
+    return "#" + h.toUpperCase();
+  }
+  const rgb = v.match(/^rgba?\(([^)]+)\)$/i);
+  if(rgb){
+    const nums = rgb[1].split(",").slice(0,3).map(x => Math.max(0, Math.min(255, parseInt(x, 10) || 0)));
+    if(nums.length === 3) return "#" + nums.map(n => n.toString(16).padStart(2,"0")).join("").toUpperCase();
+  }
+  const named = {white:"#FFFFFF", black:"#000000", yellow:"#FFFF00", gray:"#808080", grey:"#808080"};
+  return named[v.toLowerCase()] || v.toLowerCase();
+}
+function getInlineColor(el){
+  if(!el || el.nodeType !== 1) return "";
+  const style = el.getAttribute("style") || "";
+  const colorMatch = style.match(/(?:^|;)\s*color\s*:\s*([^;]+)/i);
+  if(colorMatch) return normalizeColorValue(colorMatch[1]);
+  const colorAttr = el.getAttribute("color");
+  if(colorAttr) return normalizeColorValue(colorAttr);
+  const className = String(el.className || "");
+  const arbitrary = className.match(/text-\[#([0-9a-f]{3,8})\]/i);
+  if(arbitrary) return normalizeColorValue("#" + arbitrary[1]);
+  const cls = className.toLowerCase();
+  if(/\btext-white\b/.test(cls)) return "#FFFFFF";
+  if(/\btext-indigo-400\b/.test(cls)) return "#818CF8";
+  if(/\btext-yellow-400\b/.test(cls)) return "#FACC15";
+  if(/\btext-neutral-400\b|\btext-zinc-400\b/.test(cls)) return "#A3A3A3";
+  if(/\btext-neutral-200\b|\btext-zinc-200\b/.test(cls)) return "#E5E5E5";
+  return "";
+}
+function ownerFromColor(color, className){
+  const c = normalizeColorValue(color || "");
+  const cls = String(className || "").toLowerCase();
+  if(["#818CF8", "#A3A3A3", "#A5B4FC", "#6366F1"].includes(c)) return "user";
+  if(["#FFFFFF", "#FFC200", "#FACC15", "#EAB308", "#FEF08A", "#E5E5E5"].includes(c)) return "character";
+  if(/\btext-indigo-/.test(cls)) return "user";
+  if(/\btext-white\b|\btext-yellow-|\btext-amber-/.test(cls)) return "character";
+  return "";
+}
+function ownerLabel(owner){
+  if(owner === "user") return getSpeakerName("user");
+  if(owner === "character") return getSpeakerName("character");
+  return "구분 없음";
+}
+function getElementOwnerHint(el, color){
+  if(!el || el.nodeType !== 1) return "";
+  const author = String(el.getAttribute("data-author") || el.getAttribute("data-message-author") || el.getAttribute("data-role") || "").toLowerCase();
+  if(/user|human|me|내|유저/.test(author)) return "user";
+  if(/assistant|ai|character|bot|캐릭터/.test(author)) return "character";
+  const className = String(el.className || "");
+  if(/(^|\s)mt-1(\s|$)/.test(className)) return "character";
+  if(el.tagName === "P") return "user";
+  return ownerFromColor(color, className);
+}
+function isUiOnlyText(text){
+  const s = normalizeParagraphText(text);
+  if(!s) return true;
+  if(/^\d+\s*\/\s*\d+$/.test(s)) return true;
+  if(/^(복사|삭제|수정|북마크|분기|다시 생성|재생성)$/.test(s)) return true;
+  return false;
+}
+function hasSkippableAncestor(el, root){
+  let cur = el.parentElement;
+  while(cur && cur !== root){
+    if(isSkippableElement(cur)) return true;
+    cur = cur.parentElement;
+  }
+  return false;
+}
+function collectRofanContentBlocks(root){
+  const blocks = [];
+  const candidates = Array.from(root.querySelectorAll("p, div.mt-1"));
+  candidates.forEach((el, index) => {
+    if(blocks.some(b => b.el.contains(el))) return;
+    if(isSkippableElement(el) || hasSkippableAncestor(el, root)) return;
+    const text = normalizeParagraphText(el.innerText || el.textContent || "");
+    if(isUiOnlyText(text)) return;
+    const color = getInlineColor(el);
+    const owner = getElementOwnerHint(el, color);
+    if(!owner) return;
+    blocks.push({el, owner, index});
+  });
+  return blocks;
+}
 function parseRofanChatChunks(root){
   const chunks = [];
-  let buffer = "";
-  let bufferKind = null;
-  let bufferFromTable = false;
-  let bufferFromDetails = false;
+  const blocks = [];
+  let chunkSeq = 0;
+  let blockSeq = 0;
 
-  const flush = () => {
-    const text = normalizeParagraphText(buffer);
-    if(text){
-      chunks.push({
-        kind: bufferKind || "normal",
-        text,
-        fromTable: bufferFromTable,
-        fromDetails: bufferFromDetails
-      });
-    }
-    buffer = "";
-    bufferKind = null;
-    bufferFromTable = false;
-    bufferFromDetails = false;
-  };
+  const pushChunksFromElement = (el, baseOwner) => {
+    const blockId = "b" + (blockSeq++);
+    const start = chunks.length;
+    let buffer = "";
+    let bufferKind = null;
+    let bufferOwner = baseOwner || "";
+    let bufferColor = "";
+    let bufferFromTable = false;
+    let bufferFromDetails = false;
 
-  const addInlineText = (text, ctx) => {
-    const raw = String(text || "").replace(/\r/g,"");
-    if(!raw) return;
-    const kind = ctx.italic ? "scene" : "normal";
-    const parts = raw.split("\n");
-    parts.forEach((part, idx) => {
-      const normalized = part.replace(/\u00a0/g," ").replace(/[ \t]+/g," ");
-      if(normalized){
-        if(buffer && bufferKind && bufferKind !== kind) flush();
-        if(!bufferKind) bufferKind = kind;
-        buffer += normalized;
-        if(ctx.fromTable) bufferFromTable = true;
-        if(ctx.fromDetails) bufferFromDetails = true;
+    const flush = () => {
+      const text = normalizeParagraphText(buffer);
+      if(text){
+        chunks.push({
+          id: "c" + (chunkSeq++),
+          kind: bufferKind || "normal",
+          text,
+          owner: bufferOwner || "",
+          color: bufferColor || "",
+          fromTable: bufferFromTable,
+          fromDetails: bufferFromDetails,
+          blockId
+        });
       }
-      if(idx < parts.length - 1) flush();
-    });
-  };
-
-  const walk = (node, ctx) => {
-    if(!node) return;
-
-    if(node.nodeType === Node.TEXT_NODE){
-      addInlineText(node.nodeValue, ctx);
-      return;
-    }
-
-    if(node.nodeType !== Node.ELEMENT_NODE) return;
-
-    const el = node;
-    if(isSkippableElement(el)) return;
-
-    if(el.tagName === "BR"){
-      flush();
-      return;
-    }
-
-    const nextCtx = {
-      italic: ctx.italic || isItalicElement(el),
-      fromTable: ctx.fromTable || isTableElement(el),
-      fromDetails: ctx.fromDetails || el.tagName === "DETAILS"
+      buffer = "";
+      bufferKind = null;
+      bufferOwner = baseOwner || "";
+      bufferColor = "";
+      bufferFromTable = false;
+      bufferFromDetails = false;
     };
 
-    const block = isBlockElement(el);
-    if(block) flush();
-    Array.from(el.childNodes).forEach(child => walk(child, nextCtx));
-    if(block) flush();
+    const addInlineText = (text, ctx) => {
+      const raw = String(text || "").replace(/\r/g,"");
+      if(!raw) return;
+      const kind = ctx.italic ? "scene" : "normal";
+      const owner = ctx.owner || ownerFromColor(ctx.color, "") || "";
+      const parts = raw.split("\n");
+      parts.forEach((part, idx) => {
+        const normalized = part.replace(/\u00a0/g," ").replace(/[ \t]+/g," ");
+        if(normalized){
+          if(buffer && ((bufferKind && bufferKind !== kind) || (bufferOwner && owner && bufferOwner !== owner))) flush();
+          if(!bufferKind) bufferKind = kind;
+          if(!bufferOwner && owner) bufferOwner = owner;
+          if(!bufferColor && ctx.color) bufferColor = ctx.color;
+          buffer += normalized;
+          if(ctx.fromTable) bufferFromTable = true;
+          if(ctx.fromDetails) bufferFromDetails = true;
+        }
+        if(idx < parts.length - 1) flush();
+      });
+    };
+
+    const walk = (node, ctx) => {
+      if(!node) return;
+      if(node.nodeType === Node.TEXT_NODE){
+        addInlineText(node.nodeValue, ctx);
+        return;
+      }
+      if(node.nodeType !== Node.ELEMENT_NODE) return;
+
+      const childEl = node;
+      if(isSkippableElement(childEl)) return;
+
+      if(childEl.tagName === "BR"){
+        flush();
+        return;
+      }
+
+      const color = getInlineColor(childEl) || ctx.color || "";
+      const ownerHint = getElementOwnerHint(childEl, color);
+      const nextCtx = {
+        italic: ctx.italic || isItalicElement(childEl),
+        fromTable: ctx.fromTable || isTableElement(childEl),
+        fromDetails: ctx.fromDetails || childEl.tagName === "DETAILS",
+        owner: ownerHint || ctx.owner || "",
+        color
+      };
+
+      const block = isBlockElement(childEl) && childEl !== el;
+      if(block) flush();
+      Array.from(childEl.childNodes).forEach(child => walk(child, nextCtx));
+      if(block) flush();
+    };
+
+    Array.from(el.childNodes).forEach(child => walk(child, {
+      italic: false,
+      fromTable: isTableElement(el),
+      fromDetails: el.tagName === "DETAILS",
+      owner: baseOwner || getElementOwnerHint(el, getInlineColor(el)) || "",
+      color: getInlineColor(el) || ""
+    }));
+    flush();
+
+    const blockText = chunks.slice(start).map(c => c.text).join("\n\n").trim();
+    if(blockText){
+      blocks.push({id:blockId, owner:baseOwner || "", text:blockText, startChunk:start, endChunk:chunks.length});
+    }else{
+      chunks.splice(start);
+    }
   };
 
-  Array.from(root.childNodes).forEach(child => walk(child, {italic:false, fromTable:false, fromDetails:false}));
-  flush();
-  return chunks;
+  const semanticBlocks = collectRofanContentBlocks(root);
+  if(semanticBlocks.length){
+    semanticBlocks.forEach(block => pushChunksFromElement(block.el, block.owner));
+  }else{
+    pushChunksFromElement(root, "");
+  }
+
+  return {chunks, blocks};
+}
+
+// ------------------ 중복/삭제 확인 패널 ------------------
+function normalizeForCompare(text){
+  return String(text || "")
+    .replace(/\s+/g, "")
+    .replace(/[“”‘’"']/g, "")
+    .trim();
+}
+function hashString(str){
+  let h = 2166136261;
+  const s = String(str || "");
+  for(let i=0; i<s.length; i++){
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+function previewText(text, limit){
+  const s = normalizeParagraphText(text || "");
+  if(s.length <= limit) return s;
+  return s.slice(0, limit).trim() + "…";
+}
+function findNextAnswerBlock(blocks, index){
+  for(let i=index + 1; i<blocks.length; i++){
+    if(blocks[i].owner === "character") return blocks[i];
+    if(blocks[i].owner === "user") return null;
+  }
+  return null;
+}
+function findPrevUserBlock(blocks, index){
+  for(let i=index - 1; i>=0; i--){
+    if(blocks[i].owner === "user") return blocks[i];
+    if(blocks[i].owner === "character") return null;
+  }
+  return null;
+}
+function buildDuplicateAnswerGroups(blocks){
+  const groups = new Map();
+  blocks.forEach((block, index) => {
+    if(block.owner !== "user") return;
+    const norm = normalizeForCompare(block.text);
+    if(norm.length < 30) return;
+    const answer = findNextAnswerBlock(blocks, index);
+    if(!answer) return;
+    const key = "prompt-" + hashString(norm);
+    if(!groups.has(key)) groups.set(key, {key, type:"prompt", promptText:block.text, occurrences:[]});
+    groups.get(key).occurrences.push({promptBlock:block, answerBlock:answer});
+  });
+
+  const promptGroups = Array.from(groups.values()).filter(g => g.occurrences.length > 1);
+  const coveredAnswerIds = new Set();
+  promptGroups.forEach(g => g.occurrences.forEach(o => coveredAnswerIds.add(o.answerBlock.id)));
+
+  const answerGroups = new Map();
+  blocks.forEach((block, index) => {
+    if(block.owner !== "character" || coveredAnswerIds.has(block.id)) return;
+    const norm = normalizeForCompare(block.text);
+    if(norm.length < 80) return;
+    const key = "answer-" + hashString(norm);
+    if(!answerGroups.has(key)) answerGroups.set(key, {key, type:"answer", promptText:block.text, occurrences:[]});
+    answerGroups.get(key).occurrences.push({promptBlock:findPrevUserBlock(blocks, index), answerBlock:block});
+  });
+
+  return promptGroups.concat(Array.from(answerGroups.values()).filter(g => g.occurrences.length > 1)).slice(0, 80);
+}
+function getDroppedBlockIdsFromDuplicateDecisions(groups){
+  const dropped = new Set();
+  groups.forEach(group => {
+    const decision = duplicateDecisions[group.key] || "all";
+    if(decision === "all") return;
+    group.occurrences.forEach(occ => {
+      const keepId = occ.answerBlock ? occ.answerBlock.id : (occ.promptBlock ? occ.promptBlock.id : "");
+      if(keepId === decision) return;
+      if(occ.promptBlock) dropped.add(occ.promptBlock.id);
+      if(occ.answerBlock) dropped.add(occ.answerBlock.id);
+    });
+  });
+  return dropped;
+}
+function updateDuplicateReviewPanel(groups){
+  currentDuplicateGroups = groups || [];
+  if(activeMode !== "chat" || !reviewDuplicatesEl.checked){
+    duplicateReviewPanel.classList.add("hidden");
+    duplicateReviewPanel.innerHTML = "";
+    return;
+  }
+  if(!currentDuplicateGroups.length){
+    duplicateReviewPanel.classList.remove("hidden");
+    duplicateReviewPanel.innerHTML = `<div class="reviewHead"><div><div class="reviewTitle">중복 답변 확인</div><div class="reviewMeta">같은 입력이나 같은 답변이 반복된 후보를 찾지 못했습니다.</div></div></div>`;
+    return;
+  }
+
+  let html = `<div class="reviewHead"><div><div class="reviewTitle">중복 답변 확인</div><div class="reviewMeta">같은 유저 입력에 붙은 답변 후보 또는 완전히 반복된 답변을 찾았습니다. 후보를 고르면 나머지 입력/답변 블록은 결과에서 제외됩니다. 기본값은 모두 유지입니다.</div></div><div class="smallMuted">${currentDuplicateGroups.length}묶음</div></div>`;
+  currentDuplicateGroups.forEach((group, gIdx) => {
+    const selected = duplicateDecisions[group.key] || "all";
+    const title = group.type === "prompt" ? "같은 입력에 대한 답변 후보" : "반복된 답변 후보";
+    html += `<div class="reviewItem"><div class="reviewTitle">${gIdx + 1}. ${title} (${group.occurrences.length}개)</div>`;
+    if(group.type === "prompt"){
+      html += `<div class="reviewBlock"><span class="pill">입력</span><div class="previewText">${escapeHTML(previewText(group.promptText, 450))}</div></div>`;
+    }
+    html += `<label class="reviewChoice" style="margin-top:8px;"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="all" ${selected === "all" ? "checked" : ""}>모두 유지</label>`;
+    html += `<div class="reviewChoices">`;
+    group.occurrences.forEach((occ, idx) => {
+      const answer = occ.answerBlock || occ.promptBlock;
+      const answerId = answer ? answer.id : "";
+      const promptPreview = occ.promptBlock && group.type !== "prompt" ? `<div class="smallMuted">앞 입력: ${escapeHTML(previewText(occ.promptBlock.text, 120))}</div>` : "";
+      html += `<label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="${escapeAttr(answerId)}" ${selected === answerId ? "checked" : ""}>후보 ${idx + 1}만 유지${promptPreview}<div class="reviewBlock"><span class="pill">${escapeHTML(ownerLabel(answer ? answer.owner : ""))}</span><span class="pill">답변</span><div class="previewText">${escapeHTML(previewText(answer ? answer.text : "", 650))}</div></div></label>`;
+    });
+    html += `</div></div>`;
+  });
+  duplicateReviewPanel.classList.remove("hidden");
+  duplicateReviewPanel.innerHTML = html;
+}
+function handleDuplicateReviewChange(e){
+  const target = e.target;
+  if(!target || !target.matches('input[type="radio"][data-dupe-key]')) return;
+  duplicateDecisions[target.dataset.dupeKey] = target.value;
+  transformText();
+}
+function getChunkKey(chunk, index){
+  return "chunk-" + (chunk.blockId || "x") + "-" + hashString((chunk.owner || "") + "|" + (chunk.kind || "") + "|" + normalizeForCompare(chunk.text)) + "-" + index;
+}
+function buildContainsReviewItems(chunks, dropBlockIds, deleteTokens){
+  const tokens = getProtectTokens();
+  if(!deleteContainsEnabledEl.checked || deleteContainsModeEl.value !== "review" || !deleteTokens.length) return [];
+  return chunks.map((chunk, index) => ({chunk, index, key:getChunkKey(chunk, index)}))
+    .filter(item => !dropBlockIds.has(item.chunk.blockId))
+    .filter(item => shouldDeleteByContains(item.chunk.text, deleteTokens))
+    .filter(item => !isProtectedText(item.chunk.text, tokens));
+}
+function updateContainsReviewPanel(items){
+  currentContainsItems = items || [];
+  if(activeMode !== "chat" || !deleteContainsEnabledEl.checked || deleteContainsModeEl.value !== "review"){
+    containsReviewPanel.classList.add("hidden");
+    containsReviewPanel.innerHTML = "";
+    return;
+  }
+  if(!currentContainsItems.length){
+    containsReviewPanel.classList.remove("hidden");
+    containsReviewPanel.innerHTML = `<div class="reviewHead"><div><div class="reviewTitle">특정 글자 포함 문단 확인</div><div class="reviewMeta">현재 키워드에 걸리는 문단이 없습니다.</div></div></div>`;
+    return;
+  }
+
+  let html = `<div class="reviewHead"><div><div class="reviewTitle">특정 글자 포함 문단 확인</div><div class="reviewMeta">각 문단을 확인한 뒤 남김/삭제를 고르세요. 기본값은 남김입니다.</div></div><div><button type="button" data-contains-bulk="keep">모두 남김</button> <button type="button" data-contains-bulk="delete">모두 삭제</button></div></div>`;
+  currentContainsItems.forEach((item, idx) => {
+    const decision = containsDecisions[item.key] || "keep";
+    const chunk = item.chunk;
+    const kindLabel = chunk.kind === "scene" ? "지문" : "대사";
+    html += `<div class="reviewItem"><div class="reviewTitle">${idx + 1}. 포함 문단</div><div class="smallMuted"><span class="pill">${escapeHTML(ownerLabel(chunk.owner))}</span><span class="pill">${kindLabel}</span></div><div class="reviewBlock"><div class="previewText">${escapeHTML(chunk.text)}</div></div><div class="field" style="margin-top:8px;"><label><input type="radio" name="contains_${escapeAttr(item.key)}" data-contains-key="${escapeAttr(item.key)}" value="keep" ${decision !== "delete" ? "checked" : ""}>남김</label><label><input type="radio" name="contains_${escapeAttr(item.key)}" data-contains-key="${escapeAttr(item.key)}" value="delete" ${decision === "delete" ? "checked" : ""}>삭제</label></div></div>`;
+  });
+  containsReviewPanel.classList.remove("hidden");
+  containsReviewPanel.innerHTML = html;
+}
+function handleContainsReviewChange(e){
+  const target = e.target;
+  if(!target || !target.matches('input[type="radio"][data-contains-key]')) return;
+  containsDecisions[target.dataset.containsKey] = target.value;
+  transformText();
+}
+function handleContainsReviewClick(e){
+  const button = e.target.closest("button[data-contains-bulk]");
+  if(!button) return;
+  const value = button.dataset.containsBulk === "delete" ? "delete" : "keep";
+  currentContainsItems.forEach(item => { containsDecisions[item.key] = value; });
+  transformText();
 }
 
 // ------------------ 출력 공통 렌더러 ------------------
 function renderChunks(chunks, options){
   const tokens = getProtectTokens();
   const deleteTokens = options.deleteTokens || [];
+  const dropBlockIds = options.dropBlockIds || new Set();
   const quoteStyle = quoteStyleEl.value;
   const [openQ, closeQ] = getQuotes(quoteStyle);
 
-  const result = chunks.map(({kind, text: raw, fromTable, fromDetails}) => {
+  const result = chunks.map((chunk, index) => {
+    const {kind, text: raw, fromTable, fromDetails} = chunk;
+    if(dropBlockIds.has(chunk.blockId)) return "";
     let t = (raw || "").trim();
     if(!t) return "";
 
-    // HTML 제거 옵션은 최종 텍스트 안에 남아 있는 깨진 태그 문자열까지 정리한다.
     if(removeHTMLEl.checked){
       t = t.replace(/<script[\s\S]*?<\/script>/gi,"");
       t = t.replace(/<style[\s\S]*?<\/style>/gi,"");
@@ -739,50 +1251,44 @@ function renderChunks(chunks, options){
       if(!t) return "";
     }
 
-    // 마크다운 굵게 제거
     t = t.replace(/\*\*(.*?)\*\*/g,"$1");
     t = t.replace(/__(.*?)__/g,"$1");
 
     const protectedHere = isProtectedText(t, tokens);
 
-    // 접힘 토큰(details)은 보호 키워드가 있는 문단만 예외로 살린다.
     if(removeDetailsEl.checked && fromDetails && !protectedHere) return "";
-
-    // 로판Ai 탭의 표/블록 삭제 옵션
     if(options.removeTables && !protectedHere && (fromTable || isTableLikeText(t))) return "";
 
-    // 로판Ai 탭의 특정 글자 포함 문단 삭제 옵션. 보호 키워드가 켜진 문단은 예외.
-    if(shouldDeleteByContains(t, deleteTokens) && !protectedHere) return "";
+    if(shouldDeleteByContains(t, deleteTokens) && !protectedHere){
+      if(options.deleteContainsMode === "review"){
+        const key = getChunkKey(chunk, index);
+        if(options.containsDecisions && options.containsDecisions[key] === "delete") return "";
+      }else{
+        return "";
+      }
+    }
 
-    // (선택) 구분선/기호만 줄 제거: 보호된 문단은 예외
     if(removeDecorEl.checked && !protectedHere){
       if(isDecorOnlyParagraph(t)) return "";
       t = removeDecorLines(t);
       if(!t) return "";
     }
 
-    // 보호된 문단은 무조건 지문 처리 (따옴표 금지)
     if(protectedHere){
-      if(removeEmptyLinesEl.checked) return t.replace(/\n\s*\n+/g,"\n");
-      return t;
+      const kept = removeEmptyLinesEl.checked ? t.replace(/\n\s*\n+/g,"\n") : t;
+      return labelChunk(kept, chunk, false);
     }
 
-    // 지문(scene) 따옴표 금지 + scene 내부 빈 줄 제거 옵션 반영
     if(kind==="scene"){
-      if(removeEmptyLinesEl.checked) return t.replace(/\n\s*\n+/g,"\n");
-      return t;
+      const scene = removeEmptyLinesEl.checked ? t.replace(/\n\s*\n+/g,"\n") : t;
+      return labelChunk(scene, chunk, false);
     }
 
-    // 기호-only 문단은 옵션 꺼도 대사 취급 안 함 (따옴표 금지)
     if(isDecorOnlyParagraph(t)) return t;
 
-    // 따옴표 없음
-    if(quoteStyle==="none") return t;
-
-    // 이미 따옴표면 유지
-    if(isAlreadyQuoted(t)) return t;
-
-    return openQ + t + closeQ;
+    let dialogue = t;
+    if(quoteStyle !== "none" && !isAlreadyQuoted(t)) dialogue = openQ + t + closeQ;
+    return labelChunk(dialogue, chunk, true);
   }).filter(Boolean);
 
   const joiner = removeEmptyLinesEl.checked ? "\n" : "\n\n";
@@ -792,10 +1298,21 @@ function renderChunks(chunks, options){
 // ------------------ 메인 변환 ------------------
 function transformText(){
   if(activeMode === "chat"){
-    const chunks = parseRofanChatChunks(chatPaste);
-    chatOutput.value = renderChunks(chunks, {
+    const parsed = parseRofanChatChunks(chatPaste);
+    const duplicateGroups = reviewDuplicatesEl.checked ? buildDuplicateAnswerGroups(parsed.blocks) : [];
+    const dropBlockIds = getDroppedBlockIdsFromDuplicateDecisions(duplicateGroups);
+    updateDuplicateReviewPanel(duplicateGroups);
+
+    const deleteTokens = getDeleteContainsTokens();
+    const containsItems = buildContainsReviewItems(parsed.chunks, dropBlockIds, deleteTokens);
+    updateContainsReviewPanel(containsItems);
+
+    chatOutput.value = renderChunks(parsed.chunks, {
       removeTables: removeTablesEl.checked,
-      deleteTokens: getDeleteContainsTokens()
+      deleteTokens,
+      deleteContainsMode: deleteContainsModeEl.value,
+      containsDecisions,
+      dropBlockIds
     });
     return;
   }
@@ -803,31 +1320,30 @@ function transformText(){
   let text = input.value || "";
   const tokens = getProtectTokens();
 
-  // 1) details 제거 (보호 토큰이 있으면 해당 문단만 살려서 남김)
   if(removeDetailsEl.checked){
     text = filterDetailsByProtection(text, tokens);
-    // 혹시 남은 summary 정리
     text = text.replace(/<summary.*?>.*?<\/summary>/gi,"");
   }
 
-  // 2) HTML 제거
   if(removeHTMLEl.checked){
     text = text.replace(/<script[\s\S]*?<\/script>/gi,"");
     text = text.replace(/<style[\s\S]*?<\/style>/gi,"");
     text = text.replace(/<br\s*\/?>/gi,"\n");
     text = text.replace(/<\/p>/gi,"\n");
     text = text.replace(/<[^>]+>/g,"");
-    text = text.replace(/<[^>\n]*/g,""); // 깨진 <태그 형태 제거
+    text = text.replace(/<[^>\n]*/g,"");
   }
 
-  // 3) 마크다운 굵게 제거
   text = text.replace(/\*\*(.*?)\*\*/g,"$1");
   text = text.replace(/__(.*?)__/g,"$1");
 
   const chunks = parseChunks(text);
   output.value = renderChunks(chunks, {
     removeTables: false,
-    deleteTokens: []
+    deleteTokens: [],
+    deleteContainsMode: "auto",
+    containsDecisions: {},
+    dropBlockIds: new Set()
   });
 }
 
@@ -861,7 +1377,7 @@ function showToast(msg){
   const t = document.getElementById("toast");
   t.textContent = msg;
   t.style.opacity = "1";
-  setTimeout(()=>{ t.style.opacity = "0"; }, 1200);
+  setTimeout(()=>{ t.style.opacity = "0"; }, 1600);
 }
 function downloadTxt(){
   const blob=new Blob([getActiveOutput().value],{type:"text/plain;charset=utf-8"});
@@ -873,10 +1389,15 @@ function downloadTxt(){
   URL.revokeObjectURL(url);
 }
 function clearAll(){
+  resetReviewDecisions();
   if(activeMode === "chat"){
     chatPaste.innerHTML="";
     chatOutput.value="";
     chatFileInput.value="";
+    duplicateReviewPanel.innerHTML = "";
+    duplicateReviewPanel.classList.add("hidden");
+    containsReviewPanel.innerHTML = "";
+    containsReviewPanel.classList.add("hidden");
   }else{
     input.value="";
     output.value="";
@@ -884,7 +1405,6 @@ function clearAll(){
   transformText();
 }
 
-// 첫 렌더
 transformText();
 </script>
 </body>
