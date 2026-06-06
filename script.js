@@ -45,6 +45,10 @@ const chapterSplitModeEl = document.getElementById("chapterSplitMode");
 const chapterSizeEl = document.getElementById("chapterSize");
 const chapterSeparatorEl = document.getElementById("chapterSeparator");
 const chapterTitlePrefixEl = document.getElementById("chapterTitlePrefix");
+const chapterKeywordInputEl = document.getElementById("chapterKeywordInput");
+const chapterOrderInputEl = document.getElementById("chapterOrderInput");
+const chapterPositionEl = document.getElementById("chapterPosition");
+const chapterDividerPanelEl = document.getElementById("chapterDividerPanel");
 const epubStylePresetEl = document.getElementById("epubStylePreset");
 const epubTextModeEl = document.getElementById("epubTextMode");
 const duplicateReviewPanel = document.getElementById("duplicateReviewPanel");
@@ -69,11 +73,20 @@ let duplicateOrderQuery = "";
 let oocGroupPage = 0;
 let oocFilterText = "";
 let oocOrderQuery = "";
+let cachedChatFileName = "";
+let cachedCoverAsset = null;
+let isRestoringWork = false;
+let autosaveTimer = null;
+let chapterKeywordQuery = "";
+let chapterOrderQuery = "";
+let chapterMatchPage = 0;
+let currentChapterMatches = [];
 
-input.addEventListener("input", transformText);
+input.addEventListener("input", () => { transformText(); scheduleAutosave(); });
 chatPaste.addEventListener("input", () => {
   resetReviewDecisions();
   transformText();
+  scheduleAutosave();
 });
 chatPaste.addEventListener("paste", handleRichPaste);
 
@@ -110,6 +123,22 @@ if(speakerLabelModeEl) speakerLabelModeEl.addEventListener("change", transformTe
   if(!el) return;
   el.addEventListener(el.tagName === "SELECT" || el.type === "file" ? "change" : "input", () => updateEpubPreview());
 });
+
+[chapterKeywordInputEl, chapterOrderInputEl].forEach(el => {
+  if(!el) return;
+  el.addEventListener("input", () => {
+    if(el === chapterKeywordInputEl) chapterKeywordQuery = el.value || "";
+    if(el === chapterOrderInputEl) chapterOrderQuery = el.value || "";
+    chapterMatchPage = 0;
+    updateChapterDividerPanel();
+    scheduleAutosave();
+  });
+  el.addEventListener("keydown", e => {
+    if(e.key === "Enter"){ e.preventDefault(); chapterMatchPage = 0; updateChapterDividerPanel(); }
+  });
+});
+if(chapterPositionEl) chapterPositionEl.addEventListener("change", () => { updateChapterDividerPanel(); scheduleAutosave(); });
+if(chapterDividerPanelEl) chapterDividerPanelEl.addEventListener("click", handleChapterDividerClick);
 chatFileInput.addEventListener("change", loadChatFile);
 duplicateReviewPanel.addEventListener("change", handleDuplicateReviewChange);
 duplicateReviewPanel.addEventListener("click", handleDuplicateReviewClick);
@@ -128,6 +157,231 @@ function updateModeVisibility(){
   speakerOnlyEls.forEach(el => el.classList.toggle("hidden", !showSpeakerOptions));
 }
 
+
+// ------------------ 작업 자동 저장 ------------------
+const WORK_DB_NAME = "rofan-cleaner-work-cache";
+const WORK_STORE_NAME = "work";
+const WORK_STATE_KEY = "current";
+const WORK_META_KEY = "rofan-cleaner-work-meta";
+const WORK_FALLBACK_KEY = "rofan-cleaner-work-fallback";
+
+function openWorkDB(){
+  return new Promise((resolve, reject) => {
+    if(!window.indexedDB){ reject(new Error("IndexedDB not supported")); return; }
+    const req = indexedDB.open(WORK_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if(!db.objectStoreNames.contains(WORK_STORE_NAME)) db.createObjectStore(WORK_STORE_NAME);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error("IndexedDB open error"));
+  });
+}
+function idbPut(key, value){
+  return openWorkDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(WORK_STORE_NAME, "readwrite");
+    tx.objectStore(WORK_STORE_NAME).put(value, key);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error || new Error("IndexedDB write error")); };
+  }));
+}
+function idbGet(key){
+  return openWorkDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(WORK_STORE_NAME, "readonly");
+    const req = tx.objectStore(WORK_STORE_NAME).get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error || new Error("IndexedDB read error"));
+    tx.oncomplete = () => db.close();
+  }));
+}
+function idbDelete(key){
+  return openWorkDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(WORK_STORE_NAME, "readwrite");
+    tx.objectStore(WORK_STORE_NAME).delete(key);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error || new Error("IndexedDB delete error")); };
+  }));
+}
+function collectWorkValues(){
+  return {
+    version: 3,
+    savedAt: new Date().toISOString(),
+    activeMode,
+    classicInput: input ? input.value : "",
+    classicOutput: output ? output.value : "",
+    chatHTML: chatPaste ? chatPaste.innerHTML : "",
+    chatOutputValue: chatOutput ? chatOutput.value : "",
+    cachedChatFileName,
+    options: collectPresetValues(),
+    duplicateDecisions,
+    containsDecisions,
+    oocDecisions,
+    duplicatePageByGroup,
+    duplicateGroupPage,
+    duplicateFilterText,
+    duplicateOrderQuery,
+    oocGroupPage,
+    oocFilterText,
+    oocOrderQuery,
+    chapterKeywordQuery,
+    chapterOrderQuery,
+    chapterMatchPage,
+    cachedCoverAsset
+  };
+}
+function applyActiveModeFromState(mode){
+  activeMode = mode === "chat" ? "chat" : "classic";
+  document.querySelectorAll(".tab").forEach(t => {
+    const on = t.dataset.tab === activeMode;
+    t.classList.toggle("active", on);
+    t.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  classicPanel.classList.toggle("hidden", activeMode !== "classic");
+  chatPanel.classList.toggle("hidden", activeMode !== "chat");
+  chatOptions.classList.remove("hidden");
+  updateModeVisibility();
+}
+async function saveWorkNow(){
+  if(isRestoringWork) return;
+  const state = collectWorkValues();
+  try{
+    await idbPut(WORK_STATE_KEY, state);
+    localStorage.setItem(WORK_META_KEY, JSON.stringify({savedAt: state.savedAt, fileName: cachedChatFileName || "", mode: activeMode}));
+    updateAutosaveBadge("자동 저장됨");
+  }catch(err){
+    try{
+      localStorage.setItem(WORK_FALLBACK_KEY, JSON.stringify(state));
+      localStorage.setItem(WORK_META_KEY, JSON.stringify({savedAt: state.savedAt, fileName: cachedChatFileName || "", mode: activeMode, fallback:true}));
+      updateAutosaveBadge("자동 저장됨");
+    }catch(err2){
+      console.warn("autosave failed", err, err2);
+      updateAutosaveBadge("저장 실패");
+    }
+  }
+}
+function scheduleAutosave(){
+  if(isRestoringWork) return;
+  updateAutosaveBadge("저장 중…");
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(saveWorkNow, 500);
+}
+function updateAutosaveBadge(text){
+  const el = document.getElementById("autosaveStatus");
+  if(!el) return;
+  let suffix = "";
+  const raw = localStorage.getItem(WORK_META_KEY);
+  if(raw){
+    try{
+      const meta = JSON.parse(raw);
+      if(meta.savedAt){
+        const d = new Date(meta.savedAt);
+        if(!Number.isNaN(d.getTime())) suffix = ` · ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+      }
+      if(meta.fileName) suffix += ` · ${meta.fileName}`;
+    }catch(_err){}
+  }
+  el.textContent = text + suffix;
+}
+async function restoreSavedWork(){
+  isRestoringWork = true;
+  let state = null;
+  try{ state = await idbGet(WORK_STATE_KEY); }catch(_err){}
+  if(!state){
+    const fallback = localStorage.getItem(WORK_FALLBACK_KEY);
+    if(fallback){
+      try{ state = JSON.parse(fallback); }catch(_err){}
+    }
+  }
+  if(state){
+    try{
+      applyPresetValues(state.options || {});
+      if(input) input.value = state.classicInput || "";
+      if(chatPaste) chatPaste.innerHTML = state.chatHTML || "";
+      cachedChatFileName = state.cachedChatFileName || "";
+      cachedCoverAsset = state.cachedCoverAsset || null;
+      duplicateDecisions = state.duplicateDecisions || {};
+      containsDecisions = state.containsDecisions || {};
+      oocDecisions = state.oocDecisions || {};
+      duplicatePageByGroup = state.duplicatePageByGroup || {};
+      duplicateGroupPage = state.duplicateGroupPage || 0;
+      duplicateFilterText = state.duplicateFilterText || "";
+      duplicateOrderQuery = state.duplicateOrderQuery || "";
+      oocGroupPage = state.oocGroupPage || 0;
+      oocFilterText = state.oocFilterText || "";
+      oocOrderQuery = state.oocOrderQuery || "";
+      chapterKeywordQuery = state.chapterKeywordQuery || "";
+      chapterOrderQuery = state.chapterOrderQuery || "";
+      chapterMatchPage = state.chapterMatchPage || 0;
+      if(chapterKeywordInputEl) chapterKeywordInputEl.value = chapterKeywordQuery;
+      if(chapterOrderInputEl) chapterOrderInputEl.value = chapterOrderQuery;
+      applyActiveModeFromState(state.activeMode || activeMode);
+      updateAutosaveBadge("복원됨");
+      showToast(cachedChatFileName ? `저장된 작업을 불러왔습니다: ${cachedChatFileName}` : "저장된 작업을 불러왔습니다.");
+    }catch(err){
+      console.error(err);
+      updateAutosaveBadge("복원 실패");
+    }
+  }else{
+    applyActiveModeFromState(activeMode);
+    updateAutosaveBadge("자동 저장 대기");
+  }
+  isRestoringWork = false;
+  transformText();
+  if(state){
+    if(output && state.classicOutput) output.value = state.classicOutput;
+    if(chatOutput && state.chatOutputValue) chatOutput.value = state.chatOutputValue;
+  }
+  updateResultStats([], [], getActiveOutputValue());
+  updateEpubPreview();
+  updateChapterDividerPanel();
+  scheduleAutosave();
+}
+async function clearSavedWork(){
+  try{ await idbDelete(WORK_STATE_KEY); }catch(_err){}
+  localStorage.removeItem(WORK_META_KEY);
+  localStorage.removeItem(WORK_FALLBACK_KEY);
+  cachedChatFileName = "";
+  cachedCoverAsset = null;
+  updateAutosaveBadge("캐시 삭제됨");
+  showToast("저장된 작업 캐시를 삭제했습니다.");
+}
+function wireAutosave(){
+  document.addEventListener("input", e => {
+    if(e.target && e.target.closest && e.target.closest("#toast")) return;
+    scheduleAutosave();
+  }, true);
+  document.addEventListener("change", e => {
+    if(e.target === epubCoverInputEl) cacheCoverFile();
+    scheduleAutosave();
+  }, true);
+  document.addEventListener("click", e => {
+    if(e.target && e.target.closest && e.target.closest("button,.toggle,.tab,input[type='radio']")) scheduleAutosave();
+  }, true);
+}
+async function cacheCoverFile(){
+  const file = epubCoverInputEl && epubCoverInputEl.files && epubCoverInputEl.files[0];
+  if(!file) return;
+  if(file.size > 8 * 1024 * 1024){
+    cachedCoverAsset = null;
+    showToast("표지가 커서 자동 저장에서는 제외했습니다.");
+    return;
+  }
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("cover read error"));
+    reader.readAsDataURL(file);
+  });
+  cachedCoverAsset = {name:file.name || "cover", type:file.type || "image/jpeg", dataUrl};
+}
+function dataUrlToUint8Array(dataUrl){
+  const m = String(dataUrl || "").match(/^data:([^;,]+)?(;base64)?,(.*)$/);
+  if(!m) return new Uint8Array();
+  const is64 = !!m[2];
+  const raw = is64 ? atob(m[3]) : decodeURIComponent(m[3]);
+  return Uint8Array.from(raw, ch => ch.charCodeAt(0));
+}
+
 // 탭 전환
 document.querySelectorAll(".tab").forEach(tab => {
   tab.addEventListener("click", () => {
@@ -142,6 +396,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     chatOptions.classList.remove("hidden");
     updateModeVisibility();
     transformText();
+    scheduleAutosave();
   });
 });
 
@@ -395,7 +650,10 @@ async function loadChatFile(){
     activateChatTab();
     resetReviewDecisions();
     chatPaste.innerHTML = sanitized;
+    cachedChatFileName = file.name || "로판Ai 저장 파일";
     transformText();
+    updateChapterDividerPanel();
+    scheduleAutosave();
     showToast("파일을 불러왔습니다.");
   }catch(err){
     console.error(err);
@@ -1073,10 +1331,9 @@ function updateDuplicateReviewPanel(groups){
 
   html += `<div class="dupeCard">`;
   html += `<div class="reviewNav"><div><div class="reviewTitle">${title}</div><div class="reviewMeta">전체 ${gIdx + 1}/${total} · 검색 결과 ${duplicateGroupPage + 1}/${count} · 후보 ${group.occurrences.length}개</div></div><div class="navButtons"><button type="button" class="navIconBtn" data-dupe-group-page="prev" ${prevGroupDisabled} aria-label="이전 묶음">‹</button><button type="button" class="navIconBtn" data-dupe-group-page="next" ${nextGroupDisabled} aria-label="다음 묶음">›</button></div></div>`;
-  html += `<div class="candidateToolbar"><span class="smallMuted">답변 후보 ${current + 1} / ${group.occurrences.length}</span><div class="navButtons"><button type="button" class="navIconBtn" data-dupe-page="prev" data-dupe-key="${escapeAttr(group.key)}" ${prevCandDisabled} aria-label="이전 후보">‹</button><button type="button" class="navIconBtn" data-dupe-page="next" data-dupe-key="${escapeAttr(group.key)}" ${nextCandDisabled} aria-label="다음 후보">›</button></div></div>`;
   html += `<div class="dupeCompareGrid">`;
-  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">연결 지문</span><span class="pill">${current + 1}/${group.occurrences.length}</span></div><div class="previewText">${escapeHTML(previewText(occ.promptBlock ? occ.promptBlock.text : "", 1200))}</div></div>`;
-  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">${escapeHTML(ownerLabel(answer ? answer.owner : ""))}</span><span class="pill">답변 후보</span></div><div class="previewText">${escapeHTML(previewText(answer ? answer.text : "", 1600))}</div></div>`;
+  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">연결 지문</span><span class="pill">${current + 1}/${group.occurrences.length}</span></div><div class="previewText fullPreview">${escapeHTML(occ.promptBlock ? occ.promptBlock.text : "")}</div></div>`;
+  html += `<div class="reviewBlock"><div class="dupeSummary withNav"><span><span class="pill">${escapeHTML(ownerLabel(answer ? answer.owner : ""))}</span><span class="pill">답변 후보 ${current + 1}/${group.occurrences.length}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-dupe-page="prev" data-dupe-key="${escapeAttr(group.key)}" ${prevCandDisabled} aria-label="이전 후보">‹</button><button type="button" class="navIconBtn" data-dupe-page="next" data-dupe-key="${escapeAttr(group.key)}" ${nextCandDisabled} aria-label="다음 후보">›</button></span></div><div class="previewText fullPreview">${escapeHTML(answer ? answer.text : "")}</div></div>`;
   html += `</div>`;
   html += `<div class="reviewChoices choiceRow"><label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="all" ${selected === "all" ? "checked" : ""}>모두 유지</label><label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="${escapeAttr(answerId)}" ${selected === answerId ? "checked" : ""}>현재 후보만 유지</label></div>`;
   html += `</div>`;
@@ -1316,8 +1573,8 @@ function updateOocReviewPanel(items){
   html += `<div class="dupeCard oocCard">`;
   html += `<div class="reviewNav"><div><div class="reviewTitle">OOC 지문 ${idx + 1}</div><div class="reviewMeta">전체 ${idx + 1}/${total} · 검색 결과 ${oocGroupPage + 1}/${count} · 연결 응답 ${answerCount}개</div></div><div class="navButtons"><button type="button" class="navIconBtn" data-ooc-page="prev" ${prevDisabled} aria-label="이전 OOC">‹</button><button type="button" class="navIconBtn" data-ooc-page="next" ${nextDisabled} aria-label="다음 OOC">›</button></div></div>`;
   html += `<div class="dupeCompareGrid">`;
-  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">OOC 포함 지문</span></div><div class="previewText">${escapeHTML(previewText(item.promptBlock.text, 1600))}</div></div>`;
-  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">연결 캐릭터 응답</span><span class="pill">${answerCount}개</span></div>${answerCount ? `<div class="previewText">${escapeHTML(previewText(answersText, 1800))}</div>` : `<div class="emptyState">연결된 캐릭터 응답이 없습니다.</div>`}</div>`;
+  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">OOC 포함 지문</span></div><div class="previewText">${escapeHTML(item.promptBlock.text)}</div></div>`;
+  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">연결 캐릭터 응답</span><span class="pill">${answerCount}개</span></div>${answerCount ? `<div class="previewText">${escapeHTML(answersText)}</div>` : `<div class="emptyState">연결된 캐릭터 응답이 없습니다.</div>`}</div>`;
   html += `</div>`;
   html += `<div class="reviewChoices choiceRow threeChoices"><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="strip" ${decision === "strip" ? "checked" : ""}>OOC 문단만 삭제</label><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="prompt" ${decision === "prompt" ? "checked" : ""}>전체 유저 지문 삭제</label><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="delete" ${decision === "delete" ? "checked" : ""}>응답까지 삭제</label></div>`;
   html += `</div>`;
@@ -1492,6 +1749,7 @@ function shouldRenderSpeakerLabels(){
 function afterTransform(chunks, blocks, renderedText){
   updateResultStats(chunks || [], blocks || [], renderedText || "");
   updateEpubPreview();
+  updateChapterDividerPanel();
 }
 function transformText(){
   if(activeMode === "chat"){
@@ -1625,6 +1883,14 @@ function clearAll(){
     containsReviewPanel.classList.add("hidden");
   }
   transformText();
+  if(state){
+    if(output && state.classicOutput) output.value = state.classicOutput;
+    if(chatOutput && state.chatOutputValue) chatOutput.value = state.chatOutputValue;
+  }
+  updateResultStats([], [], getActiveOutputValue());
+  updateEpubPreview();
+  updateChapterDividerPanel();
+  scheduleAutosave();
 }
 
 
@@ -1743,6 +2009,89 @@ function resetReviewOnly(){
   resetReviewDecisions();
   transformText();
   showToast("검토 선택을 초기화했습니다.");
+}
+
+function getActiveOutputValue(){
+  const el = getActiveOutput();
+  return el ? (el.value || "") : "";
+}
+function setActiveOutputValue(value){
+  const el = getActiveOutput();
+  if(!el) return;
+  el.value = value;
+  updateResultStats([], [], value || "");
+  updateEpubPreview();
+  updateChapterDividerPanel();
+  scheduleAutosave();
+}
+function splitOutputParagraphsWithOffsets(text){
+  const re = /\n\s*\n+/g;
+  const parts = [];
+  let start = 0;
+  let m;
+  while((m = re.exec(text))){
+    const raw = text.slice(start, m.index);
+    if(raw.trim()) parts.push({text:raw.trim(), start, end:m.index});
+    start = re.lastIndex;
+  }
+  const raw = text.slice(start);
+  if(raw.trim()) parts.push({text:raw.trim(), start, end:text.length});
+  return parts;
+}
+function getChapterSearchMatches(){
+  const q = String(chapterKeywordQuery || "").trim().toLowerCase();
+  const order = String(chapterOrderQuery || "").trim();
+  const text = getActiveOutputValue();
+  let matches = splitOutputParagraphsWithOffsets(text).map((p, index) => ({...p, index}));
+  if(q) matches = matches.filter(p => p.text.toLowerCase().includes(q));
+  if(order){
+    const n = Number(order);
+    if(Number.isFinite(n) && n > 0) matches = matches.filter((_p, idx) => idx + 1 === n || _p.index + 1 === n);
+  }
+  return matches;
+}
+function updateChapterDividerPanel(){
+  if(!chapterDividerPanelEl) return;
+  const separator = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "---";
+  const useSeparatorMode = chapterSplitModeEl && chapterSplitModeEl.value === "separator";
+  currentChapterMatches = getChapterSearchMatches();
+  const total = currentChapterMatches.length;
+  chapterMatchPage = Math.max(0, Math.min(Math.max(0, total - 1), chapterMatchPage || 0));
+  const current = total ? currentChapterMatches[chapterMatchPage] : null;
+  let html = `<div class="miniToolHead"><div><strong>구분선 삽입</strong><span>${useSeparatorMode ? "검색한 지문 위/아래에 챕터 구분선을 넣습니다." : "나누기를 구분선 기준으로 바꾸면 EPUB 챕터가 나뉩니다."}</span></div><span class="smallMuted">${total ? `${chapterMatchPage + 1}/${total}` : "0개"}</span></div>`;
+  if(!total){
+    html += `<div class="emptyState">키워드를 입력하면 해당 문단이 표시됩니다.</div>`;
+  }else{
+    const prevDisabled = chapterMatchPage <= 0 ? "disabled" : "";
+    const nextDisabled = chapterMatchPage >= total - 1 ? "disabled" : "";
+    html += `<div class="chapterMatchCard"><div class="dupeSummary withNav"><span><span class="pill">문단 ${current.index + 1}</span><span class="pill">구분선 ${escapeHTML(separator)}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-chapter-match-page="prev" ${prevDisabled} aria-label="이전 문단">‹</button><button type="button" class="navIconBtn" data-chapter-match-page="next" ${nextDisabled} aria-label="다음 문단">›</button></span></div><div class="previewText fullPreview">${escapeHTML(current.text)}</div><div class="chapterInsertRow"><button type="button" class="btn primary" data-chapter-insert="1">현재 문단에 구분선 넣기</button></div></div>`;
+  }
+  chapterDividerPanelEl.innerHTML = html;
+}
+function insertChapterDividerAtCurrentMatch(){
+  const matches = getChapterSearchMatches();
+  if(!matches.length){ showToast("구분선을 넣을 문단을 찾지 못했습니다."); return; }
+  const current = matches[Math.max(0, Math.min(matches.length - 1, chapterMatchPage || 0))];
+  const separator = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "---";
+  const position = chapterPositionEl ? chapterPositionEl.value : "before";
+  const text = getActiveOutputValue();
+  const paras = splitOutputParagraphsWithOffsets(text).map(p => p.text);
+  const insertAt = position === "after" ? current.index + 1 : current.index;
+  paras.splice(insertAt, 0, separator);
+  setActiveOutputValue(paras.join("\n\n"));
+  if(chapterSplitModeEl) chapterSplitModeEl.value = "separator";
+  showToast(position === "after" ? "문단 아래에 구분선을 넣었습니다." : "문단 위에 구분선을 넣었습니다.");
+}
+function handleChapterDividerClick(e){
+  const pageBtn = e.target.closest("button[data-chapter-match-page]");
+  if(pageBtn){
+    const max = Math.max(0, currentChapterMatches.length - 1);
+    chapterMatchPage = pageBtn.dataset.chapterMatchPage === "next" ? Math.min(max, chapterMatchPage + 1) : Math.max(0, chapterMatchPage - 1);
+    updateChapterDividerPanel();
+    scheduleAutosave();
+    return;
+  }
+  if(e.target.closest("button[data-chapter-insert]")) insertChapterDividerAtCurrentMatch();
 }
 function getEpubConfig(){
   const title = (epubTitleEl && epubTitleEl.value.trim()) || "정리한 로그";
@@ -1886,10 +2235,16 @@ function makeXhtmlDoc(title, body){
 }
 async function getCoverInfo(){
   const file = epubCoverInputEl && epubCoverInputEl.files && epubCoverInputEl.files[0];
-  if(!file) return null;
-  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g,"") || "jpg";
   const typeMap = {jpg:"image/jpeg", jpeg:"image/jpeg", png:"image/png", webp:"image/webp", gif:"image/gif"};
-  return {name:`cover.${ext}`, media:typeMap[ext] || file.type || "image/jpeg", data:new Uint8Array(await file.arrayBuffer())};
+  if(file){
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g,"") || "jpg";
+    return {name:`cover.${ext}`, media:typeMap[ext] || file.type || "image/jpeg", data:new Uint8Array(await file.arrayBuffer())};
+  }
+  if(cachedCoverAsset && cachedCoverAsset.dataUrl){
+    const ext = ((cachedCoverAsset.name || "cover.jpg").split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g,"") || "jpg";
+    return {name:`cover.${ext}`, media:typeMap[ext] || cachedCoverAsset.type || "image/jpeg", data:dataUrlToUint8Array(cachedCoverAsset.dataUrl)};
+  }
+  return null;
 }
 function uuidLike(){
   const s = `${Date.now()}-${Math.random()}-${getEpubConfig().title}`;
@@ -2003,7 +2358,7 @@ function createZipBlob(entries, type){
   return new Blob(chunks, {type:type || "application/zip"});
 }
 function collectPresetValues(){
-  const ids = ["removeDetails","removeEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","epubStylePreset","epubTextMode"];
+  const ids = ["removeDetails","removeEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode"];
   const data = {};
   ids.forEach(id => {
     const el = document.getElementById(id);
@@ -2023,6 +2378,7 @@ function applyPresetValues(data){
 function saveCurrentPreset(){
   localStorage.setItem("rofan-cleaner-preset", JSON.stringify(collectPresetValues()));
   showToast("현재 옵션을 저장했습니다.");
+  scheduleAutosave();
 }
 function loadSavedPreset(){
   const raw = localStorage.getItem("rofan-cleaner-preset");
@@ -2030,6 +2386,8 @@ function loadSavedPreset(){
   try{
     applyPresetValues(JSON.parse(raw));
     transformText();
+    updateChapterDividerPanel();
+    scheduleAutosave();
     showToast("프리셋을 불러왔습니다.");
   }catch(err){
     console.error(err);
@@ -2041,5 +2399,5 @@ function clearSavedPreset(){
   showToast("저장된 프리셋을 삭제했습니다.");
 }
 
-updateModeVisibility();
-transformText();
+wireAutosave();
+restoreSavedWork();
