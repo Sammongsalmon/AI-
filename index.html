@@ -940,6 +940,7 @@ async function restoreSavedWork(){
   scheduleAutosave();
 }
 async function clearSavedWork(){
+  if(!window.confirm("저장된 작업 캐시를 삭제하시겠습니까? 새로고침 복원 데이터도 함께 지워집니다.")) return;
   try{ await idbDelete(WORK_STATE_KEY); }catch(_err){}
   localStorage.removeItem(WORK_META_KEY);
   localStorage.removeItem(WORK_FALLBACK_KEY);
@@ -2711,6 +2712,7 @@ function appendDeleteKeyword(term){
   showToast("검토 키워드에 추가했습니다.");
 }
 function resetDuplicateChoices(){
+  if(!window.confirm("중복 답변 검토 선택을 초기화하시겠습니까?")) return;
   duplicateDecisions = {};
   duplicatePageByGroup = {};
   duplicateGroupPage = 0;
@@ -2723,11 +2725,13 @@ function resetDuplicateChoices(){
   showToast("중복 선택을 초기화했습니다.");
 }
 function resetContainsChoices(){
+  if(!window.confirm("키워드 검토 선택을 초기화하시겠습니까?")) return;
   containsDecisions = {};
   transformText();
   showToast("키워드 검토 선택을 초기화했습니다.");
 }
 function resetReviewOnly(){
+  if(!window.confirm("모든 검토 선택을 초기화하시겠습니까?")) return;
   resetReviewDecisions();
   transformText();
   showToast("검토 선택을 초기화했습니다.");
@@ -3117,6 +3121,7 @@ function loadSavedPreset(){
   }
 }
 function clearSavedPreset(){
+  if(!window.confirm("저장된 프리셋을 삭제하시겠습니까?")) return;
   localStorage.removeItem("rofan-cleaner-preset");
   showToast("저장된 프리셋을 삭제했습니다.");
 }
