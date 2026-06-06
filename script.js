@@ -28,7 +28,7 @@ const removeDecorEl = document.getElementById("removeDecor");
 const protectEnabledEl = document.getElementById("protectEnabled");
 const protectTokenEl = document.getElementById("protectToken");
 const quoteStyleEl = document.getElementById("quoteStyle");
-const indentTextEl = document.getElementById("indentText");
+const indentOutputEl = document.getElementById("indentOutput");
 const deleteContainsEnabledEl = document.getElementById("deleteContainsEnabled");
 const deleteContainsTokenEl = document.getElementById("deleteContainsToken");
 const deleteContainsModeEl = document.getElementById("deleteContainsMode");
@@ -62,10 +62,12 @@ const chapterSplitModeEl = document.getElementById("chapterSplitMode");
 const chapterSizeEl = document.getElementById("chapterSize");
 const chapterSeparatorEl = document.getElementById("chapterSeparator");
 const chapterTitlePrefixEl = document.getElementById("chapterTitlePrefix");
+const chapterFirstTitleEl = document.getElementById("chapterFirstTitle");
 const chapterKeywordInputEl = document.getElementById("chapterKeywordInput");
 const chapterOrderInputEl = document.getElementById("chapterOrderInput");
 const chapterPositionEl = document.getElementById("chapterPosition");
 const chapterDividerPanelEl = document.getElementById("chapterDividerPanel");
+const chapterTocInlineEl = document.getElementById("chapterTocInline");
 const epubStylePresetEl = document.getElementById("epubStylePreset");
 const epubTextModeEl = document.getElementById("epubTextMode");
 const duplicateReviewPanel = document.getElementById("duplicateReviewPanel");
@@ -105,13 +107,15 @@ let chapterOrderQuery = "";
 let chapterMatchPage = 0;
 let currentChapterMatches = [];
 let classicLoadedFileText = "";
-let classicLoadedChunksAll = null;
+let classicLoadedChunks = null;
 let classicActiveChunks = null;
 let classicActiveDisplayText = "";
-let suppressClassicInputReset = false;
+let isApplyingClassicExcerpt = false;
 let cachedEpubEditFileName = "";
 let cachedEpubFontAsset = null;
 let downloadFileBaseName = "";
+let quoteLongPressTimer = null;
+let quoteLongPressMeta = null;
 
 
 function wirePrettyFileInputs(){
@@ -136,22 +140,8 @@ function wirePrettyFileInputs(){
 }
 wirePrettyFileInputs();
 
-function wireEpubToolSelectionGuards(){
-  document.querySelectorAll('#epubEditPanel button, #epubEditPanel input, #epubEditPanel textarea, #epubEditPanel select').forEach(el => {
-    if(el.dataset.editorGuardWired === '1') return;
-    el.dataset.editorGuardWired = '1';
-    ['pointerdown','touchstart','mousedown'].forEach(ev => {
-      el.addEventListener(ev, () => { if(activeMode === 'epubedit') rememberEditorSelection(); }, {passive:true});
-    });
-  });
-}
-wireEpubToolSelectionGuards();
-
 input.addEventListener("input", () => {
-  if(!suppressClassicInputReset){
-    classicActiveChunks = null;
-    classicActiveDisplayText = "";
-  }
+  if(!isApplyingClassicExcerpt) classicActiveChunks = null;
   transformText();
   scheduleAutosave();
 });
@@ -165,6 +155,9 @@ if(epubEditEditor){
   ["mouseup","keyup","touchend","pointerup"].forEach(ev => epubEditEditor.addEventListener(ev, rememberEditorSelection));
   document.addEventListener("selectionchange", () => { if(activeMode === "epubedit") rememberEditorSelection(); });
   epubEditEditor.addEventListener("input", () => { rememberEditorSelection(); scheduleAutosave(); updateEpubPreview(); });
+  epubEditEditor.addEventListener("pointerdown", handleQuotePointerDown);
+  epubEditEditor.addEventListener("pointermove", handleQuotePointerMove);
+  ["pointerup","pointercancel","pointerleave","scroll"].forEach(ev => epubEditEditor.addEventListener(ev, clearQuoteLongPressTimer));
 }
 if(epubFontInputEl) epubFontInputEl.addEventListener("change", e => { updateFileNameLabel(epubFontInputEl, epubFontFileNameEl, "선택 없음"); loadEpubFontFile(); });
 downloadFileNameEls.forEach(el => {
@@ -193,7 +186,7 @@ chatPaste.addEventListener("paste", handleRichPaste);
   removeDecorEl,
   protectEnabledEl,
   quoteStyleEl,
-  indentTextEl,
+  indentOutputEl,
   deleteContainsEnabledEl,
   deleteContainsModeEl,
   removeTablesEl,
@@ -203,7 +196,7 @@ chatPaste.addEventListener("paste", handleRichPaste);
   oocCascadeModeEl,
   speakerMarkerPresetEl,
   speakerColorTargetEl
-].forEach(el => { if(el) el.addEventListener("change", transformText); });
+].forEach(el => el.addEventListener("change", transformText));
 
 protectTokenEl.addEventListener("input", transformText);
 deleteContainsTokenEl.addEventListener("input", transformText);
@@ -215,7 +208,7 @@ if(speakerLabelModeEl) speakerLabelModeEl.addEventListener("change", transformTe
 [
   epubTitleEl, epubSubtitleEl, epubAuthorEl, epubSeriesEl, epubVolumeEl,
   epubDescriptionEl, epubTagsEl, epubLanguageEl, chapterSplitModeEl, chapterSizeEl,
-  chapterSeparatorEl, chapterTitlePrefixEl, epubStylePresetEl, epubTextModeEl, epubCoverInputEl
+  chapterSeparatorEl, chapterTitlePrefixEl, chapterFirstTitleEl, epubStylePresetEl, epubTextModeEl, epubCoverInputEl
 ].forEach(el => {
   if(!el) return;
   el.addEventListener(el.tagName === "SELECT" || el.type === "file" ? "change" : "input", () => updateEpubPreview());
@@ -307,7 +300,7 @@ function collectWorkValues(){
     activeMode,
     classicInput: input ? input.value : "",
     classicLoadedFileText,
-    classicLoadedChunksAll,
+    classicLoadedChunks,
     classicActiveChunks,
     classicActiveDisplayText,
     excerptStartText: excerptStartTextEl ? excerptStartTextEl.value : "",
@@ -419,7 +412,7 @@ async function restoreSavedWork(){
       applyPresetValues(restoredOptions);
       if(input) input.value = state.classicInput || "";
       classicLoadedFileText = state.classicLoadedFileText || "";
-      classicLoadedChunksAll = Array.isArray(state.classicLoadedChunksAll) ? state.classicLoadedChunksAll : null;
+      classicLoadedChunks = Array.isArray(state.classicLoadedChunks) ? state.classicLoadedChunks : null;
       classicActiveChunks = Array.isArray(state.classicActiveChunks) ? state.classicActiveChunks : null;
       classicActiveDisplayText = state.classicActiveDisplayText || "";
       if(excerptStartTextEl) excerptStartTextEl.value = state.excerptStartText || "";
@@ -786,7 +779,7 @@ async function loadChatFile(){
     const raw = decodeBytesSmart(bytes);
     const looksMHT = /\.(mht|mhtml)$/i.test(lowerName) || /MIME-Version:\s*1\.0/i.test(raw) || /Content-Type:\s*multipart\/related/i.test(raw);
     const looksHTML = /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span)\b/i.test(raw);
-    const looksStructuredMarkdown = /<!--\s*rofan:owner=/i.test(raw) || /\.(md|markdown)$/i.test(lowerName);
+    const looksStructuredMarkdown = /<!--\s*rofan:/i.test(raw) || /\.(md|markdown)$/i.test(lowerName);
     const allowedExt = /\.(mht|mhtml|html|htm|md|markdown|txt)$/i.test(lowerName);
 
     if(!allowedExt && !looksMHT && !looksHTML && !looksStructuredMarkdown){
@@ -1002,7 +995,8 @@ function escapeAttr(str){
 function isItalicElement(el){
   if(!el || el.nodeType !== 1) return false;
   const dataKind = String(el.getAttribute("data-kind") || "").toLowerCase();
-  if(dataKind === "scene" || dataKind === "narration") return true;
+  if(/scene|narration|지문/.test(dataKind)) return true;
+  if(/normal|dialogue|대사/.test(dataKind)) return false;
   const tag = el.tagName;
   if(tag === "I" || tag === "EM" || tag === "CITE") return true;
   if(String(el.getAttribute("data-narration") || "").toLowerCase() === "true") return true;
@@ -1127,6 +1121,18 @@ function ownerLabel(owner){
   if(owner === "character") return getSpeakerName("character");
   return "구분 없음";
 }
+function getElementKindHint(el){
+  if(!el || el.nodeType !== 1) return "";
+  const dataKind = String(el.getAttribute("data-kind") || "").toLowerCase();
+  if(/scene|narration|지문/.test(dataKind)) return "scene";
+  if(/normal|dialogue|대사/.test(dataKind)) return "normal";
+  return "";
+}
+function getElementBlockId(el){
+  if(!el || el.nodeType !== 1) return "";
+  return (el.getAttribute("data-block-id") || el.getAttribute("data-block") || "").trim();
+}
+
 function getElementOwnerHint(el, color){
   if(!el || el.nodeType !== 1) return "";
   const dataOwner = String(el.getAttribute("data-owner") || "").toLowerCase();
@@ -1195,8 +1201,8 @@ function parseRofanChatChunks(root){
   let blockSeq = 0;
 
   const pushChunksFromElement = (el, baseOwner) => {
-    const explicitBlockId = el && el.nodeType === 1 ? (el.getAttribute("data-block-id") || (el.closest && el.closest("[data-block-id]") ? el.closest("[data-block-id]").getAttribute("data-block-id") : "")) : "";
-    const blockId = explicitBlockId ? ("b-" + explicitBlockId) : ("b" + (blockSeq++));
+    const blockId = getElementBlockId(el) || ("b" + (blockSeq++));
+    const baseKind = getElementKindHint(el);
     const start = chunks.length;
     let buffer = "";
     let bufferKind = null;
@@ -1210,7 +1216,7 @@ function parseRofanChatChunks(root){
       if(text){
         chunks.push({
           id: "c" + (chunkSeq++),
-          kind: bufferKind || "normal",
+          kind: bufferKind || baseKind || "normal",
           text,
           owner: bufferOwner || "",
           color: bufferColor || "",
@@ -1230,7 +1236,7 @@ function parseRofanChatChunks(root){
     const addInlineText = (text, ctx) => {
       const raw = String(text || "").replace(/\r/g,"");
       if(!raw) return;
-      const kind = ctx.italic ? "scene" : "normal";
+      const kind = ctx.kind || (ctx.italic ? "scene" : "normal");
       const owner = ctx.owner || ownerFromColor(ctx.color, "") || "";
       const parts = raw.split("\n");
       parts.forEach((part, idx) => {
@@ -1268,6 +1274,7 @@ function parseRofanChatChunks(root){
       const ownerHint = getElementOwnerHint(childEl, color);
       const nextCtx = {
         italic: ctx.italic || isItalicElement(childEl),
+        kind: getElementKindHint(childEl) || ctx.kind || "",
         fromTable: ctx.fromTable || isRemovableBlockElement(childEl),
         fromDetails: ctx.fromDetails || childEl.tagName === "DETAILS",
         owner: ownerHint || ctx.owner || "",
@@ -1282,6 +1289,7 @@ function parseRofanChatChunks(root){
 
     Array.from(el.childNodes).forEach(child => walk(child, {
       italic: isItalicElement(el),
+      kind: baseKind || "",
       fromTable: isRemovableBlockElement(el),
       fromDetails: el.tagName === "DETAILS",
       owner: baseOwner || getElementOwnerHint(el, getInlineColor(el)) || "",
@@ -1304,8 +1312,40 @@ function parseRofanChatChunks(root){
     pushChunksFromElement(root, "");
   }
 
+  const mergedBlocks = mergeRofanBlocksById(blocks, chunks);
+  blocks.splice(0, blocks.length, ...mergedBlocks);
   preserveLeadingCharacterBlocks(blocks, chunks);
   return {chunks, blocks};
+}
+
+function mergeRofanBlocksById(blocks, chunks){
+  if(!blocks || !blocks.length) return blocks || [];
+  const map = new Map();
+  const order = [];
+  blocks.forEach(block => {
+    const id = block && block.id;
+    if(!id) return;
+    if(!map.has(id)){
+      map.set(id, {id, owner:block.owner || "", text:"", startChunk:block.startChunk, endChunk:block.endChunk});
+      order.push(id);
+    }else{
+      const cur = map.get(id);
+      if(!cur.owner && block.owner) cur.owner = block.owner;
+      cur.startChunk = Math.min(cur.startChunk, block.startChunk);
+      cur.endChunk = Math.max(cur.endChunk, block.endChunk);
+    }
+  });
+  return order.map(id => {
+    const b = map.get(id);
+    const related = (chunks || []).filter(c => c.blockId === id);
+    if(related.length){
+      b.owner = b.owner || (related.find(c => c.owner) || {}).owner || "";
+      b.text = related.map(c => c.text).filter(Boolean).join("\n\n").trim();
+      const positions = related.map(c => (chunks || []).indexOf(c)).filter(i => i >= 0);
+      if(positions.length){ b.startChunk = Math.min(...positions); b.endChunk = Math.max(...positions) + 1; }
+    }
+    return b;
+  }).filter(b => b.text);
 }
 
 function preserveLeadingCharacterBlocks(blocks, chunks){
@@ -1954,9 +1994,10 @@ function makeDeleteOptions(base){
   return out;
 }
 
-// ------------------ 출력 공통 렌더러 ------------------
-function shouldIndentOutput(){ return !!(indentTextEl && indentTextEl.checked); }
-function indentRenderedContent(text){
+function shouldIndentOutput(){
+  return !!(indentOutputEl && indentOutputEl.checked);
+}
+function indentRenderedText(text){
   if(!shouldIndentOutput()) return text;
   return String(text || "").split("\n").map(line => line.trim() ? "　" + line : line).join("\n");
 }
@@ -1972,28 +2013,6 @@ function renderChunks(chunks, options){
   const [openQ, closeQ] = getQuotes(quoteStyle);
   const labeledBlockIds = new Set();
   const allowSpeakerLabels = !!options.labelSpeakers;
-  let lastLabeledOwner = "";
-
-  const takeLabelDecision = (chunk) => {
-    if(!allowSpeakerLabels || !chunk || !chunk.owner) return false;
-    const bid = chunk.blockId || "";
-    if(bid && labeledBlockIds.has(bid)) return false;
-    if(bid) labeledBlockIds.add(bid);
-    if(lastLabeledOwner === chunk.owner) return false;
-    lastLabeledOwner = chunk.owner;
-    return true;
-  };
-  const makeItem = (content, chunk, kindOverride) => {
-    const contentText = indentRenderedContent(content);
-    const shouldLabel = takeLabelDecision(chunk);
-    return {
-      text: labelChunk(contentText, chunk, shouldLabel),
-      rawText: contentText,
-      blockId: chunk.blockId,
-      owner: chunk.owner || "",
-      kind: kindOverride || chunk.kind || "normal"
-    };
-  };
 
   const renderedItems = chunks.map((chunk, index) => {
     const {kind, text: raw, fromTable, fromDetails} = chunk;
@@ -2041,21 +2060,27 @@ function renderChunks(chunks, options){
     }
 
     if(protectedHere){
-      const kept = normalizeBlankLinesInsideCell(t);
-      return makeItem(kept, chunk, chunk.kind || "normal");
+      const kept = indentRenderedText(normalizeBlankLinesInsideCell(t));
+      const shouldLabel = allowSpeakerLabels && !labeledBlockIds.has(chunk.blockId);
+      if(shouldLabel) labeledBlockIds.add(chunk.blockId);
+      return { text: labelChunk(kept, chunk, shouldLabel), blockId: chunk.blockId, owner: chunk.owner || "", kind: chunk.kind || "normal" };
     }
 
     if(kind==="scene"){
-      const scene = normalizeBlankLinesInsideCell(t);
-      return makeItem(scene, chunk, "scene");
+      const scene = indentRenderedText(normalizeBlankLinesInsideCell(t));
+      const shouldLabel = allowSpeakerLabels && !labeledBlockIds.has(chunk.blockId);
+      if(shouldLabel) labeledBlockIds.add(chunk.blockId);
+      return { text: labelChunk(scene, chunk, shouldLabel), blockId: chunk.blockId, owner: chunk.owner || "", kind: chunk.kind || "scene" };
     }
 
-    if(isDecorOnlyParagraph(t, getProtectedChapterSeparators())) return makeItem(t, chunk, chunk.kind || "normal");
+    if(isDecorOnlyParagraph(t, getProtectedChapterSeparators())) return { text: t, blockId: chunk.blockId, owner: chunk.owner || "", kind: chunk.kind || "normal" };
 
     let dialogue = t;
     if(quoteStyle !== "none" && !isAlreadyQuoted(t)) dialogue = openQ + t + closeQ;
-    dialogue = normalizeBlankLinesInsideCell(dialogue);
-    return makeItem(dialogue, chunk, "normal");
+    dialogue = indentRenderedText(dialogue);
+    const shouldLabel = allowSpeakerLabels && !labeledBlockIds.has(chunk.blockId);
+    if(shouldLabel) labeledBlockIds.add(chunk.blockId);
+    return { text: labelChunk(dialogue, chunk, shouldLabel), blockId: chunk.blockId, owner: chunk.owner || "", kind: chunk.kind || "normal" };
   }).filter(item => item && item.text);
 
   let outputText;
@@ -2065,8 +2090,7 @@ function renderChunks(chunks, options){
     outputText = renderedItems.map((item, idx) => {
       if(idx === 0) return item.text;
       const prev = renderedItems[idx - 1];
-      const sameCell = prev && (prev.blockId === item.blockId || (prev.owner && item.owner && prev.owner === item.owner));
-      return (sameCell ? "\n" : "\n\n") + item.text;
+      return (prev && prev.blockId === item.blockId ? "\n" : "\n\n") + item.text;
     }).join("").trim();
   }else{
     outputText = renderedItems.map(item => item.text).join("\n\n").trim();
@@ -2131,7 +2155,7 @@ function transformText(){
 
   let text = input.value || "";
   const tokens = getProtectTokens();
-  const structuredChunks = (classicActiveChunks && input && input.value === classicActiveDisplayText) ? cloneChunks(classicActiveChunks) : parseStructuredMarkdownToChunks(text);
+  const structuredChunks = parseStructuredMarkdownToChunks(text);
 
   if(!structuredChunks){
     if(removeDetailsEl.checked){
@@ -2152,7 +2176,7 @@ function transformText(){
     text = text.replace(/__(.*?)__/g,"$1");
   }
 
-  const chunks = structuredChunks || parseChunks(text);
+  const chunks = (classicActiveChunks && classicActiveChunks.length) ? cloneChunks(classicActiveChunks) : (structuredChunks || parseChunks(text));
   const deleteTokens = getDeleteContainsTokens();
   currentDuplicateGroups = [];
   duplicateReviewPanel.classList.add("hidden");
@@ -2282,7 +2306,7 @@ function clearAll(){
     if(excerptStartTextEl) excerptStartTextEl.value = "";
     if(excerptEndTextEl) excerptEndTextEl.value = "";
     classicLoadedFileText = "";
-    classicLoadedChunksAll = null;
+    classicLoadedChunks = null;
     classicActiveChunks = null;
     classicActiveDisplayText = "";
     lastStructuredItems = [];
@@ -2319,7 +2343,9 @@ function stripSpeakerLabelLines(text){
   return String(text || "").split(/\n/).filter(line => !labels.has(normalizeSpeakerCompareLine(line))).join("\n").replace(/\n{3,}/g,"\n\n").trim();
 }
 function getPreparedOutputForExport(){
-  let text = (getActiveOutput().value || "").replace(/\r/g, "");
+  const active = getActiveOutput();
+  let text = activeMode === "epubedit" ? editorPlainText(epubEditEditor) : ((active && active.value) || "");
+  text = String(text || "").replace(/\r/g, "");
   const mode = epubTextModeEl ? epubTextModeEl.value : "current";
   const labelMode = speakerLabelModeEl ? speakerLabelModeEl.value : "output";
   if(mode === "removeLabels" || labelMode === "hideInEpub" || labelMode === "reviewOnly"){
@@ -2522,8 +2548,28 @@ function getEpubConfig(){
     chapterSize: Math.max(1, parseInt(chapterSizeEl ? chapterSizeEl.value : "7000", 10) || 7000),
     separator: (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "—————",
     chapterPrefix: (chapterTitlePrefixEl && chapterTitlePrefixEl.value.trim()) || "Chapter",
+    firstChapterTitle: (chapterFirstTitleEl && chapterFirstTitleEl.value.trim()) || "",
     stylePreset: epubStylePresetEl ? epubStylePresetEl.value : "novel"
   };
+}
+function getChapterTitle(idx, cfg){
+  const c = cfg || getEpubConfig();
+  if(idx === 0 && c.firstChapterTitle) return c.firstChapterTitle;
+  return `${c.chapterPrefix} ${idx + 1}`;
+}
+function chapterLeadText(ch){
+  const raw = ch && ch.bodyHtml ? blockHtmlToText(ch.bodyHtml) : String((ch && ch.body) || "");
+  return raw.replace(/\s+/g, " ").trim().slice(0, 80);
+}
+function renderChapterTocHtml(chapters, compact){
+  if(!chapters || !chapters.length) return `<div class="emptyState">챕터가 아직 없습니다. 결과가 생기면 목차가 표시됩니다.</div>`;
+  const rows = chapters.slice(0, compact ? 12 : 50).map((ch, idx) => {
+    const count = fmtNum(stripHTMLTags(ch.body || blockHtmlToText(ch.bodyHtml || "")).length);
+    const lead = chapterLeadText(ch);
+    return `<div class="chapterTocRow"><b>${idx + 1}</b><span><strong>${escapeHTML(ch.title)}</strong>${lead ? `<small>${escapeHTML(lead)}</small>` : ""}</span><em>${count}자</em></div>`;
+  }).join("");
+  const more = chapters.length > (compact ? 12 : 50) ? `<div class="miniHelp">외 ${chapters.length - (compact ? 12 : 50)}개 챕터</div>` : "";
+  return `<div class="chapterTocBox"><div class="tocSummary"><strong>현재 목차</strong><span>${chapters.length}개 챕터</span></div>${rows}${more}</div>`;
 }
 function splitTextIntoParagraphs(text){
   return String(text || "").replace(/\r/g,"").split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
@@ -2533,7 +2579,7 @@ function splitTextIntoChapters(text){
   const source = String(text || "").trim();
   if(!source) return [];
   const chapters = [];
-  const makeTitle = (idx) => `${cfg.chapterPrefix} ${idx + 1}`;
+  const makeTitle = (idx) => getChapterTitle(idx, cfg);
   if(cfg.chapterMode === "separator"){
     const sep = cfg.separator.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`^\\s*${sep}\\s*$`, "gm");
@@ -2580,7 +2626,7 @@ function textToXhtmlBody(text){
 function getEpubCss(){
   const preset = getEpubConfig().stylePreset;
   const fontFace = cachedEpubFontAsset ? `@font-face{font-family:"UploadedEpubFont";src:url("${escapeXML(cachedEpubFontAsset.epubName || cachedEpubFontAsset.name || "uploaded-font.woff")}");} body{font-family:"UploadedEpubFont",serif !important;}` : "";
-  const base = `body{line-height:1.82;word-break:keep-all;overflow-wrap:break-word;} p{margin:0 0 1em;} h1{font-size:1.45em;margin:0 0 1.2em;} .cover{text-align:center;} .cover img{max-width:100%;height:auto;} .quotePostype{margin:1em 0;padding:.85em 1em;border-left:3px solid #74a8bd;background:#f3f9fc;border-radius:.65em;} .quoteBlog{margin:1em 0;padding:.85em .35em;border-top:1px solid #cfe4ee;border-bottom:1px solid #cfe4ee;} .quoteSoft{margin:1em 0;padding:.9em 1em;background:#edf6fa;border-radius:.9em;} .rofan-block[data-owner]{margin:0 0 1em;} .rofan-block[data-kind="scene"]{font-style:normal;}`;
+  const base = `body{line-height:1.82;word-break:keep-all;overflow-wrap:break-word;} p{margin:0 0 1em;} h1{font-size:1.45em;margin:0 0 1.2em;} .cover{text-align:center;} .cover img{max-width:100%;height:auto;} blockquote{margin:1em 0;} .quotePostype{padding:.9em 1.05em;border-left:4px solid #4f8aa4;background:#f3f9fc;border-radius:.75em;text-align:left;} .quoteBlog{padding:1em .5em;border-top:1px solid #bdd8e3;border-bottom:1px solid #bdd8e3;border-left:0;background:transparent;border-radius:0;text-align:center;} .quoteSoft{padding:1em 1.1em;border-left:0;background:#eaf5fa;border:1px solid #d4e9f1;border-radius:1em;text-align:center;} .rofan-block[data-owner]{margin:0 0 1em;} .rofan-block[data-kind="scene"]{font-style:normal;}`;
   if(preset === "paper") return fontFace + base + ` body{font-family:serif;} p{text-indent:1em;margin-bottom:.65em;}`;
   if(preset === "script") return fontFace + base + ` body{font-family:sans-serif;} p{margin-bottom:1.1em;} p:nth-child(odd){padding-left:.5em;border-left:2px solid #ddd;}`;
   if(preset === "backup") return fontFace + base + ` body{font-family:monospace;font-size:.92em;} p{white-space:pre-wrap;margin-bottom:1.2em;}`;
@@ -2591,11 +2637,10 @@ function updateEpubPreview(){
   const chapters = getExportChapters();
   const cfg = getEpubConfig();
   if(chapterPreviewEl){
-    if(!chapters.length){
-      chapterPreviewEl.innerHTML = `<div class="emptyState">결과가 생기면 챕터 목록이 표시됩니다.</div>`;
-    }else{
-      chapterPreviewEl.innerHTML = chapters.slice(0, 30).map((ch, idx) => `<div class="chapterRow"><b>${idx + 1}</b><span>${escapeHTML(ch.title)}</span><em>${fmtNum(stripHTMLTags(ch.body).length)}자</em></div>`).join("") + (chapters.length > 30 ? `<div class="miniHelp">외 ${chapters.length - 30}개</div>` : "");
-    }
+    chapterPreviewEl.innerHTML = renderChapterTocHtml(chapters, false);
+  }
+  if(chapterTocInlineEl){
+    chapterTocInlineEl.innerHTML = renderChapterTocHtml(chapters, true);
   }
   if(epubPreviewEl){
     const first = chapters[0] ? chapters[0].body : "";
@@ -2621,57 +2666,51 @@ function downloadBlob(blob, filename){
 }
 
 function itemKindLabel(kind){ return kind === "scene" ? "scene" : "dialogue"; }
-function sanitizeMetaValue(value){ return String(value || "").replace(/[;\n\r>]/g, "").trim(); }
-function normalizeStructuredOwner(owner, index){
-  const o = sanitizeMetaValue(owner);
-  if(o) return o;
-  return index === 0 ? "character" : "character";
+function safeMetaValue(value, fallback){
+  const v = String(value || "").replace(/[;\n>]/g, "").trim();
+  return v || fallback;
 }
-function normalizeStructuredKind(kind){
-  const k = sanitizeMetaValue(kind || "normal");
-  return k || "normal";
-}
-function normalizeStructuredBlockId(item, index){
-  const raw = sanitizeMetaValue(item && (item.blockId || item.block || item.id));
-  return raw || `block-${index + 1}`;
-}
-function parseRofanMeta(metaText){
-  const meta = {};
-  String(metaText || "").split(";").forEach(part => {
-    const i = part.indexOf("=");
-    if(i < 0) return;
-    const key = part.slice(0, i).trim().toLowerCase();
-    const value = part.slice(i + 1).trim();
-    if(key) meta[key] = value;
-  });
-  return meta;
+function stripCurrentSpeakerLabelsFromItemText(text){
+  return stripSpeakerLabelLines(String(text || "")).trim();
 }
 function structuredItemsToHtml(items){
-  return (items || []).map((item, index) => {
-    const owner = escapeAttr(normalizeStructuredOwner(item.owner, index));
-    const kind = escapeAttr(normalizeStructuredKind(item.kind));
-    const blockId = escapeAttr(normalizeStructuredBlockId(item, index));
-    const bodyHtml = item.html ? sanitizeEditorHTML(item.html) : String(item.text || "").split(/\n+/).filter(Boolean).map(t => `<p>${escapeHTML(t)}</p>`).join("\n");
-    return `<div class="rofan-block" data-owner="${owner}" data-kind="${kind}" data-block-id="${blockId}">${bodyHtml}</div>`;
-  }).join("\n");
+  return (items || []).map((item, idx) => {
+    const owner = escapeAttr(safeMetaValue(item.owner, idx === 0 ? "character" : "character"));
+    const kind = escapeAttr(safeMetaValue(item.kind, "normal"));
+    const blockId = escapeAttr(safeMetaValue(item.blockId, "block-" + idx));
+    const cleanText = stripCurrentSpeakerLabelsFromItemText(item.text || "");
+    const paragraphs = String(cleanText || "").split(/\n+/).filter(Boolean).map(t => `<p>${escapeHTML(t)}</p>`).join("\n");
+    return paragraphs ? `<div class="rofan-block" data-block-id="${blockId}" data-owner="${owner}" data-kind="${kind}">${paragraphs}</div>` : "";
+  }).filter(Boolean).join("\n");
 }
 function structuredItemsToMarkdown(items){
-  return (items || []).map((item, index) => {
-    const owner = normalizeStructuredOwner(item.owner, index);
-    const kind = normalizeStructuredKind(item.kind);
-    const blockId = normalizeStructuredBlockId(item, index);
-    const body = item.markdownBody != null ? String(item.markdownBody) : (item.html ? String(item.html) : String(item.text || ""));
-    return `<!-- rofan:owner=${owner};kind=${kind};block=${blockId} -->\n${body}`;
-  }).join("\n\n");
+  return (items || []).map((item, idx) => {
+    const owner = safeMetaValue(item.owner, idx === 0 ? "character" : "character");
+    const kind = safeMetaValue(item.kind, "normal");
+    const blockId = safeMetaValue(item.blockId, "block-" + idx);
+    const body = stripCurrentSpeakerLabelsFromItemText(item.text || "");
+    return body ? `<!-- rofan:block=${blockId};owner=${owner};kind=${kind} -->\n${body}` : "";
+  }).filter(Boolean).join("\n\n");
 }
 
 function chunksToStructuredMarkdown(chunks){
-  return structuredItemsToMarkdown((chunks || []).filter(c => c && String(c.text || '').trim()).map((c, i) => ({
-    owner: c.owner || (i === 0 ? 'character' : 'character'),
+  return structuredItemsToMarkdown((chunks || []).filter(c => c && String(c.text || '').trim()).map((c, idx) => ({
+    blockId: c.blockId || ('block-' + idx),
+    owner: c.owner || 'character',
     kind: c.kind || 'normal',
-    blockId: c.blockId || `chunk-block-${i + 1}`,
     text: c.text || ''
   })));
+}
+function parseRofanCommentAttrs(src){
+  const attrs = {};
+  String(src || "").split(";").forEach(part => {
+    const eq = part.indexOf("=");
+    if(eq < 0) return;
+    const key = part.slice(0, eq).trim().toLowerCase();
+    const val = part.slice(eq + 1).trim();
+    if(key) attrs[key] = val;
+  });
+  return attrs;
 }
 function parseStructuredMarkdownToChunks(raw){
   const text = String(raw || '').replace(/\r/g, '');
@@ -2679,32 +2718,32 @@ function parseStructuredMarkdownToChunks(raw){
   let match, last = 0, items = [];
   while((match = re.exec(text))){
     if(items.length){ items[items.length - 1].body = text.slice(last, match.index).trim(); }
-    const meta = parseRofanMeta(match[1] || "");
-    items.push({
-      owner: sanitizeMetaValue(meta.owner) || 'character',
-      kind: sanitizeMetaValue(meta.kind) || 'normal',
-      blockId: sanitizeMetaValue(meta.block || meta.blockid || meta.id) || `md-${items.length}`,
-      body:''
-    });
+    const attrs = parseRofanCommentAttrs(match[1] || "");
+    const owner = safeMetaValue(attrs.owner, 'character');
+    const kind = safeMetaValue(attrs.kind, 'normal');
+    let block = safeMetaValue(attrs.block || attrs.blockid || attrs['block-id'], '');
+    if(!block){
+      const prev = items[items.length - 1];
+      block = prev && prev.owner === owner ? prev.block : ('md-' + items.length);
+    }
+    items.push({owner, kind, block, body:''});
     last = re.lastIndex;
   }
   if(!items.length) return null;
   items[items.length - 1].body = text.slice(last).trim();
   const chunks = [];
   let seq = 0;
-  items.forEach((it, idx) => {
-    const blockId = it.blockId || 'md-' + idx;
-    let bodyText = String(it.body || '').trim();
-    if(looksLikeHTML(bodyText)) bodyText = blockHtmlToText(bodyText);
-    bodyText.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean).forEach(p => {
-      chunks.push({id:'mdc-' + (seq++), kind:it.kind || 'normal', owner:it.owner || 'character', text:p, color:'', fromTable:false, fromDetails:false, blockId});
+  items.forEach((it) => {
+    String(it.body || '').split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean).forEach(p => {
+      chunks.push({id:'mdc-' + (seq++), kind:it.kind || 'normal', owner:it.owner || 'character', text:p, color:'', fromTable:false, fromDetails:false, blockId:it.block || ('md-' + seq)});
     });
   });
   return chunks.length ? chunks : null;
 }
+
 function structuredMarkdownToHtml(raw){
   const chunks = parseStructuredMarkdownToChunks(raw);
-  return chunks ? structuredItemsToHtml(chunks.map(c => ({owner:c.owner, kind:c.kind, blockId:c.blockId, text:c.text}))) : '';
+  return chunks ? structuredItemsToHtml(chunks.map(c => ({blockId:c.blockId, owner:c.owner, kind:c.kind, text:c.text}))) : '';
 }
 function parseHtmlToRofanChunks(html){
   const holder = document.createElement('div');
@@ -2721,57 +2760,43 @@ function fileContentToChunks(raw, fileName){
   if(/\.(mht|mhtml)$/i.test(lower) || /MIME-Version:\s*1\.0/i.test(text) || /Content-Type:\s*multipart\/related/i.test(text)){
     const html = extractHTMLFromMHT(text);
     const chunks = parseHtmlToRofanChunks(html);
-    if(chunks.length) return chunks;
+    if(chunks && chunks.length) return chunks;
   }
   if(/\.(html|htm)$/i.test(lower) || looksLikeHTML(text)){
     const chunks = parseHtmlToRofanChunks(text);
-    if(chunks.length) return chunks;
+    if(chunks && chunks.length) return chunks;
   }
   return null;
+}
+function cloneChunks(chunks){
+  return (chunks || []).map((c, idx) => Object.assign({}, c, {id:c.id || ('clone-' + idx)}));
+}
+function chunksDisplayText(chunks){
+  return (chunks || []).map(c => c.text || '').filter(Boolean).join("\n\n").trim();
+}
+function sliceChunksByStartEnd(chunks, startNeedle, endNeedle){
+  const records = [];
+  let text = "";
+  (chunks || []).forEach((c, idx) => {
+    if(idx) text += "\n\n";
+    const start = text.length;
+    text += c.text || "";
+    const end = text.length;
+    records.push({chunk:c, start, end});
+  });
+  let rangeStart = 0, rangeEnd = text.length;
+  const start = String(startNeedle || "").trim();
+  const end = String(endNeedle || "").trim();
+  if(start){ const i = text.indexOf(start); if(i >= 0) rangeStart = i; }
+  if(end){ const j = text.indexOf(end, rangeStart); if(j >= 0) rangeEnd = j + end.length; }
+  return records.filter(r => r.end > rangeStart && r.start < rangeEnd).map(r => Object.assign({}, r.chunk));
 }
 function fileContentToStructuredMarkdown(raw, fileName){
   const chunks = fileContentToChunks(raw, fileName);
   if(chunks && chunks.length) return chunksToStructuredMarkdown(chunks);
   return String(raw || '');
 }
-function chunksToDisplayText(chunks){
-  return (chunks || []).filter(c => c && String(c.text || '').trim()).map(c => String(c.text || '').trim()).join("\n\n");
-}
-function cloneChunks(chunks){
-  return (chunks || []).map(c => Object.assign({}, c));
-}
-function sliceChunksByStartEnd(chunks, startNeedle, endNeedle){
-  const display = chunksToDisplayText(chunks);
-  if(!display) return [];
-  const startText = String(startNeedle || '').trim();
-  const endText = String(endNeedle || '').trim();
-  let sliceStart = 0;
-  if(startText){
-    const i = display.indexOf(startText);
-    if(i >= 0) sliceStart = i;
-  }
-  let sliceEnd = display.length;
-  if(endText){
-    const j = display.indexOf(endText, sliceStart);
-    if(j >= 0) sliceEnd = j + endText.length;
-  }
-  const out = [];
-  let pos = 0;
-  (chunks || []).forEach(chunk => {
-    const t = String(chunk.text || '').trim();
-    if(!t) return;
-    const start = pos;
-    const end = start + t.length;
-    if(end > sliceStart && start < sliceEnd){
-      const localStart = Math.max(0, sliceStart - start);
-      const localEnd = Math.min(t.length, sliceEnd - start);
-      const clipped = t.slice(localStart, localEnd).trim();
-      if(clipped) out.push(Object.assign({}, chunk, {text: clipped}));
-    }
-    pos = end + 2;
-  });
-  return out;
-}
+
 function exportedBodyHtml(){
   if(activeMode !== "epubedit" && lastStructuredItems && lastStructuredItems.length){
     return structuredItemsToHtml(lastStructuredItems);
@@ -2803,6 +2828,8 @@ function downloadMarkdown(){
     md += structuredItemsToMarkdown(lastStructuredItems) + "\n";
   }else if(activeMode === "epubedit" && editorStructuredMarkdown()){
     md += editorStructuredMarkdown() + "\n";
+  }else if(activeMode === "epubedit"){
+    md += editorHtmlForExport() + "\n";
   }else{
     chapters.forEach(ch => { md += `## ${ch.title}\n\n${ch.body}\n\n`; });
   }
@@ -2945,7 +2972,7 @@ function createZipBlob(entries, type){
   return new Blob(chunks, {type:type || "application/zip"});
 }
 function collectPresetValues(){
-  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentText","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode"];
+  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode"];
   const data = {};
   ids.forEach(id => {
     const el = document.getElementById(id);
@@ -3016,16 +3043,17 @@ async function loadClassicFile(){
     const raw = await readFileAsTextSmart(file);
     const chunks = fileContentToChunks(raw, file.name || "");
     if(chunks && chunks.length){
-      classicLoadedChunksAll = cloneChunks(chunks);
-      classicLoadedFileText = chunksToDisplayText(classicLoadedChunksAll);
+      classicLoadedChunks = chunks;
+      classicLoadedFileText = chunksDisplayText(chunks);
     }else{
-      classicLoadedChunksAll = null;
+      classicLoadedChunks = null;
       classicLoadedFileText = String(raw || "");
     }
     applyClassicExcerpt();
     showToast("파일을 불러왔습니다.");
   }catch(err){ console.error(err); showToast("파일을 읽지 못했습니다."); }
 }
+
 function sliceByStartEnd(text, startNeedle, endNeedle){
   let s = String(text || "");
   const start = String(startNeedle || "").trim();
@@ -3035,29 +3063,25 @@ function sliceByStartEnd(text, startNeedle, endNeedle){
   return s.trim();
 }
 function applyClassicExcerpt(){
-  if(classicLoadedChunksAll && classicLoadedChunksAll.length){
-    const nextChunks = sliceChunksByStartEnd(classicLoadedChunksAll, excerptStartTextEl ? excerptStartTextEl.value : "", excerptEndTextEl ? excerptEndTextEl.value : "");
-    classicActiveChunks = cloneChunks(nextChunks.length ? nextChunks : classicLoadedChunksAll);
-    classicActiveDisplayText = chunksToDisplayText(classicActiveChunks);
-    if(input){
-      suppressClassicInputReset = true;
-      input.value = classicActiveDisplayText;
-      suppressClassicInputReset = false;
-    }
+  const start = excerptStartTextEl ? excerptStartTextEl.value : "";
+  const end = excerptEndTextEl ? excerptEndTextEl.value : "";
+  let next = "";
+  if(classicLoadedChunks && classicLoadedChunks.length){
+    classicActiveChunks = sliceChunksByStartEnd(classicLoadedChunks, start, end);
+    next = chunksDisplayText(classicActiveChunks);
   }else{
     const base = classicLoadedFileText || (input ? input.value : "");
-    const next = sliceByStartEnd(base, excerptStartTextEl ? excerptStartTextEl.value : "", excerptEndTextEl ? excerptEndTextEl.value : "");
+    next = sliceByStartEnd(base, start, end);
     classicActiveChunks = null;
-    classicActiveDisplayText = "";
-    if(input){
-      suppressClassicInputReset = true;
-      input.value = next;
-      suppressClassicInputReset = false;
-    }
   }
+  classicActiveDisplayText = next;
+  isApplyingClassicExcerpt = true;
+  if(input) input.value = next;
+  isApplyingClassicExcerpt = false;
   transformText();
   scheduleAutosave();
 }
+
 function activateEpubEditTab(){
   activeMode = "epubedit";
   document.querySelectorAll(".tab").forEach(t => {
@@ -3093,32 +3117,11 @@ async function loadEpubEditFile(){
   }catch(err){ console.error(err); showToast("파일을 읽지 못했습니다."); }
 }
 function parseStructuredMarkdown(raw){
-  const text = String(raw || "").replace(/\r/g, "");
-  const re = /<!--\s*rofan:([^>]*)-->/gi;
-  let match, last = 0, items = [];
-  while((match = re.exec(text))){
-    if(items.length){ items[items.length - 1].body = text.slice(last, match.index).trim(); }
-    const meta = parseRofanMeta(match[1] || "");
-    items.push({
-      owner: sanitizeMetaValue(meta.owner) || "character",
-      kind: sanitizeMetaValue(meta.kind) || "normal",
-      blockId: sanitizeMetaValue(meta.block || meta.blockid || meta.id) || `md-${items.length}`,
-      body:""
-    });
-    last = re.lastIndex;
-  }
-  if(items.length){
-    items[items.length - 1].body = text.slice(last).trim();
-    return items.filter(it => it.body).map((it, index) => {
-      const owner = escapeAttr(normalizeStructuredOwner(it.owner, index));
-      const kind = escapeAttr(normalizeStructuredKind(it.kind));
-      const blockId = escapeAttr(it.blockId || `md-${index}`);
-      const body = looksLikeHTML(it.body) ? sanitizeEditorHTML(it.body) : plainTextToHtml(it.body);
-      return `<div class="rofan-block" data-owner="${owner}" data-kind="${kind}" data-block-id="${blockId}">${body}</div>`;
-    }).join("\n");
-  }
-  return "";
+  const chunks = parseStructuredMarkdownToChunks(raw);
+  if(!chunks || !chunks.length) return "";
+  return structuredItemsToHtml(chunks.map(c => ({blockId:c.blockId, owner:c.owner, kind:c.kind, text:c.text})));
 }
+
 function markdownOrTextToEditorHTML(raw, isMarkdown){
   let text = String(raw || "").replace(/\r/g, "");
   if(isMarkdown){
@@ -3152,7 +3155,7 @@ function sanitizeEditorHTML(html){
       const name = attr.name.toLowerCase();
       if(name.startsWith("on")) el.removeAttribute(attr.name);
       else if(name === "style"){ const clean = sanitizeInlineStyle(attr.value); clean ? el.setAttribute("style", clean) : el.removeAttribute("style"); }
-      else if(!(name === "class" || name === "style" || name === "data-owner" || name === "data-kind" || name === "data-block-id" || name === "title" || name === "lang" || name === "xml:lang")){ el.removeAttribute(attr.name); }
+      else if(!(name === "class" || name === "style" || name === "data-owner" || name === "data-kind" || name === "title" || name === "lang" || name === "xml:lang")){ el.removeAttribute(attr.name); }
     });
   });
   return doc.body.innerHTML || plainTextToHtml(doc.body.innerText || "");
@@ -3290,6 +3293,35 @@ function replaceSelectionWithHtml(html){
   epubEditEditor.focus({preventScroll:true});
   return true;
 }
+function clearQuoteLongPressTimer(){
+  if(quoteLongPressTimer){ clearTimeout(quoteLongPressTimer); quoteLongPressTimer = null; }
+  quoteLongPressMeta = null;
+}
+function handleQuotePointerDown(e){
+  if(activeMode !== "epubedit" || !epubEditEditor) return;
+  const quote = e.target && e.target.closest ? e.target.closest("blockquote") : null;
+  if(!quote || !epubEditEditor.contains(quote)) return;
+  clearQuoteLongPressTimer();
+  quoteLongPressMeta = {quote, x:e.clientX || 0, y:e.clientY || 0};
+  quoteLongPressTimer = setTimeout(() => {
+    const target = quoteLongPressMeta && quoteLongPressMeta.quote;
+    clearQuoteLongPressTimer();
+    if(target && epubEditEditor.contains(target)) unwrapQuoteBlock(target);
+  }, 720);
+}
+function handleQuotePointerMove(e){
+  if(!quoteLongPressTimer || !quoteLongPressMeta) return;
+  if(Math.abs((e.clientX || 0) - quoteLongPressMeta.x) > 9 || Math.abs((e.clientY || 0) - quoteLongPressMeta.y) > 9) clearQuoteLongPressTimer();
+}
+function unwrapQuoteBlock(quote){
+  if(!quote || !quote.parentNode) return;
+  const frag = document.createDocumentFragment();
+  while(quote.firstChild) frag.appendChild(quote.firstChild);
+  quote.parentNode.replaceChild(frag, quote);
+  rememberEditorSelection();
+  updateEpubPreview(); scheduleAutosave();
+  showToast("인용구를 해제했습니다.");
+}
 function makeQuoteHtml(type, content){
   const cls = type === "blog" ? "quoteBlog" : (type === "soft" ? "quoteSoft" : "quotePostype");
   return `<blockquote class="${cls}">${content}</blockquote>`;
@@ -3325,23 +3357,30 @@ function wrapRangeWithSpan(range, styleText){
 }
 function applyEpubTextFormat(){
   if(!epubEditEditor) return;
-  const size = Math.max(8, Math.min(60, parseInt(epubEditFontSizeEl ? epubEditFontSizeEl.value : "15",10) || 15));
+  const size = Math.max(8, Math.min(72, parseInt(epubEditFontSizeEl ? epubEditFontSizeEl.value : "15",10) || 15));
   const color = epubEditTextColorEl ? epubEditTextColorEl.value : "#1f2d36";
   const range = getActiveEditorRange();
   if(range && !range.collapsed){
-    const ok = wrapRangeWithSpan(range, `font-size:${size}px;color:${color}`);
+    const ok = wrapRangeWithSpan(range, `font-size:${size}px;color:${color};`);
     if(!ok){ showToast("선택 영역을 다시 드래그해 주세요."); return; }
   }else{
-    epubEditEditor.querySelectorAll('.epub-global-style').forEach(n => n.classList.remove('epub-global-style'));
-    epubEditEditor.style.fontSize = size + "px";
-    epubEditEditor.style.color = color;
+    epubEditEditor.style.setProperty("font-size", size + "px", "important");
+    epubEditEditor.style.setProperty("color", color, "important");
+    Array.from(epubEditEditor.children).forEach(el => {
+      if(el.nodeType === 1){
+        if(!el.style.fontSize) el.style.fontSize = "inherit";
+        if(!el.style.color) el.style.color = "inherit";
+      }
+    });
   }
+  rememberEditorSelection();
   updateEpubPreview(); scheduleAutosave(); showToast("서식을 적용했습니다.");
 }
+
 function adjustEpubFontSize(delta){
   if(!epubEditFontSizeEl) return;
   const cur = parseInt(epubEditFontSizeEl.value || '15', 10) || 15;
-  epubEditFontSizeEl.value = String(Math.max(8, Math.min(60, cur + delta)));
+  epubEditFontSizeEl.value = String(Math.max(8, Math.min(72, cur + delta)));
   applyEpubTextFormat();
 }
 function clearEpubInlineFormat(){
@@ -3372,20 +3411,14 @@ async function applyCachedEpubFont(){
     if(epubEditEditor) epubEditEditor.style.fontFamily = 'UploadedEpubFont, serif';
   }catch(err){ console.warn(err); }
 }
-function editorRootStyleText(){
-  if(!epubEditEditor) return "";
-  const styles = [];
-  if(epubEditEditor.style.fontSize) styles.push(`font-size:${epubEditEditor.style.fontSize}`);
-  if(epubEditEditor.style.color) styles.push(`color:${epubEditEditor.style.color}`);
-  if(epubEditEditor.style.fontFamily) styles.push(`font-family:${epubEditEditor.style.fontFamily}`);
-  return styles.join(";");
-}
 function editorHtmlForExport(){
   if(activeMode !== "epubedit" || !epubEditEditor) return "";
-  const inner = sanitizeEditorHTML(epubEditEditor.innerHTML || "");
-  const style = editorRootStyleText();
-  return style ? `<div class="epub-editor-root" style="${escapeAttr(style)}">${inner}</div>` : inner;
+  let html = sanitizeEditorHTML(epubEditEditor.innerHTML || "");
+  const style = sanitizeInlineStyle(`font-size:${epubEditEditor.style.fontSize || ""};color:${epubEditEditor.style.color || ""};font-family:${epubEditEditor.style.fontFamily || ""}`);
+  if(style) html = `<div class="epub-editor-body" style="${escapeAttr(style)}">${html}</div>`;
+  return html;
 }
+
 function blockHtmlToText(html){
   const div=document.createElement('div'); div.innerHTML=html; return (div.innerText||div.textContent||'').trim();
 }
@@ -3398,31 +3431,20 @@ function editorHtmlToChapterBlocks(html){
   });
   return blocks;
 }
-function pushHtmlChapter(chapters, bucket, title){
-  const html = bucket.join('\n').trim();
-  if(!html) return;
-  chapters.push({title, bodyHtml: html, body: blockHtmlToText(html)});
-}
 
 function editorStructuredBlocks(){
   if(!epubEditEditor) return [];
-  return Array.from(epubEditEditor.querySelectorAll('[data-owner][data-kind], .rofan-block')).map((el, index) => ({
-    owner: el.getAttribute('data-owner') || (index === 0 ? 'character' : 'character'),
+  return Array.from(epubEditEditor.querySelectorAll('[data-owner][data-kind], .rofan-block')).map((el, idx) => ({
+    blockId: el.getAttribute('data-block-id') || el.getAttribute('data-block') || ('editor-' + idx),
+    owner: el.getAttribute('data-owner') || 'character',
     kind: el.getAttribute('data-kind') || 'normal',
-    blockId: el.getAttribute('data-block-id') || `editor-${index + 1}`,
-    text: (el.innerText || el.textContent || '').trim(),
-    html: sanitizeEditorHTML(el.innerHTML || '')
-  })).filter(it => it.text || it.html);
+    text: (el.innerText || el.textContent || '').trim()
+  })).filter(it => it.text);
 }
 function editorStructuredMarkdown(){
   const items = editorStructuredBlocks();
   if(!items.length) return '';
-  return structuredItemsToMarkdown(items.map((it, idx) => ({
-    owner: it.owner || (idx === 0 ? 'character' : 'character'),
-    kind: it.kind || 'normal',
-    blockId: it.blockId || `editor-${idx + 1}`,
-    markdownBody: it.html || it.text || ''
-  })));
+  return structuredItemsToMarkdown(items);
 }
 function getExportChapters(markdownMode){
   if(activeMode !== "epubedit"){
@@ -3430,37 +3452,30 @@ function getExportChapters(markdownMode){
   }
   const cfg = getEpubConfig();
   const html = editorHtmlForExport();
-  if(markdownMode){ return [{title: cfg.title, body: editorStructuredMarkdown() || html || blockHtmlToText(html)}]; }
   const blocks = editorHtmlToChapterBlocks(html);
-  const makeTitle = idx => `${cfg.chapterPrefix} ${idx + 1}`;
-  if(!html.trim()) return [];
+  const makeTitle = idx => getChapterTitle(idx, cfg);
+  if(markdownMode){ return splitTextIntoChapters(blockHtmlToText(html)); }
+  const makeChapter = (bucket, idxTitle) => ({title: idxTitle === null ? cfg.title : makeTitle(idxTitle), bodyHtml:bucket.join("\n"), body:blockHtmlToText(bucket.join("\n"))});
   if(cfg.chapterMode === "separator"){
     const chapters=[]; let bucket=[];
-    blocks.forEach(b => { if(b.sep){ if(bucket.length){ pushHtmlChapter(chapters, bucket, makeTitle(chapters.length)); bucket=[]; } } else if(b.html) bucket.push(b.html); });
-    if(bucket.length) pushHtmlChapter(chapters, bucket, makeTitle(chapters.length));
+    blocks.forEach(b => { if(b.sep){ if(bucket.length){ chapters.push(makeChapter(bucket, chapters.length)); bucket=[]; } } else if(b.html) bucket.push(b.html); });
+    if(bucket.length) chapters.push(makeChapter(bucket, chapters.length));
     return chapters.length ? chapters : [{title:cfg.title, bodyHtml:html, body:blockHtmlToText(html)}];
   }
-  if(cfg.chapterMode === "paragraphs"){
-    const chapters=[]; let bucket=[];
-    blocks.filter(b => !b.sep && b.html).forEach(b => {
-      bucket.push(b.html);
-      if(bucket.length >= cfg.chapterSize){ pushHtmlChapter(chapters, bucket, makeTitle(chapters.length)); bucket=[]; }
-    });
-    if(bucket.length) pushHtmlChapter(chapters, bucket, makeTitle(chapters.length));
-    return chapters.length ? chapters : [{title:cfg.title, bodyHtml:html, body:blockHtmlToText(html)}];
-  }
-  if(cfg.chapterMode === "chars"){
+  if(cfg.chapterMode === "chars" || cfg.chapterMode === "paragraphs"){
     const chapters=[]; let bucket=[]; let count=0;
-    blocks.filter(b => !b.sep && b.html).forEach(b => {
-      const len = blockHtmlToText(b.html).length;
-      if(bucket.length && count + len > cfg.chapterSize){ pushHtmlChapter(chapters, bucket, makeTitle(chapters.length)); bucket=[]; count=0; }
-      bucket.push(b.html); count += len;
+    blocks.filter(b => b.html).forEach(b => {
+      const t = blockHtmlToText(b.html);
+      const unit = cfg.chapterMode === "paragraphs" ? 1 : t.length;
+      if(bucket.length && count + unit > cfg.chapterSize){ chapters.push(makeChapter(bucket, chapters.length)); bucket=[]; count=0; }
+      bucket.push(b.html); count += unit;
     });
-    if(bucket.length) pushHtmlChapter(chapters, bucket, makeTitle(chapters.length));
-    return chapters.length ? chapters : [{title:cfg.title, bodyHtml:html, body:blockHtmlToText(html)}];
+    if(bucket.length) chapters.push(makeChapter(bucket, chapters.length));
+    if(chapters.length) return chapters;
   }
-  return [{title:cfg.title, bodyHtml:html, body:blockHtmlToText(html)}];
+  return html ? [{title:cfg.title, bodyHtml:html, body:blockHtmlToText(html)}] : [];
 }
+
 function chapterBodyToXhtml(ch){
   if(activeMode === "epubedit" && ch.bodyHtml) return sanitizeEditorHTML(ch.bodyHtml).replace(/<br>/g,"<br/>").replace(/<hr\s*\/?\s*>/gi,"");
   return textToXhtmlBody(ch.body || "");
