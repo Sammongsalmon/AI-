@@ -1352,7 +1352,7 @@ function updateResultStats(chunks, blocks, renderedText){
   }
   updateRiskPanel(renderedText || "");
   if(workflowHintEl){
-    const missing = !renderedText ? "입력값을 넣으면 결과와 검토 후보가 자동으로 갱신됩니다." : `${fmtNum(stats.paragraphs)}개 문단이 준비되었습니다. 검토 후 TXT/HTML/EPUB으로 내보낼 수 있습니다.`;
+    const missing = !renderedText ? "입력하면 바로 정리됩니다." : `${fmtNum(stats.paragraphs)}개 문단 준비됨`;
     workflowHintEl.textContent = missing;
   }
 }
@@ -1369,10 +1369,10 @@ function updateRiskPanel(text){
   if(!riskPanelEl) return;
   const found = RISK_TERMS.map(term => ({term, count:countTermInsensitive(text, term)})).filter(x => x.count > 0);
   if(!found.length){
-    riskPanelEl.innerHTML = `<div class="emptyState">위험 문구 후보가 보이지 않습니다.</div>`;
+    riskPanelEl.innerHTML = `<div class="emptyState">위험 문구 없음</div>`;
     return;
   }
-  riskPanelEl.innerHTML = found.map(x => `<button type="button" class="riskChip" onclick="appendDeleteKeyword('${escapeAttr(x.term)}')"><span>${escapeHTML(x.term)}</span><b>${x.count}</b></button>`).join("") + `<div class="miniHelp">칩을 누르면 특정 글자 삭제 키워드에 추가됩니다.</div>`;
+  riskPanelEl.innerHTML = found.map(x => `<button type="button" class="riskChip" onclick="appendDeleteKeyword('${escapeAttr(x.term)}')"><span>${escapeHTML(x.term)}</span><b>${x.count}</b></button>`).join("") + `<div class="miniHelp">누르면 삭제 키워드에 추가됩니다.</div>`;
 }
 function appendDeleteKeyword(term){
   const tokens = splitTokens(deleteContainsTokenEl.value || "");
@@ -1485,7 +1485,7 @@ function updateEpubPreview(){
     if(!chapters.length){
       chapterPreviewEl.innerHTML = `<div class="emptyState">결과가 생기면 챕터 목록이 표시됩니다.</div>`;
     }else{
-      chapterPreviewEl.innerHTML = chapters.slice(0, 30).map((ch, idx) => `<div class="chapterRow"><b>${idx + 1}</b><span>${escapeHTML(ch.title)}</span><em>${fmtNum(stripHTMLTags(ch.body).length)}자</em></div>`).join("") + (chapters.length > 30 ? `<div class="miniHelp">외 ${chapters.length - 30}개 챕터</div>` : "");
+      chapterPreviewEl.innerHTML = chapters.slice(0, 30).map((ch, idx) => `<div class="chapterRow"><b>${idx + 1}</b><span>${escapeHTML(ch.title)}</span><em>${fmtNum(stripHTMLTags(ch.body).length)}자</em></div>`).join("") + (chapters.length > 30 ? `<div class="miniHelp">외 ${chapters.length - 30}개</div>` : "");
     }
   }
   if(epubPreviewEl){
@@ -1493,7 +1493,7 @@ function updateEpubPreview(){
     const previewBody = splitTextIntoParagraphs(first).slice(0, 12).map(paragraphToXhtml).join("\n");
     epubPreviewEl.innerHTML = `
       <div class="previewMeta"><b>${escapeHTML(cfg.title)}</b>${cfg.author ? `<span>${escapeHTML(cfg.author)}</span>` : ""}<span>${chapters.length || 0}개 챕터</span></div>
-      <div class="bookPreview">${previewBody || `<p class="mutedText">미리볼 결과가 없습니다.</p>`}</div>`;
+      <div class="bookPreview">${previewBody || `<p class="mutedText">미리보기 없음</p>`}</div>`;
   }
 }
 function safeFileName(name, ext){
