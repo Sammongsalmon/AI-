@@ -2569,18 +2569,54 @@ function updateChapterDividerPanel(){
   }
   chapterDividerPanelEl.innerHTML = html;
 }
+function makeEditorChapterSeparator(separator){
+  const hr = document.createElement("hr");
+  hr.setAttribute("data-chapter-separator", "true");
+  hr.setAttribute("aria-label", separator || "챕터 구분선");
+  hr.className = "chapter-editor-separator";
+  return hr;
+}
+function insertChapterDividerIntoEditor(current, position, separator){
+  if(!epubEditEditor) return false;
+  const normalize = value => String(value || "").replace(/\s+/g, " ").trim();
+  const nodes = Array.from(epubEditEditor.childNodes).filter(node => {
+    if(node.nodeType === Node.ELEMENT_NODE && node.tagName === "HR") return true;
+    return !!normalize(node.innerText || node.textContent || "");
+  });
+  const wanted = normalize(current && current.text);
+  let target = nodes.find(node => normalize(node.innerText || node.textContent || "") === wanted);
+  if(!target) target = nodes[current ? current.index : -1];
+  const marker = makeEditorChapterSeparator(separator);
+  if(target && target.parentNode){
+    target.parentNode.insertBefore(marker, position === "after" ? target.nextSibling : target);
+  }else{
+    epubEditEditor.appendChild(marker);
+  }
+  return true;
+}
 function insertChapterDividerAtCurrentMatch(){
   const matches = getChapterSearchMatches();
   if(!matches.length){ showToast("구분선을 넣을 문단을 찾지 못했습니다."); return; }
   const current = matches[Math.max(0, Math.min(matches.length - 1, chapterMatchPage || 0))];
   const separator = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "—————";
   const position = chapterPositionEl ? chapterPositionEl.value : "before";
-  const text = getActiveOutputValue();
-  const paras = splitOutputParagraphsWithOffsets(text).map(p => p.text);
-  const insertAt = position === "after" ? current.index + 1 : current.index;
-  paras.splice(insertAt, 0, separator);
-  setActiveOutputValue(paras.join("\n\n"));
   if(chapterSplitModeEl) chapterSplitModeEl.value = "separator";
+
+  if(activeMode === "epubedit" && epubEditEditor){
+    insertChapterDividerIntoEditor(current, position, separator);
+    updateEpubPreview();
+    updateChapterDividerPanel();
+    scheduleAutosave();
+  }else{
+    const text = getActiveOutputValue();
+    const paras = splitOutputParagraphsWithOffsets(text).map(p => p.text);
+    const insertAt = position === "after" ? current.index + 1 : current.index;
+    paras.splice(insertAt, 0, separator);
+    setActiveOutputValue(paras.join("\n\n"));
+    updateEpubPreview();
+    updateChapterDividerPanel();
+    scheduleAutosave();
+  }
   showToast(position === "after" ? "문단 아래에 구분선을 넣었습니다." : "문단 위에 구분선을 넣었습니다.");
 }
 function handleChapterDividerClick(e){
@@ -3528,9 +3564,13 @@ function blockHtmlToText(html){
 }
 function editorHtmlToChapterBlocks(html){
   const temp=document.createElement('div'); temp.innerHTML=html || '';
+  const separator = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "—————";
+  const normalize = value => String(value || "").replace(/\s+/g, " ").trim();
   const blocks=[];
   Array.from(temp.childNodes).forEach(node => {
+    const text = normalize(node.innerText || node.textContent || "");
     if(node.nodeType===Node.ELEMENT_NODE && node.tagName==='HR') blocks.push({sep:true});
+    else if(separator && text === separator) blocks.push({sep:true});
     else if((node.textContent||'').trim() || node.nodeType===Node.ELEMENT_NODE) blocks.push({html: node.outerHTML || escapeHTML(node.textContent||'')});
   });
   return blocks;
