@@ -1,3 +1,4 @@
+
 const input = document.getElementById("inputText");
 const output = document.getElementById("outputText");
 const chatPaste = document.getElementById("chatPaste");

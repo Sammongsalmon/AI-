@@ -260,6 +260,66 @@ details.foldBlock[open] summary:after{transform:rotate(180deg);}
 @media(max-width:860px){.appFrame{padding:14px}.editorGrid,.controlsGrid,.epubGrid,.formGrid{grid-template-columns:1fr}textarea,.pastebox{height:430px}.statsGrid{grid-template-columns:1fr 1fr}.tabs{width:100%;flex-direction:column}.tab{width:100%}}
 
 
+.nextPromptFold{
+  margin-top:12px;
+  border:1px solid var(--line2);
+  border-radius:16px;
+  background:#fff;
+  overflow:hidden;
+  box-shadow:0 6px 18px rgba(63,107,128,.04);
+}
+.nextPromptFold>summary{
+  list-style:none;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:42px;
+  padding:10px 12px;
+  cursor:pointer;
+  color:rgba(31,45,54,.72);
+  font-size:13px;
+  font-weight:620;
+  user-select:none;
+  border-radius:16px;
+}
+.nextPromptFold>summary::-webkit-details-marker{display:none;}
+.nextPromptFold>summary:hover{background:var(--paper2);color:rgba(31,45,54,.84);}
+.nextFoldIcon{
+  width:22px;
+  height:22px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--accentSoft);
+  color:var(--accent);
+  font-size:18px;
+  line-height:1;
+  transition:transform .18s ease, background .18s ease;
+  flex:0 0 auto;
+}
+.nextPromptFold[open]>.nextFoldIcon,
+.nextPromptFold[open]>summary .nextFoldIcon{transform:rotate(90deg);background:#edf7fb;}
+.nextPromptFold .nextPreview,
+.nextPromptFold .nextEmpty{
+  margin:0 12px 12px;
+  border-radius:14px;
+  border:1px solid var(--line2);
+  background:var(--paper2);
+}
+.nextPromptFold .nextEmpty{
+  padding:14px;
+  color:var(--muted);
+  font-size:13px;
+}
+@media(max-width:720px){
+  .nextPromptFold{margin-top:9px;border-radius:13px;}
+  .nextPromptFold>summary{min-height:34px;padding:8px 10px;font-size:11.5px;border-radius:13px;}
+  .nextFoldIcon{width:18px;height:18px;font-size:15px;}
+  .nextPromptFold .nextPreview,.nextPromptFold .nextEmpty{margin:0 9px 9px;border-radius:12px;}
+}
+
+
 /* refined layout and mobile polish */
 .flowItem{border:1px solid var(--line2);text-align:left;width:100%;font-family:inherit;cursor:pointer;appearance:none;}
 .flowItem:hover{background:var(--paper2);transform:translateY(-1px)}
@@ -434,59 +494,10 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
 .blogMini{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:10px 22px;justify-content:center;}
 .softMini{background:#edf7fb;border:1px solid #d6edf4;border-radius:14px;padding:10px 18px;justify-content:center;}
 .customQuoteBox{display:grid;gap:8px;color:var(--muted);font-weight:650;margin-top:12px;}
-.customQuoteBox textarea{min-height:96px;resize:vertical;border:1px solid var(--line);border-radius:14px;padding:11px 12px;background:#fff;color:var(--ink);font:13px/1.55 "Pretendard Variable",Pretendard,"Noto Sans KR",sans-serif;}
+.customQuoteBox textarea{height:64px;min-height:64px;max-height:64px;resize:none;overflow:hidden;border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:#fff;color:var(--ink);font:13px/1.45 "Pretendard Variable",Pretendard,"Noto Sans KR",sans-serif;}
 .downloadHint{display:block;flex-basis:100%;font-size:12px;color:var(--muted);margin-top:-2px;}
 .epubToolStack input[type="text"],.epubToolStack input[type="search"],.epubToolStack input[type="number"],.epubToolStack textarea{font-family:inherit;width:100%;}
 @media(max-width:720px){.quotePresetBtn{min-height:66px;padding:12px}.fileNameText{max-width:130px}}
-
-
-/* final layout fix: filename, excerpt fold, aligned editors, mobile scale */
-.editorGrid{align-items:stretch;}
-.editorBox{height:100%;min-height:0;}
-.editorBox textarea[id$="outputText"],
-.editorBox textarea#outputText,
-.editorBox textarea#chatOutputText{height:auto;min-height:420px;flex:1;resize:vertical;}
-#classicPanel .editorGrid > .editorBox:first-child,
-#chatPanel .editorGrid > .editorBox:first-child{display:flex;flex-direction:column;}
-#inputText,#chatPaste{flex:0 0 auto;}
-.filePicker.excerptFold{padding:0;overflow:hidden;background:var(--paper2);}
-.filePicker.excerptFold summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 15px;cursor:pointer;color:var(--sub);font-size:13px;font-weight:650;}
-.filePicker.excerptFold summary::-webkit-details-marker{display:none;}
-.filePicker.excerptFold summary:after{content:"⌄";color:var(--muted);transition:.15s ease;}
-.filePicker.excerptFold[open] summary:after{transform:rotate(180deg);}
-.excerptFoldBody{padding:0 14px 14px;border-top:1px dashed var(--line);}
-.excerptFoldBody .optionRow{margin-top:10px;}
-.downloadNameControl{flex:0 0 300px;max-width:300px;white-space:nowrap;flex-wrap:nowrap;justify-content:flex-start;}
-.downloadNameControl input{width:180px;min-width:0;flex:0 1 180px;}
-.actionDock .btn{white-space:nowrap;}
-@media(max-width:720px){
-  body{font-size:11px;}
-  .appFrame{padding:7px;gap:8px;}
-  .canvas{padding:8px 6px;}
-  .card{padding:11px;border-radius:16px;}
-  .hero{padding:13px;}
-  h1,.hero h1{font-size:15px;}
-  .sectionTitle{font-size:12px;}
-  .sectionDesc,.hint,.miniHelp,.reviewMeta,.downloadHint,.editorLabel,.filePicker.excerptFold summary{font-size:9px;line-height:1.45;}
-  .btn,.toggle,.control,.tab,.flowItem,.badge,.saveBadge,.reviewChoice,.miniChoiceBtn{font-size:9.5px !important;min-height:27px !important;padding:5px 7px !important;border-radius:10px !important;}
-  .btn.primary{box-shadow:none;}
-  .control{gap:5px;}
-  input[type="text"],input[type="search"],input[type="number"],input[type="email"],select{font-size:10px !important;min-height:26px !important;padding:5px 7px !important;border-radius:9px !important;}
-  textarea,.pastebox,.epubRichEditor{font-size:10px !important;line-height:1.62;padding:10px !important;border-radius:13px !important;}
-  textarea,.pastebox{height:300px;min-height:260px;}
-  .editorBox textarea[id$="outputText"],.editorBox textarea#outputText,.editorBox textarea#chatOutputText{min-height:260px;}
-  details.foldBlock summary{font-size:11px !important;padding:9px 10px !important;}
-  .blockBody{padding:0 10px 10px;max-height:430px;}
-  .actionDock{gap:5px;margin-top:10px;padding-top:10px;}
-  .downloadNameControl{flex:0 0 210px;max-width:210px;}
-  .downloadNameControl input{width:120px;flex-basis:120px;}
-  .filePicker label.prettyFile,.prettyFile,.fileControl{min-height:27px;padding:5px 7px;border-radius:10px;font-size:9.5px;}
-  .fileButtonText:before{width:14px;height:14px;font-size:10px;}
-  .fileNameText{font-size:9px;max-width:90px;}
-  .navIconBtn{width:24px !important;height:24px !important;font-size:14px !important;}
-  .previewText{font-size:10px;line-height:1.62;}
-  .tabs{gap:5px;padding:4px;border-radius:12px;}
-}
 
 </style>
 </head>
@@ -539,18 +550,14 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
       <div class="panel" id="classicPanel">
         <div class="editorGrid">
           <div class="editorBox"><div class="editorLabel"><span>원본 로그</span><span>*지문* / 대사</span></div>
-            <details class="filePicker excerptFold">
-              <summary><span>파일에서 발췌</span><span class="fileNameText" id="classicFileName">선택된 파일 없음</span></summary>
-              <div class="excerptFoldBody">
-                <label class="prettyFile"><span class="fileButtonText">파일 선택</span><span class="fileNameText">MHT · HTML · TXT · Markdown</span><input type="file" id="classicFileInput" accept=".mht,.mhtml,.html,.htm,.txt,.md,.markdown"></label>
-                <div class="optionRow compactControls">
-                  <span class="control">시작 문장 <input id="excerptStartText" type="text" placeholder="발췌 시작 문장"></span>
-                  <span class="control">끝 문장 <input id="excerptEndText" type="text" placeholder="여기까지 발췌"></span>
-                  <button type="button" class="btn subtle" onclick="applyClassicExcerpt()">범위 적용</button>
-                </div>
-                <div class="hint">MHT/HTML/TXT/Markdown 파일에서 필요한 구간만 넣을 수 있습니다.</div>
+            <div class="filePicker"><label class="prettyFile"><span class="fileButtonText">파일에서 발췌</span><span class="fileNameText" id="classicFileName">선택된 파일 없음</span><input type="file" id="classicFileInput" accept=".mht,.mhtml,.html,.htm,.txt,.md,.markdown"></label>
+              <div class="optionRow compactControls" style="margin-top:10px">
+                <span class="control">시작 문장 <input id="excerptStartText" type="text" placeholder="발췌 시작 문장"></span>
+                <span class="control">끝 문장 <input id="excerptEndText" type="text" placeholder="여기까지 발췌"></span>
+                <button type="button" class="btn subtle" onclick="applyClassicExcerpt()">범위 적용</button>
               </div>
-            </details><textarea id="inputText" placeholder="여기에 로그를 붙여 넣으세요"></textarea></div>
+              <div class="hint">MHT/HTML/TXT/Markdown 파일을 불러온 뒤, 시작/끝 문장으로 필요한 구간만 넣을 수 있습니다.</div>
+            </div><textarea id="inputText" placeholder="여기에 로그를 붙여 넣으세요"></textarea></div>
           <div class="editorBox"><div class="editorLabel"><span>변환 결과</span><span>복사·다운로드 가능</span></div><textarea id="outputText" readonly placeholder="변환 결과"></textarea></div>
         </div>
       </div>
@@ -595,7 +602,7 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
                 <span class="control">색상 <input id="epubEditTextColor" type="color" value="#1f2d36"></span>
                 <label class="fileControl"><span class="fileButtonText">폰트 불러오기</span><span class="fileNameText" id="epubFontFileName">선택 없음</span><input id="epubFontInput" type="file" accept=".ttf,.otf,.woff,.woff2"></label>
               </div>
-              <div class="formatButtonRow"><button type="button" class="btn subtle" onclick="applyEpubTextFormat()">선택/전체 적용</button><button type="button" class="btn subtle" onclick="clearEpubInlineFormat()">서식 제거</button></div>
+              <div class="formatButtonRow"><button type="button" class="btn subtle" onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" onclick="applyEpubTextFormat()">선택/전체 적용</button><button type="button" class="btn subtle" onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" onclick="clearEpubInlineFormat()">서식 제거</button></div>
               <div class="hint">드래그한 부분이 있으면 선택 영역에만, 없으면 원고 전체에 적용합니다.</div>
             </div></details>
           </div>
@@ -842,6 +849,29 @@ let classicLoadedFileText = "";
 let cachedEpubEditFileName = "";
 let cachedEpubFontAsset = null;
 let downloadFileBaseName = "";
+
+
+function wirePrettyFileInputs(){
+  document.querySelectorAll('label.prettyFile, .fileControl').forEach(label => {
+    const fileInput = label.querySelector('input[type="file"]');
+    if(!fileInput || label.dataset.fileWired === '1') return;
+    label.dataset.fileWired = '1';
+    label.setAttribute('tabindex', label.getAttribute('tabindex') || '0');
+    label.setAttribute('role', 'button');
+    label.addEventListener('click', ev => {
+      if(ev.target === fileInput) return;
+      ev.preventDefault();
+      fileInput.click();
+    });
+    label.addEventListener('keydown', ev => {
+      if(ev.key === 'Enter' || ev.key === ' '){
+        ev.preventDefault();
+        fileInput.click();
+      }
+    });
+  });
+}
+wirePrettyFileInputs();
 
 input.addEventListener("input", () => { transformText(); scheduleAutosave(); });
 if(classicFileInput) classicFileInput.addEventListener("change", e => { updateFileNameLabel(classicFileInput, classicFileNameEl); loadClassicFile(); });
@@ -2194,8 +2224,8 @@ function updateDuplicateReviewPanel(groups){
   html += `<div class="reviewNav"><div><div class="reviewTitle">${title}</div><div class="reviewMeta">전체 ${gIdx + 1}/${total} · 검색 결과 ${duplicateGroupPage + 1}/${count} · 후보 ${group.occurrences.length}개</div></div><div class="navButtons"><button type="button" class="navIconBtn" data-dupe-group-page="prev" ${prevGroupDisabled} aria-label="이전 묶음">‹</button><button type="button" class="navIconBtn" data-dupe-group-page="next" ${nextGroupDisabled} aria-label="다음 묶음">›</button></div></div>`;
   const nextUser = occ.nextUserBlock || findNextUserBlockAfter((currentParsedBlocks || []), answer);
   const nextUserHtml = nextUser
-    ? `<details class="nextPromptFold"><summary>》유저 다음 지문</summary><div class="previewText fullPreview nextPreview">${escapeHTML(nextUser.text || "")}</div></details>`
-    : `<details class="nextPromptFold"><summary>》유저 다음 지문</summary><div class="emptyState">다음 유저 지문이 없습니다.</div></details>`;
+    ? `<details class="nextPromptFold"><summary><span class="nextFoldIcon">›</span><span>유저 다음 지문</span></summary><div class="previewText fullPreview nextPreview">${escapeHTML(nextUser.text || "")}</div></details>`
+    : `<details class="nextPromptFold"><summary><span class="nextFoldIcon">›</span><span>유저 다음 지문</span></summary><div class="emptyState nextEmpty">다음 유저 지문이 없습니다.</div></details>`;
   html += `<div class="dupeCompareGrid">`;
   html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">연결 유저 지문</span><span class="pill">${current + 1}/${group.occurrences.length}</span></div><div class="previewText fullPreview">${escapeHTML(occ.promptBlock ? occ.promptBlock.text : "")}</div>${nextUserHtml}</div>`;
   html += `<div class="reviewBlock"><div class="dupeSummary withNav"><span><span class="pill">${escapeHTML(ownerLabel(answer ? answer.owner : ""))}</span><span class="pill">답변 후보 ${current + 1}/${group.occurrences.length}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-dupe-page="prev" data-dupe-key="${escapeAttr(group.key)}" ${prevCandDisabled} aria-label="이전 후보">‹</button><button type="button" class="navIconBtn" data-dupe-page="next" data-dupe-key="${escapeAttr(group.key)}" ${nextCandDisabled} aria-label="다음 후보">›</button></span></div><div class="previewText fullPreview">${escapeHTML(answer ? answer.text : "")}</div></div>`;
@@ -2894,33 +2924,39 @@ function clearAll(){
   chapterMatchPage = 0;
   if(chapterKeywordInputEl) chapterKeywordInputEl.value = "";
   if(chapterOrderInputEl) chapterOrderInputEl.value = "";
+  if(duplicateReviewPanel){ duplicateReviewPanel.innerHTML = ""; duplicateReviewPanel.classList.add("hidden"); }
+  if(containsReviewPanel){ containsReviewPanel.innerHTML = ""; containsReviewPanel.classList.add("hidden"); }
+  if(oocReviewPanel){ oocReviewPanel.innerHTML = ""; oocReviewPanel.classList.add("hidden"); }
+
   if(activeMode === "epubedit"){
+    if(epubEditEditor){ epubEditEditor.innerHTML = ""; epubEditEditor.scrollTop = 0; }
+    if(epubEditFileInput) epubEditFileInput.value = "";
+    if(epubEditFileNameEl) epubEditFileNameEl.textContent = "선택된 파일 없음";
+    cachedEpubEditFileName = "";
+    savedEditorRange = null;
     lastStructuredItems = [];
     updateEpubPreview();
-    updateResultStats([], [], epubEditEditor ? editorPlainText(epubEditEditor) : "");
-    return;
+    updateResultStats([], [], "");
   }else if(activeMode === "chat"){
-    chatPaste.innerHTML="";
-    chatOutput.value="";
-    chatOutput.scrollTop = 0;
-    chatFileInput.value="";
-    duplicateReviewPanel.innerHTML = "";
-    duplicateReviewPanel.classList.add("hidden");
-    containsReviewPanel.innerHTML = "";
-    containsReviewPanel.classList.add("hidden");
-    if(oocReviewPanel){ oocReviewPanel.innerHTML = ""; oocReviewPanel.classList.add("hidden"); }
+    if(chatPaste) chatPaste.innerHTML="";
+    if(chatOutput){ chatOutput.value=""; chatOutput.scrollTop = 0; }
+    if(chatFileInput) chatFileInput.value="";
+    if(chatFileNameEl) chatFileNameEl.textContent = "선택된 파일 없음";
+    lastStructuredItems = [];
+    transformText();
+    updateResultStats([], [], getActiveOutputValue());
   }else{
-    input.value="";
-    output.value="";
-    output.scrollTop = 0;
-    duplicateReviewPanel.innerHTML = "";
-    duplicateReviewPanel.classList.add("hidden");
-    containsReviewPanel.innerHTML = "";
-    containsReviewPanel.classList.add("hidden");
-    if(oocReviewPanel){ oocReviewPanel.innerHTML = ""; oocReviewPanel.classList.add("hidden"); }
+    if(input) input.value="";
+    if(output){ output.value=""; output.scrollTop = 0; }
+    if(classicFileInput) classicFileInput.value = "";
+    if(classicFileNameEl) classicFileNameEl.textContent = "선택된 파일 없음";
+    if(excerptStartTextEl) excerptStartTextEl.value = "";
+    if(excerptEndTextEl) excerptEndTextEl.value = "";
+    classicLoadedFileText = "";
+    lastStructuredItems = [];
+    transformText();
+    updateResultStats([], [], getActiveOutputValue());
   }
-  transformText();
-  updateResultStats([], [], getActiveOutputValue());
   updateEpubPreview();
   updateChapterDividerPanel();
   scheduleAutosave();
@@ -3482,6 +3518,12 @@ function clearSavedPreset(){
   localStorage.removeItem("rofan-cleaner-preset");
   showToast("저장된 프리셋을 삭제했습니다.");
 }
+function updateFileNameLabel(inputEl, labelEl, emptyText){
+  if(!labelEl) return;
+  const file = inputEl && inputEl.files && inputEl.files[0];
+  labelEl.textContent = file ? (file.name || "선택됨") : (emptyText || "선택된 파일 없음");
+}
+
 
 wireAutosave();
 
@@ -3744,46 +3786,29 @@ function replaceSelectionWithHtml(html){
   }
   return true;
 }
-function wrapSelectionWithElement(className){
-  let sel = window.getSelection();
-  if((!sel || sel.rangeCount === 0 || sel.isCollapsed) && savedEditorRange){
-    restoreEditorSelection();
-    sel = window.getSelection();
-  }
-  if(!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
-  const range = sel.getRangeAt(0);
-  if(epubEditEditor && !epubEditEditor.contains(range.commonAncestorContainer)) return false;
-  const block = document.createElement("blockquote");
-  block.className = className;
-  const content = range.extractContents();
-  block.appendChild(content);
-  range.insertNode(block);
-  range.setStartAfter(block);
-  range.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(range);
-  savedEditorRange = range.cloneRange();
-  return true;
+function makeQuoteHtml(type, content){
+  const cls = type === "blog" ? "quoteBlog" : (type === "soft" ? "quoteSoft" : "quotePostype");
+  return `<blockquote class="${cls}">${content}</blockquote>`;
 }
 function getCustomQuoteTemplate(){
   const el = document.getElementById("epubQuoteCustomTemplate");
   return el ? el.value.trim() : "";
 }
 function applyQuoteStyle(type){
+  if(!epubEditEditor) return;
   restoreEditorSelection();
   const selected = getSelectedHtml();
   if(!selected){ showToast("인용할 문장을 드래그하세요."); return; }
-  let ok = false;
+  let html = "";
   if(type === "custom"){
     const tpl = getCustomQuoteTemplate();
     if(!tpl){ showToast("직접 입력 형식을 입력하세요."); return; }
-    const html = tpl.includes("{{content}}") ? tpl.replace(/{{content}}/g, selected) : `${tpl}${selected}`;
-    ok = replaceSelectionWithHtml(html);
+    html = tpl.includes("{{content}}") ? tpl.replace(/{{content}}/g, selected) : `${tpl}${selected}`;
   }else{
-    const cls = type === "blog" ? "quoteBlog" : (type === "soft" ? "quoteSoft" : "quotePostype");
-    ok = wrapSelectionWithElement(cls);
+    html = makeQuoteHtml(type, selected);
   }
-  if(ok){ transformText(); scheduleAutosave(); showToast("인용구를 적용했습니다."); }
+  const ok = replaceSelectionWithHtml(html);
+  if(ok){ rememberEditorSelection(); updateEpubPreview(); scheduleAutosave(); showToast("인용구를 적용했습니다."); }
   else showToast("선택 영역을 다시 드래그해 주세요.");
 }
 function selectionInsideEditor(){
@@ -3794,20 +3819,24 @@ function applyEpubTextFormat(){
   if(!epubEditEditor) return;
   const size = Math.max(8, Math.min(40, parseInt(epubEditFontSizeEl ? epubEditFontSizeEl.value : "15",10) || 15));
   const color = epubEditTextColorEl ? epubEditTextColorEl.value : "#1f2d36";
-  if(selectionInsideEditor() && !window.getSelection().isCollapsed){
-    const selected = getSelectedHtml();
-    replaceSelectionWithHtml(`<span style="font-size:${size}px;color:${color}">${selected}</span>`);
+  restoreEditorSelection();
+  const selected = getSelectedHtml();
+  if(selected){
+    const ok = replaceSelectionWithHtml(`<span style="font-size:${size}px;color:${color}">${selected}</span>`);
+    if(!ok){ epubEditEditor.style.fontSize = size + "px"; epubEditEditor.style.color = color; }
   }else{
     epubEditEditor.style.fontSize = size + "px";
     epubEditEditor.style.color = color;
   }
-  transformText(); scheduleAutosave();
+  rememberEditorSelection(); updateEpubPreview(); scheduleAutosave();
 }
 function clearEpubInlineFormat(){
   if(!epubEditEditor) return;
-  if(selectionInsideEditor() && !window.getSelection().isCollapsed){ document.execCommand("removeFormat", false, null); }
+  restoreEditorSelection();
+  const selected = getSelectedHtml();
+  if(selected){ document.execCommand("removeFormat", false, null); }
   else { epubEditEditor.querySelectorAll("span,font").forEach(n => n.replaceWith(...n.childNodes)); epubEditEditor.style.fontSize=""; epubEditEditor.style.color=""; }
-  transformText(); scheduleAutosave();
+  updateEpubPreview(); scheduleAutosave();
 }
 async function loadEpubFontFile(){
   const file = epubFontInputEl && epubFontInputEl.files && epubFontInputEl.files[0];
