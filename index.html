@@ -61,10 +61,100 @@ h1{margin:0 0 8px 0;font-size:22px;}
 .toolbar{
   display:flex;
   flex-wrap:wrap;
-  gap:12px;
+  gap:10px;
   margin-bottom:14px;
   align-items:center;
 }
+.optionGroup{
+  width:100%;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#fff;
+  padding:12px;
+  margin:10px 0 12px;
+}
+.optionGroupTitle{
+  font-size:12px;
+  font-weight:700;
+  color:var(--sub);
+  margin:0 0 9px;
+  letter-spacing:-0.01em;
+}
+.optionRow{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+}
+.toggle{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:36px;
+  padding:8px 12px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:#fff;
+  color:var(--sub);
+  font-size:13px;
+  cursor:pointer;
+  user-select:none;
+  transition:background .15s ease,color .15s ease,border-color .15s ease,box-shadow .15s ease;
+}
+.toggle:hover{background:var(--soft);}
+.toggle input[type="checkbox"]{display:none;}
+.toggle:has(input[type="checkbox"]:checked){
+  background:var(--accent);
+  border-color:var(--accent);
+  color:#fff;
+  box-shadow:0 5px 15px rgba(23,24,28,.12);
+}
+.control{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  min-height:36px;
+  padding:6px 10px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff;
+  color:var(--sub);
+  font-size:13px;
+}
+.control input[type="text"]{min-width:160px;}
+.control input[type="color"]{
+  width:32px;
+  height:28px;
+  padding:0;
+  border:0;
+  background:transparent;
+}
+.actionBar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:10px 0 16px;
+}
+.actionButton{
+  min-height:38px;
+  border-radius:999px;
+  font-weight:700;
+}
+.filePicker{
+  width:100%;
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#fafaf8;
+  margin:0 0 10px;
+}
+.filePicker label{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.filePicker input[type="file"]{max-width:100%;}
 .toolbar.extra{
   margin-top:-4px;
   padding:12px;
@@ -89,9 +179,10 @@ button{
 button:hover{background:var(--soft);}
 .grid{
   display:grid;
-  grid-template-columns:1fr 1fr;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:16px;
 }
+.grid > *{min-width:0;}
 textarea,.pastebox{
   width:100%;
   min-height:420px;
@@ -112,6 +203,21 @@ textarea[readonly]{background:#fafaf8;}
   outline:none;
   background:#fff;
   white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}
+.pastebox *{
+  max-width:100% !important;
+  overflow-wrap:anywhere !important;
+  word-break:break-word !important;
+}
+.pastebox img,.pastebox video,.pastebox canvas,.pastebox svg{
+  max-width:100% !important;
+  height:auto !important;
+}
+.pastebox table{
+  table-layout:fixed;
+  width:100%;
 }
 .pastebox:empty::before{
   content:attr(data-placeholder);
@@ -230,7 +336,7 @@ textarea[readonly]{background:#fafaf8;}
 <body>
 <div class="wrap">
   <h1>✍️ 로그 다듬기</h1>
-  <div class="sub">지문(*) 처리 · 로판Ai 채팅방 서식 읽기 · 대사 따옴표 · HTML 제거 · 보호 키워드 · 구분선 정리</div>
+  <div class="sub">지문(*) 처리 · 로판Ai 채팅방 서식 읽기 · 대사 따옴표 · 검토 삭제 · 이름표 · 구분선 정리</div>
 
   <div class="card">
     <div class="tabs" role="tablist" aria-label="다듬기 모드">
@@ -238,50 +344,77 @@ textarea[readonly]{background:#fafaf8;}
       <button type="button" class="tab" data-tab="chat" role="tab" aria-selected="false">로판Ai 전체 채팅방</button>
     </div>
 
-    <div class="toolbar">
-      <label><input type="checkbox" id="removeDetails"> 접힘 토큰(&lt;details&gt;) 제거</label>
-      <label><input type="checkbox" id="removeEmptyLines"> 문단 빈 줄 제거</label>
-      <label><input type="checkbox" id="removeHTML"> HTML 태그 제거</label>
-      <label><input type="checkbox" id="removeDecor"> 구분선/기호만 줄 제거</label>
-
-      <label><input type="checkbox" id="protectEnabled"> 보호 키워드</label>
-      <input id="protectToken" type="text"
-        placeholder="예: 🧷, KEEP, ⚑  (콤마로 구분)"
-        style="min-width:240px;">
-
-      <label>
-        따옴표
-        <select id="quoteStyle">
-          <option value="none">넣지 않음</option>
-          <option value="straight">&quot; &quot;</option>
-          <option value="doubleCurly" selected>“ ”</option>
-          <option value="singleCurly">‘ ’</option>
-        </select>
-      </label>
-
-      <button type="button" onclick="copyResult()">결과 복사</button>
-      <button type="button" onclick="downloadTxt()">TXT 다운로드</button>
-      <button type="button" onclick="clearAll()">초기화</button>
+    <div class="optionGroup">
+      <div class="optionGroupTitle">기본 정리</div>
+      <div class="optionRow">
+        <label class="toggle"><input type="checkbox" id="removeDetails">접힘 토큰 제거</label>
+        <label class="toggle"><input type="checkbox" id="removeEmptyLines">빈 줄 정리</label>
+        <label class="toggle"><input type="checkbox" id="removeHTML">HTML 태그 제거</label>
+        <label class="toggle"><input type="checkbox" id="removeDecor">구분선/기호 줄 제거</label>
+        <label class="toggle"><input type="checkbox" id="protectEnabled">보호 키워드 사용</label>
+        <span class="control">보호어 <input id="protectToken" type="text" placeholder="예: 🧷, KEEP, ⚑"></span>
+      </div>
     </div>
 
-    <div class="toolbar extra hidden" id="chatOptions">
-      <label><input type="checkbox" id="deleteContainsEnabled"> 특정 글자 포함 문단 삭제</label>
-      <input id="deleteContainsToken" type="text"
-        placeholder="예: [시스템], OOC, ⚠  (콤마로 구분)"
-        style="min-width:260px;">
-      <label>
-        처리
-        <select id="deleteContainsMode">
-          <option value="auto" selected>바로 삭제</option>
-          <option value="review">확인 후 선택</option>
-        </select>
-      </label>
-      <label><input type="checkbox" id="removeTables"> 블록/표 제거</label>
-      <label><input type="checkbox" id="labelSpeakers"> 이름으로 구분</label>
-      <input id="userName" type="text" placeholder="내 캐릭터/유저 이름" style="min-width:150px;">
-      <input id="characterName" type="text" placeholder="플레이 캐릭터 이름" style="min-width:150px;">
-      <label><input type="checkbox" id="reviewDuplicates"> 중복 답변 확인 후 선택</label>
-      <span class="hint">로판Ai 탭은 붙여넣은 HTML 서식에서 <i>기울임체</i>를 지문, 기울임이 아닌 문단을 대사로 읽습니다. 이름 구분을 켜면 로판Ai의 입력/답변 구간과 글자색을 이용해 유저/캐릭터 문단을 나눕니다.</span>
+    <div class="optionGroup">
+      <div class="optionGroupTitle">출력</div>
+      <div class="optionRow">
+        <span class="control">따옴표
+          <select id="quoteStyle">
+            <option value="none">넣지 않음</option>
+            <option value="straight">&quot; &quot;</option>
+            <option value="doubleCurly" selected>“ ”</option>
+            <option value="singleCurly">‘ ’</option>
+          </select>
+        </span>
+      </div>
+    </div>
+
+    <div class="optionGroup hidden" id="chatOptions">
+      <div class="optionGroupTitle">로판Ai 전용</div>
+      <div class="optionRow">
+        <label class="toggle"><input type="checkbox" id="deleteContainsEnabled">특정 글자 포함 문단</label>
+        <span class="control">키워드 <input id="deleteContainsToken" type="text" placeholder="예: [시스템], OOC, ⚠"></span>
+        <span class="control">처리
+          <select id="deleteContainsMode">
+            <option value="auto" selected>바로 삭제</option>
+            <option value="review">확인 후 선택</option>
+          </select>
+        </span>
+        <label class="toggle"><input type="checkbox" id="removeTables">블록/표 제거</label>
+        <label class="toggle"><input type="checkbox" id="reviewDuplicates">중복 답변 검토</label>
+      </div>
+      <div class="optionGroupTitle" style="margin-top:12px;">이름표</div>
+      <div class="optionRow">
+        <label class="toggle"><input type="checkbox" id="labelSpeakers">이름으로 구분</label>
+        <span class="control">내 이름 <input id="userName" type="text" placeholder="예: 산야"></span>
+        <span class="control">캐릭터 이름 <input id="characterName" type="text" placeholder="예: 귀인"></span>
+        <span class="control">표시
+          <select id="speakerMarkerPreset">
+            <option value="none">이름만</option>
+            <option value="▪︎" selected>▪︎ 이름</option>
+            <option value="•">• 이름</option>
+            <option value="◆">◆ 이름</option>
+            <option value="custom">직접 입력</option>
+          </select>
+        </span>
+        <span class="control">기호 <input id="speakerMarkerCustom" type="text" placeholder="예: ❖" style="width:90px;min-width:90px;"></span>
+        <span class="control">색상 <input id="speakerLabelColor" type="color" value="#17181c"></span>
+        <span class="control">색상 적용
+          <select id="speakerColorTarget">
+            <option value="none" selected>없음</option>
+            <option value="marker">유니코드만</option>
+            <option value="all">이름표 전체</option>
+          </select>
+        </span>
+      </div>
+      <div class="hint">이름 구분을 켜면 입력/답변 구간과 글자색 단서를 이용해 문단 앞에 이름표를 붙입니다. 색상 적용은 HTML 형태의 span 태그로 출력됩니다.</div>
+    </div>
+
+    <div class="actionBar">
+      <button type="button" class="actionButton" onclick="copyResult()">결과 복사</button>
+      <button type="button" class="actionButton" onclick="downloadTxt()">TXT 다운로드</button>
+      <button type="button" class="actionButton" onclick="clearAll()">초기화</button>
     </div>
 
     <div class="panel" id="classicPanel">
@@ -298,9 +431,9 @@ textarea[readonly]{background:#fafaf8;}
       </div>
       <div class="grid">
         <div>
-          <div class="toolbar" style="margin-top:0;padding-top:0;">
+          <div class="filePicker">
             <label>
-              로판Ai 저장 파일 불러오기
+              <strong>로판Ai 저장 파일 불러오기</strong>
               <input type="file" id="chatFileInput" accept=".mht,.mhtml,.html,.htm">
             </label>
           </div>
@@ -338,6 +471,10 @@ const labelSpeakersEl = document.getElementById("labelSpeakers");
 const userNameEl = document.getElementById("userName");
 const characterNameEl = document.getElementById("characterName");
 const reviewDuplicatesEl = document.getElementById("reviewDuplicates");
+const speakerMarkerPresetEl = document.getElementById("speakerMarkerPreset");
+const speakerMarkerCustomEl = document.getElementById("speakerMarkerCustom");
+const speakerLabelColorEl = document.getElementById("speakerLabelColor");
+const speakerColorTargetEl = document.getElementById("speakerColorTarget");
 const duplicateReviewPanel = document.getElementById("duplicateReviewPanel");
 const containsReviewPanel = document.getElementById("containsReviewPanel");
 const chatOptions = document.getElementById("chatOptions");
@@ -368,13 +505,17 @@ chatPaste.addEventListener("paste", handleRichPaste);
   deleteContainsModeEl,
   removeTablesEl,
   labelSpeakersEl,
-  reviewDuplicatesEl
+  reviewDuplicatesEl,
+  speakerMarkerPresetEl,
+  speakerColorTargetEl
 ].forEach(el => el.addEventListener("change", transformText));
 
 protectTokenEl.addEventListener("input", transformText);
 deleteContainsTokenEl.addEventListener("input", transformText);
 userNameEl.addEventListener("input", transformText);
 characterNameEl.addEventListener("input", transformText);
+speakerMarkerCustomEl.addEventListener("input", transformText);
+speakerLabelColorEl.addEventListener("input", transformText);
 chatFileInput.addEventListener("change", loadChatFile);
 duplicateReviewPanel.addEventListener("change", handleDuplicateReviewChange);
 containsReviewPanel.addEventListener("change", handleContainsReviewChange);
@@ -517,12 +658,34 @@ function getSpeakerName(owner){
   if(owner === "character") return (characterNameEl.value || "").trim() || "캐릭터";
   return "";
 }
-function labelChunk(text, chunk, isDialogue){
-  if(activeMode !== "chat" || !labelSpeakersEl.checked || !chunk.owner) return text;
+function getSpeakerMarker(){
+  const preset = speakerMarkerPresetEl ? speakerMarkerPresetEl.value : "none";
+  if(preset === "none") return "";
+  if(preset === "custom") return (speakerMarkerCustomEl.value || "").trim();
+  return preset;
+}
+function wrapColorHTML(text, color){
+  const safeColor = /^#[0-9a-f]{6}$/i.test(color || "") ? color : "#17181c";
+  return `<span style="color:${safeColor}">${escapeHTML(text)}</span>`;
+}
+function makeSpeakerLabel(chunk){
+  if(activeMode !== "chat" || !labelSpeakersEl.checked || !chunk.owner) return "";
   const name = getSpeakerName(chunk.owner);
-  if(!name) return text;
-  if(isDialogue) return name + ": " + text;
-  return "[" + name + " 지문] " + text;
+  if(!name) return "";
+  const marker = getSpeakerMarker();
+  const colorTarget = speakerColorTargetEl ? speakerColorTargetEl.value : "none";
+  const color = speakerLabelColorEl ? speakerLabelColorEl.value : "#17181c";
+  if(colorTarget === "marker" && marker){
+    return wrapColorHTML(marker, color) + name;
+  }
+  const label = marker + name;
+  if(colorTarget === "all") return wrapColorHTML(label, color);
+  return label;
+}
+function labelChunk(text, chunk, isDialogue){
+  const label = makeSpeakerLabel(chunk);
+  if(!label) return text;
+  return label + "\n" + text;
 }
 
 // ------------------ 로판Ai 저장 파일 불러오기 ------------------
