@@ -1,4 +1,5 @@
 const input = document.getElementById("inputText");
+const inputPreview = document.getElementById("inputTextPreview");
 const output = document.getElementById("outputText");
 const outputPreview = document.getElementById("outputTextPreview");
 const chatPaste = document.getElementById("chatPaste");
@@ -4115,7 +4116,59 @@ function refreshChapterViews(){
   updateChapterDividerPanel();
   requestAnimationFrame(() => { updateEpubPreview(); syncActiveResultHeight(); });
 }
+
+function stripRofanMetaCommentsForDisplay(text){
+  return String(text || "").replace(/<!--\s*rofan:[\s\S]*?-->/gi, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+function htmlFromInputText(text){
+  return htmlFromResultText(stripRofanMetaCommentsForDisplay(text || ""));
+}
+function renderedInputToText(node){
+  if(!node) return "";
+  const clone = node.cloneNode(true);
+  clone.querySelectorAll('.rofanMetaHidden').forEach(el => el.remove());
+  clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+  clone.querySelectorAll('div,p,blockquote,hr').forEach(el => {
+    if(el.tagName === 'HR') el.replaceWith('\n' + (chapterSeparatorEl ? chapterSeparatorEl.value : '—————') + '\n');
+    else el.insertAdjacentText('afterend', '\n\n');
+  });
+  return (clone.textContent || '').replace(/\u00a0/g, ' ').replace(/\n[ \t]+/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+function syncClassicInputPreview(){
+  if(!input || !inputPreview) return;
+  const oldScroll = inputPreview.scrollTop;
+  const html = htmlFromInputText(input.value || "");
+  if(inputPreview.innerHTML !== html) inputPreview.innerHTML = html;
+  inputPreview.scrollTop = oldScroll;
+}
+function setupRenderedClassicInput(){
+  if(!input || !inputPreview || inputPreview.dataset.renderInputWired === '1') return;
+  inputPreview.dataset.renderInputWired = '1';
+  const desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+  if(desc && desc.get && desc.set && !input.dataset.valuePatched){
+    const nativeGet = desc.get.bind(input);
+    const nativeSet = desc.set.bind(input);
+    Object.defineProperty(input, 'value', {
+      configurable:true,
+      get(){ return nativeGet(); },
+      set(v){ nativeSet(v == null ? '' : String(v)); queueMicrotask(syncClassicInputPreview); }
+    });
+    input.dataset.valuePatched = '1';
+  }
+  inputPreview.addEventListener('input', () => {
+    const desc2 = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+    if(desc2 && desc2.set) desc2.set.call(input, renderedInputToText(inputPreview));
+    else input.value = renderedInputToText(inputPreview);
+    if(!isApplyingClassicExcerpt) classicActiveChunks = null;
+    transformText();
+    scheduleAutosave();
+  });
+  inputPreview.addEventListener('scroll', () => scheduleAutosave(), {passive:true});
+  syncClassicInputPreview();
+}
+
 (function applyFinalPatchNow(){
+  setupRenderedClassicInput();
   ensureActiveChapterSettings();
   syncResultPreview(output);
   syncResultPreview(chatOutput);

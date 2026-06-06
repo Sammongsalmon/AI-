@@ -585,6 +585,22 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
 
 
 
+
+/* rendered input editor */
+.rawInputStorage{display:none!important;}
+.renderInputBox{
+  width:100%;max-width:100%;height:520px;min-height:420px;border:1px solid var(--line);border-radius:18px;background:#fff;
+  padding:18px;font-size:14px;line-height:1.78;box-shadow:inset 0 1px 0 rgba(47,42,36,.04);outline:none;
+  overflow:auto;overflow-x:hidden;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;color:var(--ink);
+}
+.renderInputBox:empty:before{content:attr(data-placeholder);color:var(--muted);}
+.renderInputBox span[style*="color"]{font-weight:720;}
+.renderInputBox .rofanMetaHidden{display:none!important;}
+.renderInputBox::-webkit-scrollbar{width:10px;height:10px;}
+.renderInputBox::-webkit-scrollbar-thumb{background:#c8dde7;border-radius:999px;border:2px solid #f7fbfd;}
+.renderInputBox::-webkit-scrollbar-track{background:#f3f8fb;border-radius:999px;}
+@media(max-width:720px){.renderInputBox{height:430px;min-height:360px;font-size:11.2px;line-height:1.72;padding:12px;}}
+
 /* output preview and compact color controls */
 .editorGrid{align-items:stretch;}
 .editorBox.resultBox{align-self:stretch;height:100%;}
@@ -680,7 +696,7 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
                 <button type="button" class="btn subtle" onclick="applyClassicExcerpt()">범위 적용</button>
               </div>
               <div class="hint">MHT/HTML/TXT/Markdown 파일을 불러온 뒤, 시작/끝 문장으로 필요한 구간만 넣을 수 있습니다.</div>
-            </div><textarea id="inputText" placeholder="여기에 로그를 붙여 넣으세요"></textarea></div>
+            </div><textarea id="inputText" class="rawInputStorage" placeholder="여기에 로그를 붙여 넣으세요"></textarea><div id="inputTextPreview" class="renderInputBox" contenteditable="true" spellcheck="false" data-placeholder="여기에 로그를 붙여 넣으세요"></div></div>
           <div class="editorBox resultBox"><div class="editorLabel"><span>변환 결과</span><span>복사·다운로드 가능</span></div><textarea id="outputText" class="rawResultStorage" readonly placeholder="변환 결과"></textarea><div id="outputTextPreview" class="richResultBox" role="textbox" aria-readonly="true" aria-label="변환 결과" data-placeholder="변환 결과"></div></div>
         </div>
       </div>
@@ -885,6 +901,7 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
 <div id="quoteContextMenu" class="quoteContextMenu" hidden><button type="button" id="quoteUnwrapBtn">인용 해제</button></div>
 <script>
 const input = document.getElementById("inputText");
+const inputPreview = document.getElementById("inputTextPreview");
 const output = document.getElementById("outputText");
 const outputPreview = document.getElementById("outputTextPreview");
 const chatPaste = document.getElementById("chatPaste");
@@ -5001,7 +5018,59 @@ function refreshChapterViews(){
   updateChapterDividerPanel();
   requestAnimationFrame(() => { updateEpubPreview(); syncActiveResultHeight(); });
 }
+
+function stripRofanMetaCommentsForDisplay(text){
+  return String(text || "").replace(/<!--\s*rofan:[\s\S]*?-->/gi, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+function htmlFromInputText(text){
+  return htmlFromResultText(stripRofanMetaCommentsForDisplay(text || ""));
+}
+function renderedInputToText(node){
+  if(!node) return "";
+  const clone = node.cloneNode(true);
+  clone.querySelectorAll('.rofanMetaHidden').forEach(el => el.remove());
+  clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+  clone.querySelectorAll('div,p,blockquote,hr').forEach(el => {
+    if(el.tagName === 'HR') el.replaceWith('\n' + (chapterSeparatorEl ? chapterSeparatorEl.value : '—————') + '\n');
+    else el.insertAdjacentText('afterend', '\n\n');
+  });
+  return (clone.textContent || '').replace(/\u00a0/g, ' ').replace(/\n[ \t]+/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+function syncClassicInputPreview(){
+  if(!input || !inputPreview) return;
+  const oldScroll = inputPreview.scrollTop;
+  const html = htmlFromInputText(input.value || "");
+  if(inputPreview.innerHTML !== html) inputPreview.innerHTML = html;
+  inputPreview.scrollTop = oldScroll;
+}
+function setupRenderedClassicInput(){
+  if(!input || !inputPreview || inputPreview.dataset.renderInputWired === '1') return;
+  inputPreview.dataset.renderInputWired = '1';
+  const desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+  if(desc && desc.get && desc.set && !input.dataset.valuePatched){
+    const nativeGet = desc.get.bind(input);
+    const nativeSet = desc.set.bind(input);
+    Object.defineProperty(input, 'value', {
+      configurable:true,
+      get(){ return nativeGet(); },
+      set(v){ nativeSet(v == null ? '' : String(v)); queueMicrotask(syncClassicInputPreview); }
+    });
+    input.dataset.valuePatched = '1';
+  }
+  inputPreview.addEventListener('input', () => {
+    const desc2 = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+    if(desc2 && desc2.set) desc2.set.call(input, renderedInputToText(inputPreview));
+    else input.value = renderedInputToText(inputPreview);
+    if(!isApplyingClassicExcerpt) classicActiveChunks = null;
+    transformText();
+    scheduleAutosave();
+  });
+  inputPreview.addEventListener('scroll', () => scheduleAutosave(), {passive:true});
+  syncClassicInputPreview();
+}
+
 (function applyFinalPatchNow(){
+  setupRenderedClassicInput();
   ensureActiveChapterSettings();
   syncResultPreview(output);
   syncResultPreview(chatOutput);
