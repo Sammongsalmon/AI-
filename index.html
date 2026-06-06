@@ -1957,9 +1957,22 @@ function escapeAttr(str){
   return escapeHTML(str).replace(/`/g,"&#096;");
 }
 function htmlFromResultText(text){
-  let html = escapeHTML(text || "");
-  html = html.replace(/&lt;span\s+style=&quot;color\s*:\s*(#[0-9a-fA-F]{6})&quot;&gt;([\s\S]*?)&lt;\/span&gt;/g, '<span style="color:$1">$2</span>');
-  return html;
+  const escaped = escapeHTML(text || "");
+  // 결과창은 안전하게 escape한 뒤, 이 앱이 만든 제한적인 span 색상 태그만 다시 렌더링합니다.
+  // HTML/Markdown/EPUB 내보내기에는 raw 값이 그대로 쓰입니다.
+  return escaped.replace(/&lt;span\b([\s\S]*?)&gt;([\s\S]*?)&lt;\/span&gt;/gi, (match, rawAttrs, inner) => {
+    const attrs = String(rawAttrs || "");
+    const colorMatch = attrs.match(/color\s*:\s*(#[0-9a-fA-F]{6})/i);
+    const color = colorMatch ? colorMatch[1] : "";
+    const ownerMatch = attrs.match(/data-speaker-owner=&quot;([a-zA-Z_-]+)&quot;/i);
+    const hasSpeakerClass = /speaker-label/i.test(attrs);
+    const attrParts = [];
+    if(hasSpeakerClass) attrParts.push('class="speaker-label"');
+    if(ownerMatch) attrParts.push(`data-speaker-owner="${escapeAttr(ownerMatch[1])}"`);
+    if(color) attrParts.push(`style="color:${color}"`);
+    if(!attrParts.length) return inner;
+    return `<span ${attrParts.join(" ")}>${inner}</span>`;
+  });
 }
 function resultPreviewFor(el){
   if(el === output) return outputPreview;
@@ -1988,6 +2001,20 @@ function setResultOutputScroll(el, value){
   const v = Number(value) || 0;
   if(preview) preview.scrollTop = v;
   if(el) el.scrollTop = v;
+}
+
+function syncActiveResultHeight(){
+  const panel = activeMode === "chat" ? chatPanel : activeMode === "classic" ? classicPanel : null;
+  if(!panel || panel.classList.contains("hidden")) return;
+  const left = panel.querySelector(".editorGrid > .editorBox:not(.resultBox)");
+  const resultBox = panel.querySelector(".editorGrid > .editorBox.resultBox");
+  const preview = resultBox ? resultBox.querySelector(".richResultBox") : null;
+  const label = resultBox ? resultBox.querySelector(".editorLabel") : null;
+  if(!left || !resultBox || !preview) return;
+  const leftHeight = Math.max(360, Math.round(left.getBoundingClientRect().height));
+  const labelHeight = label ? Math.ceil(label.getBoundingClientRect().height) : 0;
+  resultBox.style.minHeight = leftHeight + "px";
+  preview.style.height = Math.max(300, leftHeight - labelHeight - 8) + "px";
 }
 function isItalicElement(el){
   if(!el || el.nodeType !== 1) return false;
@@ -2312,6 +2339,8 @@ function parseRofanChatChunks(root){
   const mergedBlocks = mergeRofanBlocksById(blocks, chunks);
   blocks.splice(0, blocks.length, ...mergedBlocks);
   preserveLeadingCharacterBlocks(blocks, chunks);
+  const responseBlocks = normalizeResponseBlocks(blocks, chunks);
+  blocks.splice(0, blocks.length, ...responseBlocks);
   return {chunks, blocks};
 }
 
@@ -2362,6 +2391,74 @@ function preserveLeadingCharacterBlocks(blocks, chunks){
       slice.forEach(c => { c.owner = "character"; });
     }
   }
+}
+
+function isLikelyChapterSeparatorText(text){
+  const clean = String(text || "").replace(/<[^>]*>/g, "").replace(/\s+/g, "").trim();
+  if(!clean) return false;
+  return /^[\-—―─━_]{3,}$/.test(clean);
+}
+
+function normalizeResponseBlocks(blocks, chunks){
+  if(!Array.isArray(blocks) || !blocks.length) return blocks || [];
+  const sorted = blocks.slice().sort((a,b)=>(a.startChunk||0)-(b.startChunk||0));
+  const grouped = [];
+  let current = null;
+  let seq = 0;
+  const finish = () => {
+    if(!current) return;
+    const related = chunks.slice(current.startChunk, current.endChunk).filter(Boolean);
+    current.text = related.map(c => c.text).filter(Boolean).join("\n\n").trim();
+    const owners = related.map(c => c.owner).filter(Boolean);
+    current.owner = current.owner || owners[0] || "";
+    if(current.text) grouped.push(current);
+    current = null;
+  };
+  sorted.forEach(block => {
+    const start = Math.max(0, block.startChunk || 0);
+    const end = Math.max(start, block.endChunk || start);
+    const related = chunks.slice(start, end).filter(Boolean);
+    const owner = block.owner || (related.find(c => c.owner) || {}).owner || "";
+    const text = related.map(c => c.text).filter(Boolean).join("\n\n").trim();
+    const separator = isLikelyChapterSeparatorText(text);
+    const canMerge = current && !separator && owner && current.owner === owner && current.endChunk === start;
+    if(!canMerge) finish();
+    if(!current){
+      current = {id:`rb${seq++}`, owner, text:"", startChunk:start, endChunk:end};
+    }else{
+      current.endChunk = Math.max(current.endChunk, end);
+    }
+    const id = current.id;
+    for(let i=start; i<end; i++){
+      if(chunks[i]) chunks[i].blockId = id;
+    }
+    if(separator){
+      finish();
+    }
+  });
+  finish();
+  return grouped;
+}
+
+function normalizeChunkResponseBlocks(chunks){
+  if(!Array.isArray(chunks) || !chunks.length) return chunks || [];
+  let seq = 0;
+  let currentId = "";
+  let currentOwner = "";
+  chunks.forEach(chunk => {
+    const owner = chunk.owner || "character";
+    const separator = isLikelyChapterSeparatorText(chunk.text);
+    if(!currentId || separator || owner !== currentOwner){
+      currentId = `md-rb${seq++}`;
+      currentOwner = owner;
+    }
+    chunk.blockId = currentId;
+    if(separator){
+      currentId = "";
+      currentOwner = "";
+    }
+  });
+  return chunks;
 }
 
 // ------------------ 중복/삭제 확인 패널 ------------------
@@ -3107,6 +3204,7 @@ function afterTransform(chunks, blocks, renderedText){
   updateResultStats(chunks || [], blocks || [], renderedText || "");
   updateEpubPreview();
   updateChapterDividerPanel();
+  syncActiveResultHeight();
 }
 function transformText(){
   if(activeMode === "epubedit"){
@@ -3206,7 +3304,7 @@ function getActiveOutput(){
   return output;
 }
 function copyResult(){
-  const value = getActiveOutputValue();
+  const value = getPlainActiveOutputValue();
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(value)
       .then(() => showToast("복사되었습니다."))
@@ -3250,7 +3348,7 @@ function safeDownloadFileName(ext, fallback){
   return safeFileName(currentDownloadBaseName(fallback), ext);
 }
 function downloadTxt(){
-  const blob=new Blob([getActiveOutputValue()],{type:"text/plain;charset=utf-8"});
+  const blob=new Blob([getPlainActiveOutputValue()],{type:"text/plain;charset=utf-8"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
   a.href=url;
@@ -3444,6 +3542,9 @@ function getActiveOutputValue(){
   const el = getActiveOutput();
   return el ? (el.value || "") : "";
 }
+function getPlainActiveOutputValue(){
+  return stripHTMLTags(getActiveOutputValue()).replace(/&nbsp;/gi, " ").trim();
+}
 function setActiveOutputValue(value){
   if(activeMode === "epubedit"){
     if(epubEditEditor) epubEditEditor.innerHTML = plainTextToHtml(value || "");
@@ -3610,6 +3711,16 @@ function renderChapterTocHtml(chapters, compact){
 function splitTextIntoParagraphs(text){
   return String(text || "").replace(/\r/g,"").split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
 }
+function isConfiguredChapterSeparator(text, cfg){
+  const raw = String(text || "");
+  const clean = raw.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").replace(/\s+/g, "").trim();
+  const sep = String((cfg && cfg.separator) || (chapterSeparatorEl && chapterSeparatorEl.value) || "—————").replace(/\s+/g, "").trim();
+  if(!clean || !sep) return false;
+  if(clean === sep) return true;
+  const dashLine = /^[\-—―─━_]{3,}$/;
+  return dashLine.test(clean) && dashLine.test(sep);
+}
+
 function splitTextIntoChapters(text){
   const cfg = getEpubConfig();
   const source = String(text || "").trim();
@@ -3617,9 +3728,18 @@ function splitTextIntoChapters(text){
   const chapters = [];
   const makeTitle = (idx) => getChapterTitle(idx, cfg);
   if(cfg.chapterMode === "separator"){
-    const sep = cfg.separator.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`^\\s*${sep}\\s*$`, "gm");
-    source.split(re).map(s=>s.trim()).filter(Boolean).forEach((body, idx) => chapters.push({title:makeTitle(idx), body}));
+    const paras = splitTextIntoParagraphs(source);
+    let bucket = [];
+    const flush = () => {
+      const body = bucket.join("\n\n").trim();
+      if(body) chapters.push({title:makeTitle(chapters.length), body});
+      bucket = [];
+    };
+    paras.forEach(p => {
+      if(isConfiguredChapterSeparator(p, cfg)) flush();
+      else bucket.push(p);
+    });
+    flush();
   }else if(cfg.chapterMode === "paragraphs"){
     const paras = splitTextIntoParagraphs(source);
     for(let i=0; i<paras.length; i += cfg.chapterSize){
@@ -3650,7 +3770,19 @@ function escapeXML(str){
     .replace(/'/g,"&#39;");
 }
 function restoreAllowedInlineSpans(escaped){
-  return String(escaped || "").replace(/&lt;span style=&quot;color:(#[0-9a-fA-F]{6})&quot;&gt;([\s\S]*?)&lt;\/span&gt;/g, '<span style="color:$1">$2</span>');
+  return String(escaped || "").replace(/&lt;span\b([\s\S]*?)&gt;([\s\S]*?)&lt;\/span&gt;/gi, (match, rawAttrs, inner) => {
+    const attrs = String(rawAttrs || "");
+    const colorMatch = attrs.match(/color\s*:\s*(#[0-9a-fA-F]{6})/i);
+    const color = colorMatch ? colorMatch[1] : "";
+    const ownerMatch = attrs.match(/data-speaker-owner=&quot;([a-zA-Z_-]+)&quot;/i);
+    const hasSpeakerClass = /speaker-label/i.test(attrs);
+    const attrParts = [];
+    if(hasSpeakerClass) attrParts.push('class="speaker-label"');
+    if(ownerMatch) attrParts.push(`data-speaker-owner="${escapeXML(ownerMatch[1])}"`);
+    if(color) attrParts.push(`style="color:${color}"`);
+    if(!attrParts.length) return inner;
+    return `<span ${attrParts.join(" ")}>${inner}</span>`;
+  });
 }
 function paragraphToXhtml(p){
   const lines = String(p || "").split(/\n/).map(line => restoreAllowedInlineSpans(escapeXML(line)));
@@ -3715,8 +3847,25 @@ function shouldKeepSpeakerLabelsForExport(){
   const mode = speakerLabelModeEl ? speakerLabelModeEl.value : "output";
   return mode === "output";
 }
+function mergeStructuredItemsByBlock(items){
+  const out = [];
+  (items || []).forEach((item, idx) => {
+    if(!item || !String(item.text || "").trim()) return;
+    const blockId = item.blockId || ("block-" + idx);
+    const owner = item.owner || "character";
+    const kind = item.kind || "normal";
+    const last = out[out.length - 1];
+    if(last && last.blockId === blockId && last.owner === owner && last.kind === kind){
+      last.text = [last.text, item.text].filter(Boolean).join("\n\n");
+    }else{
+      out.push({blockId, owner, kind, text:item.text || ""});
+    }
+  });
+  return out;
+}
+
 function structuredItemsToHtml(items){
-  return (items || []).map((item, idx) => {
+  return mergeStructuredItemsByBlock(items).map((item, idx) => {
     const owner = escapeAttr(safeMetaValue(item.owner, idx === 0 ? "character" : "character"));
     const kind = escapeAttr(safeMetaValue(item.kind, "normal"));
     const blockId = escapeAttr(safeMetaValue(item.blockId, "block-" + idx));
@@ -3726,7 +3875,7 @@ function structuredItemsToHtml(items){
   }).filter(Boolean).join("\n");
 }
 function structuredItemsToMarkdown(items){
-  return (items || []).map((item, idx) => {
+  return mergeStructuredItemsByBlock(items).map((item, idx) => {
     const owner = safeMetaValue(item.owner, idx === 0 ? "character" : "character");
     const kind = safeMetaValue(item.kind, "normal");
     const blockId = safeMetaValue(item.blockId, "block-" + idx);
@@ -3780,7 +3929,7 @@ function parseStructuredMarkdownToChunks(raw){
       chunks.push({id:'mdc-' + (seq++), kind:it.kind || 'normal', owner:it.owner || 'character', text:p, color:'', fromTable:false, fromDetails:false, blockId:it.block || ('md-' + seq)});
     });
   });
-  return chunks.length ? chunks : null;
+  return chunks.length ? normalizeChunkResponseBlocks(chunks) : null;
 }
 
 function structuredMarkdownToHtml(raw){
@@ -4577,10 +4726,12 @@ function chapterBodyToXhtml(ch){
   return textToXhtmlBody(ch.body || "");
 }
 
+window.addEventListener("resize", () => requestAnimationFrame(syncActiveResultHeight));
 restoreSavedWork();
 refreshColorWidgets();
 syncResultPreview(output);
 syncResultPreview(chatOutput);
+requestAnimationFrame(syncActiveResultHeight);
 
 </script>
 </body>
