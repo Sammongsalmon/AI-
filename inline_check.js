@@ -1,7 +1,9 @@
 const input = document.getElementById("inputText");
 const output = document.getElementById("outputText");
+const outputPreview = document.getElementById("outputPreview");
 const chatPaste = document.getElementById("chatPaste");
 const chatOutput = document.getElementById("chatOutputText");
+const chatOutputPreview = document.getElementById("chatOutputPreview");
 const chatFileInput = document.getElementById("chatFileInput");
 const classicFileInput = document.getElementById("classicFileInput");
 const excerptStartTextEl = document.getElementById("excerptStartText");
@@ -51,6 +53,8 @@ const oocCascadeModeEl = document.getElementById("oocCascadeMode");
 const speakerMarkerPresetEl = document.getElementById("speakerMarkerPreset");
 const speakerMarkerCustomEl = document.getElementById("speakerMarkerCustom");
 const speakerLabelColorEl = document.getElementById("speakerLabelColor");
+const speakerUserLabelColorEl = document.getElementById("speakerUserLabelColor");
+const speakerCharacterLabelColorEl = document.getElementById("speakerCharacterLabelColor");
 const speakerColorTargetEl = document.getElementById("speakerColorTarget");
 const speakerLabelModeEl = document.getElementById("speakerLabelMode");
 const resultStatsEl = document.getElementById("resultStats");
@@ -234,7 +238,7 @@ chatPaste.addEventListener("input", () => {
   scheduleAutosave();
 });
 chatPaste.addEventListener("paste", handleRichPaste);
-[output, chatOutput].forEach(el => {
+[output, chatOutput, outputPreview, chatOutputPreview].forEach(el => {
   if(!el) return;
   el.addEventListener("scroll", () => scheduleAutosave(), {passive:true});
 });
@@ -264,7 +268,7 @@ deleteContainsTokenEl.addEventListener("input", transformText);
 userNameEl.addEventListener("input", transformText);
 characterNameEl.addEventListener("input", transformText);
 speakerMarkerCustomEl.addEventListener("input", transformText);
-speakerLabelColorEl.addEventListener("input", transformText);
+[speakerLabelColorEl, speakerUserLabelColorEl, speakerCharacterLabelColorEl].forEach(el => { if(el) el.addEventListener("input", transformText); });
 if(speakerLabelModeEl) speakerLabelModeEl.addEventListener("change", transformText);
 [
   epubTitleEl, epubSubtitleEl, epubAuthorEl, epubSeriesEl, epubVolumeEl,
@@ -372,10 +376,10 @@ function collectWorkValues(){
     cachedEpubFontAsset,
     downloadFileBaseName,
     classicOutput: output ? output.value : "",
-    classicOutputScroll: output ? output.scrollTop : 0,
+    classicOutputScroll: (outputPreview || output) ? (outputPreview || output).scrollTop : 0,
     chatHTML: chatPaste ? chatPaste.innerHTML : "",
     chatOutputValue: chatOutput ? chatOutput.value : "",
-    chatOutputScroll: chatOutput ? chatOutput.scrollTop : 0,
+    chatOutputScroll: (chatOutputPreview || chatOutput) ? (chatOutputPreview || chatOutput).scrollTop : 0,
     cachedChatFileName,
     options: collectPresetValues(),
     duplicateDecisions,
@@ -452,7 +456,9 @@ function restoreOutputScrollFromState(state){
   if(!state) return;
   requestAnimationFrame(() => {
     if(output && Number.isFinite(Number(state.classicOutputScroll))) output.scrollTop = Number(state.classicOutputScroll) || 0;
+    if(outputPreview && Number.isFinite(Number(state.classicOutputScroll))) outputPreview.scrollTop = Number(state.classicOutputScroll) || 0;
     if(chatOutput && Number.isFinite(Number(state.chatOutputScroll))) chatOutput.scrollTop = Number(state.chatOutputScroll) || 0;
+    if(chatOutputPreview && Number.isFinite(Number(state.chatOutputScroll))) chatOutputPreview.scrollTop = Number(state.chatOutputScroll) || 0;
     if(epubEditEditor && Number.isFinite(Number(state.epubEditScroll))) epubEditEditor.scrollTop = Number(state.epubEditScroll) || 0;
   });
 }
@@ -516,8 +522,8 @@ async function restoreSavedWork(){
   isRestoringWork = false;
   transformText();
   if(state){
-    if(output && state.classicOutput) output.value = state.classicOutput;
-    if(chatOutput && state.chatOutputValue) chatOutput.value = state.chatOutputValue;
+    if(output && state.classicOutput) setOutputValue("classic", state.classicOutput);
+    if(chatOutput && state.chatOutputValue) setOutputValue("chat", state.chatOutputValue);
     restoreOutputScrollFromState(state);
   }
   updateResultStats([], [], getActiveOutputValue());
@@ -754,9 +760,19 @@ function getSpeakerMarker(){
   if(preset === "custom") return (speakerMarkerCustomEl.value || "").trim();
   return preset;
 }
-function wrapColorHTML(text, color){
-  const safeColor = /^#[0-9a-f]{6}$/i.test(color || "") ? color : "#17181c";
-  return `<span style="color:${safeColor}">${escapeHTML(text)}</span>`;
+function normalizeHexColor(value, fallback){
+  const v = String(value || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(v) ? v : (fallback || "#17181c");
+}
+function speakerColorForOwner(owner){
+  if(owner === "user" && speakerUserLabelColorEl) return normalizeHexColor(speakerUserLabelColorEl.value, "#4f849c");
+  if(owner === "character" && speakerCharacterLabelColorEl) return normalizeHexColor(speakerCharacterLabelColorEl.value, "#8a6aa5");
+  return normalizeHexColor(speakerLabelColorEl ? speakerLabelColorEl.value : "", "#4f849c");
+}
+function wrapColorHTML(text, color, extraAttrs){
+  const safeColor = normalizeHexColor(color, "#17181c");
+  const attrs = extraAttrs ? " " + String(extraAttrs).trim() : "";
+  return `<span${attrs} style="color:${safeColor}">${escapeHTML(text)}</span>`;
 }
 function makeSpeakerLabel(chunk){
   if(!(activeMode === "chat" || activeMode === "classic")) return "";
@@ -765,13 +781,14 @@ function makeSpeakerLabel(chunk){
   if(!name) return "";
   const marker = getSpeakerMarker();
   const colorTarget = speakerColorTargetEl ? speakerColorTargetEl.value : "none";
-  const color = speakerLabelColorEl ? speakerLabelColorEl.value : "#17181c";
+  const color = speakerColorForOwner(chunk.owner);
+  const ownerAttr = `class="speaker-label" data-speaker-owner="${escapeAttr(chunk.owner)}"`;
   if(colorTarget === "marker" && marker){
-    return wrapColorHTML(marker, color) + name;
+    return wrapColorHTML(marker, color, ownerAttr + ' data-speaker-part="marker"') + escapeHTML(name);
   }
   const label = marker + name;
-  if(colorTarget === "all") return wrapColorHTML(label, color);
-  return label;
+  if(colorTarget === "all") return wrapColorHTML(label, color, ownerAttr);
+  return escapeHTML(label);
 }
 function labelChunk(text, chunk, shouldLabel){
   if(!shouldLabel) return text;
@@ -779,6 +796,44 @@ function labelChunk(text, chunk, shouldLabel){
   if(!label) return text;
   return label + "\n" + text;
 }
+
+function restoreTrustedInlineMarkup(escaped){
+  return String(escaped || "")
+    .replace(/&lt;span((?:\s+(?:class|data-speaker-owner|data-speaker-part)=&quot;[^&quot;]*&quot;)*)\s+style=&quot;color:(#[0-9a-fA-F]{6})&quot;&gt;([\s\S]*?)&lt;\/span&gt;/g, (_m, attrs, color, inner) => `<span${attrs.replace(/&quot;/g, '"')} style="color:${color}">${inner}</span>`)
+    .replace(/&lt;span\s+style=&quot;color:(#[0-9a-fA-F]{6})&quot;&gt;([\s\S]*?)&lt;\/span&gt;/g, '<span style="color:$1">$2</span>');
+}
+function renderOutputHtml(value){
+  return restoreTrustedInlineMarkup(escapeHTML(String(value || ""))).replace(/\n/g, "<br>") || "";
+}
+function setOutputValue(mode, value){
+  const text = String(value || "");
+  if(mode === "chat"){
+    if(chatOutput) chatOutput.value = text;
+    if(chatOutputPreview) chatOutputPreview.innerHTML = renderOutputHtml(text);
+  }else{
+    if(output) output.value = text;
+    if(outputPreview) outputPreview.innerHTML = renderOutputHtml(text);
+  }
+  syncOutputPreviewHeights();
+}
+function syncOutputPreviewHeights(){
+  requestAnimationFrame(() => {
+    const pairs = [
+      {box: classicPanel, input: input, output: outputPreview || output},
+      {box: chatPanel, input: chatPaste, output: chatOutputPreview || chatOutput}
+    ];
+    pairs.forEach(({box,input,output}) => {
+      if(!box || box.classList.contains("hidden") || !input || !output) return;
+      const leftBox = input.closest ? input.closest(".editorBox") : null;
+      const outRect = output.getBoundingClientRect();
+      const leftRect = leftBox ? leftBox.getBoundingClientRect() : input.getBoundingClientRect();
+      const height = Math.max(input.offsetHeight || 420, Math.round(leftRect.bottom - outRect.top));
+      output.style.minHeight = height + "px";
+      output.style.height = height + "px";
+    });
+  });
+}
+window.addEventListener("resize", syncOutputPreviewHeights);
 
 // ------------------ 로판Ai 저장 파일 불러오기 ------------------
 function activateChatTab(){
@@ -2209,7 +2264,7 @@ function transformText(){
     });
     const rendered = renderedPack.text;
     lastStructuredItems = renderedPack.items || [];
-    chatOutput.value = rendered;
+    setOutputValue("chat", rendered);
     afterTransform(parsed.chunks, parsed.blocks, rendered);
     return;
   }
@@ -2259,7 +2314,7 @@ function transformText(){
   });
   const rendered = renderedPack.text;
   lastStructuredItems = renderedPack.items || [];
-  output.value = rendered;
+  setOutputValue("classic", rendered);
   afterTransform(chunks, [], rendered);
 }
 
@@ -2353,7 +2408,8 @@ function clearAll(){
     updateResultStats([], [], "");
   }else if(activeMode === "chat"){
     if(chatPaste) chatPaste.innerHTML="";
-    if(chatOutput){ chatOutput.value=""; chatOutput.scrollTop = 0; }
+    if(chatOutput){ setOutputValue("chat", ""); chatOutput.scrollTop = 0; }
+    if(chatOutputPreview) chatOutputPreview.scrollTop = 0;
     if(chatFileInput) chatFileInput.value="";
     if(chatFileNameEl) chatFileNameEl.textContent = "선택된 파일 없음";
     lastStructuredItems = [];
@@ -2361,7 +2417,8 @@ function clearAll(){
     updateResultStats([], [], getActiveOutputValue());
   }else{
     if(input) input.value="";
-    if(output){ output.value=""; output.scrollTop = 0; }
+    if(output){ setOutputValue("classic", ""); output.scrollTop = 0; }
+    if(outputPreview) outputPreview.scrollTop = 0;
     if(classicFileInput) classicFileInput.value = "";
     if(classicFileNameEl) classicFileNameEl.textContent = "선택된 파일 없음";
     if(excerptStartTextEl) excerptStartTextEl.value = "";
@@ -2519,7 +2576,8 @@ function setActiveOutputValue(value){
   }
   const el = getActiveOutput();
   if(!el) return;
-  el.value = value;
+  if(activeMode === "chat") setOutputValue("chat", value);
+  else setOutputValue("classic", value);
   updateResultStats([], [], value || "");
   updateEpubPreview();
   updateChapterDividerPanel();
@@ -2604,19 +2662,22 @@ function insertChapterDividerAtCurrentMatch(){
 
   if(activeMode === "epubedit" && epubEditEditor){
     insertChapterDividerIntoEditor(current, position, separator);
-    updateEpubPreview();
-    updateChapterDividerPanel();
-    scheduleAutosave();
   }else{
     const text = getActiveOutputValue();
     const paras = splitOutputParagraphsWithOffsets(text).map(p => p.text);
-    const insertAt = position === "after" ? current.index + 1 : current.index;
+    const insertAt = Math.max(0, Math.min(paras.length, position === "after" ? current.index + 1 : current.index));
     paras.splice(insertAt, 0, separator);
     setActiveOutputValue(paras.join("\n\n"));
-    updateEpubPreview();
-    updateChapterDividerPanel();
-    scheduleAutosave();
+    if(Array.isArray(lastStructuredItems) && lastStructuredItems.length){
+      const newItem = {text: separator, owner:"character", kind:"scene", blockId:"chapter-separator-" + Date.now()};
+      const itemInsertAt = Math.max(0, Math.min(lastStructuredItems.length, insertAt));
+      lastStructuredItems.splice(itemInsertAt, 0, newItem);
+    }
   }
+  updateEpubPreview();
+  updateChapterDividerPanel();
+  requestAnimationFrame(() => { updateEpubPreview(); updateChapterDividerPanel(); });
+  scheduleAutosave();
   showToast(position === "after" ? "문단 아래에 구분선을 넣었습니다." : "문단 위에 구분선을 넣었습니다.");
 }
 function handleChapterDividerClick(e){
@@ -2711,7 +2772,7 @@ function escapeXML(str){
     .replace(/'/g,"&#39;");
 }
 function restoreAllowedInlineSpans(escaped){
-  return String(escaped || "").replace(/&lt;span style=&quot;color:(#[0-9a-fA-F]{6})&quot;&gt;([\s\S]*?)&lt;\/span&gt;/g, '<span style="color:$1">$2</span>');
+  return restoreTrustedInlineMarkup(escaped);
 }
 function paragraphToXhtml(p){
   const lines = String(p || "").split(/\n/).map(line => restoreAllowedInlineSpans(escapeXML(line)));
@@ -2767,21 +2828,31 @@ function safeMetaValue(value, fallback){
   const v = String(value || "").replace(/[;\n>]/g, "").trim();
   return v || fallback;
 }
+function shouldStripSpeakerLabelsForExport(){
+  const mode = epubTextModeEl ? epubTextModeEl.value : "current";
+  const labelMode = speakerLabelModeEl ? speakerLabelModeEl.value : "output";
+  return mode === "removeLabels" || mode === "novel" || labelMode === "hideInEpub" || labelMode === "reviewOnly";
+}
 function stripCurrentSpeakerLabelsFromItemText(text){
-  return stripSpeakerLabelLines(String(text || "")).trim();
+  const value = String(text || "");
+  return (shouldStripSpeakerLabelsForExport() ? stripSpeakerLabelLines(value) : value).trim();
 }
 function structuredItemsToHtml(items){
+  const sep = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "—————";
   return (items || []).map((item, idx) => {
+    if(String(item.text || "").trim() === sep) return `<p data-chapter-separator="true">${escapeHTML(sep)}</p>`;
     const owner = escapeAttr(safeMetaValue(item.owner, idx === 0 ? "character" : "character"));
     const kind = escapeAttr(safeMetaValue(item.kind, "normal"));
     const blockId = escapeAttr(safeMetaValue(item.blockId, "block-" + idx));
     const cleanText = stripCurrentSpeakerLabelsFromItemText(item.text || "");
-    const paragraphs = String(cleanText || "").split(/\n+/).filter(Boolean).map(t => `<p>${escapeHTML(t)}</p>`).join("\n");
+    const paragraphs = String(cleanText || "").split(/\n+/).filter(Boolean).map(t => `<p>${restoreTrustedInlineMarkup(escapeHTML(t))}</p>`).join("\n");
     return paragraphs ? `<div class="rofan-block" data-block-id="${blockId}" data-owner="${owner}" data-kind="${kind}">${paragraphs}</div>` : "";
   }).filter(Boolean).join("\n");
 }
 function structuredItemsToMarkdown(items){
+  const sep = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "—————";
   return (items || []).map((item, idx) => {
+    if(String(item.text || "").trim() === sep) return sep;
     const owner = safeMetaValue(item.owner, idx === 0 ? "character" : "character");
     const kind = safeMetaValue(item.kind, "normal");
     const blockId = safeMetaValue(item.blockId, "block-" + idx);
@@ -2905,9 +2976,7 @@ function buildStandaloneHTML(){
   const cfg = getEpubConfig();
   const chapters = getExportChapters();
   const toc = chapters.map((ch, idx) => `<li><a href="#ch${idx+1}">${escapeXML(ch.title)}</a></li>`).join("\n");
-  const body = (activeMode !== "epubedit" && lastStructuredItems && lastStructuredItems.length)
-    ? `<section id="ch1"><h1>${escapeXML(cfg.title)}</h1>${structuredItemsToHtml(lastStructuredItems)}</section>`
-    : chapters.map((ch, idx) => `<section id="ch${idx+1}"><h1>${escapeXML(ch.title)}</h1>${chapterBodyToXhtml(ch)}</section>`).join("\n");
+  const body = chapters.map((ch, idx) => `<section id="ch${idx+1}"><h1>${escapeXML(ch.title)}</h1>${chapterBodyToXhtml(ch)}</section>`).join("\n");
   return `<!doctype html><html lang="${escapeXML(cfg.language)}"><head><meta charset="utf-8"><title>${escapeXML(cfg.title)}</title><style>${getEpubCss()} nav{margin-bottom:2rem;padding:1rem;border:1px solid #ddd;border-radius:12px;} section{max-width:720px;margin:0 auto 3rem;}</style></head><body><nav><strong>목차</strong><ol>${toc}</ol></nav>${body}</body></html>`;
 }
 function downloadHtml(){
@@ -3069,7 +3138,7 @@ function createZipBlob(entries, type){
   return new Blob(chunks, {type:type || "application/zip"});
 }
 function collectPresetValues(){
-  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode","epubEditTextColor","epubQuoteColor","epubEditTextColorR","epubEditTextColorG","epubEditTextColorB","epubQuoteColorR","epubQuoteColorG","epubQuoteColorB"];
+  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerUserLabelColor","speakerCharacterLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode","epubEditTextColor","epubQuoteColor","epubEditTextColorR","epubEditTextColorG","epubEditTextColorB","epubQuoteColorR","epubQuoteColorG","epubQuoteColorB"];
   const data = {};
   ids.forEach(id => {
     const el = document.getElementById(id);
