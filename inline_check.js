@@ -140,7 +140,8 @@ if(epubEditEditor) epubEditEditor.addEventListener("input", () => { updateResult
 if(epubEditEditor) epubEditEditor.addEventListener("scroll", () => scheduleAutosave(), {passive:true});
 if(epubEditFileInput) epubEditFileInput.addEventListener("change", e => { updateFileNameLabel(epubEditFileInput, epubEditFileNameEl); loadEpubEditFile(); });
 if(epubEditEditor){
-  ["mouseup","keyup","touchend"].forEach(ev => epubEditEditor.addEventListener(ev, rememberEditorSelection));
+  ["mouseup","keyup","touchend","pointerup"].forEach(ev => epubEditEditor.addEventListener(ev, rememberEditorSelection));
+  document.addEventListener("selectionchange", () => { if(activeMode === "epubedit") rememberEditorSelection(); });
   epubEditEditor.addEventListener("input", () => { rememberEditorSelection(); scheduleAutosave(); updateEpubPreview(); });
 }
 if(epubFontInputEl) epubFontInputEl.addEventListener("change", e => { updateFileNameLabel(epubFontInputEl, epubFontFileNameEl, "선택 없음"); loadEpubFontFile(); });
@@ -749,38 +750,44 @@ async function loadChatFile(){
 
     if(isZipBytes(bytes) || /\.zip$/i.test(lowerName)){
       chatFileInput.value = "";
-      showToast("ZIP 파일은 변환 대상이 아닙니다. 로판Ai 저장 파일(.mht/.mhtml/.html)을 선택해 주세요.");
+      showToast("ZIP 파일은 변환 대상이 아닙니다. MHT/HTML/Markdown/TXT 파일을 선택해 주세요.");
       return;
     }
 
     const raw = decodeBytesSmart(bytes);
     const looksMHT = /\.(mht|mhtml)$/i.test(lowerName) || /MIME-Version:\s*1\.0/i.test(raw) || /Content-Type:\s*multipart\/related/i.test(raw);
     const looksHTML = /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span)\b/i.test(raw);
-    const allowedExt = /\.(mht|mhtml|html|htm)$/i.test(lowerName);
+    const looksStructuredMarkdown = /<!--\s*rofan:owner=/i.test(raw) || /\.(md|markdown)$/i.test(lowerName);
+    const allowedExt = /\.(mht|mhtml|html|htm|md|markdown|txt)$/i.test(lowerName);
 
-    if(!allowedExt && !looksMHT && !looksHTML){
+    if(!allowedExt && !looksMHT && !looksHTML && !looksStructuredMarkdown){
       chatFileInput.value = "";
-      showToast("지원하지 않는 파일입니다. .mht/.mhtml/.html 파일을 선택해 주세요.");
+      showToast("지원하지 않는 파일입니다. .mht/.html/.md/.txt 파일을 선택해 주세요.");
       return;
     }
 
-    const html = looksMHT ? extractHTMLFromMHT(raw) : raw;
-    if(!html || !looksLikeHTML(html)){
-      showToast("파일 안에서 HTML 채팅 내용을 찾지 못했습니다.");
-      return;
+    let sanitized = "";
+    if(looksStructuredMarkdown){
+      sanitized = structuredMarkdownToHtml(raw) || plainTextToHtml(raw);
+    }else if(looksMHT || looksHTML){
+      const html = looksMHT ? extractHTMLFromMHT(raw) : raw;
+      if(!html || !looksLikeHTML(html)){
+        showToast("파일 안에서 HTML 채팅 내용을 찾지 못했습니다.");
+        return;
+      }
+      sanitized = sanitizePastedHTML(extractLikelyChatHTML(html));
+    }else{
+      sanitized = plainTextToHtml(raw);
     }
-
-    const likely = extractLikelyChatHTML(html);
-    const sanitized = sanitizePastedHTML(likely);
     if(!htmlToPlainText(sanitized)){
-      showToast("불러온 HTML에서 변환할 텍스트를 찾지 못했습니다.");
+      showToast("불러온 파일에서 변환할 텍스트를 찾지 못했습니다.");
       return;
     }
 
     activateChatTab();
     resetReviewDecisions();
     chatPaste.innerHTML = sanitized;
-    cachedChatFileName = file.name || "로판Ai 저장 파일";
+    cachedChatFileName = file.name || "저장 파일";
     transformText();
     updateChapterDividerPanel();
     scheduleAutosave();
@@ -965,6 +972,8 @@ function escapeAttr(str){
 }
 function isItalicElement(el){
   if(!el || el.nodeType !== 1) return false;
+  const dataKind = String(el.getAttribute("data-kind") || "").toLowerCase();
+  if(dataKind === "scene" || dataKind === "narration") return true;
   const tag = el.tagName;
   if(tag === "I" || tag === "EM" || tag === "CITE") return true;
   if(String(el.getAttribute("data-narration") || "").toLowerCase() === "true") return true;
@@ -1091,6 +1100,9 @@ function ownerLabel(owner){
 }
 function getElementOwnerHint(el, color){
   if(!el || el.nodeType !== 1) return "";
+  const dataOwner = String(el.getAttribute("data-owner") || "").toLowerCase();
+  if(/user|human|me|내|유저/.test(dataOwner)) return "user";
+  if(/assistant|ai|character|bot|캐릭터/.test(dataOwner)) return "character";
   const author = String(el.getAttribute("data-author") || el.getAttribute("data-message-author") || el.getAttribute("data-role") || "").toLowerCase();
   if(/user|human|me|내|유저/.test(author)) return "user";
   if(/assistant|ai|character|bot|캐릭터/.test(author)) return "character";
@@ -1125,7 +1137,7 @@ function collectRofanContentBlocks(root){
   // 기본 대화는 p / div.mt-1로 잡히지만, MHT 저장본의 첫 캐릭터 메시지는
   // p로 감싸지지 않고 색상 span만 있는 경우가 있어 함께 후보에 넣습니다.
   // 부모 p가 이미 잡힌 span은 아래 contains 검사로 중복 제거됩니다.
-  const candidates = Array.from(root.querySelectorAll("p, div.mt-1, span[style*=\"color\"], div[style*=\"color\"]"));
+  const candidates = Array.from(root.querySelectorAll('[data-owner][data-kind], .rofan-block, p, div.mt-1, span[style*="color"], div[style*="color"]'));
   candidates.forEach((el, index) => {
     if(blocks.some(b => b.el.contains(el))) return;
     if(isSkippableElement(el) || hasSkippableAncestor(el, root)) return;
@@ -1239,7 +1251,7 @@ function parseRofanChatChunks(root){
     };
 
     Array.from(el.childNodes).forEach(child => walk(child, {
-      italic: false,
+      italic: isItalicElement(el),
       fromTable: isRemovableBlockElement(el),
       fromDetails: el.tagName === "DETAILS",
       owner: baseOwner || getElementOwnerHint(el, getInlineColor(el)) || "",
@@ -2064,25 +2076,28 @@ function transformText(){
 
   let text = input.value || "";
   const tokens = getProtectTokens();
+  const structuredChunks = parseStructuredMarkdownToChunks(text);
 
-  if(removeDetailsEl.checked){
-    text = filterDetailsByProtection(text, tokens);
-    text = text.replace(/<summary.*?>.*?<\/summary>/gi,"");
+  if(!structuredChunks){
+    if(removeDetailsEl.checked){
+      text = filterDetailsByProtection(text, tokens);
+      text = text.replace(/<summary.*?>.*?<\/summary>/gi,"");
+    }
+
+    if(removeHTMLEl.checked){
+      text = text.replace(/<script[\s\S]*?<\/script>/gi,"");
+      text = text.replace(/<style[\s\S]*?<\/style>/gi,"");
+      text = text.replace(/<br\s*\/?>/gi,"\n");
+      text = text.replace(/<\/p>/gi,"\n");
+      text = text.replace(/<[^>]+>/g,"");
+      text = text.replace(/<[^>\n]*/g,"");
+    }
+
+    text = text.replace(/\*\*(.*?)\*\*/g,"$1");
+    text = text.replace(/__(.*?)__/g,"$1");
   }
 
-  if(removeHTMLEl.checked){
-    text = text.replace(/<script[\s\S]*?<\/script>/gi,"");
-    text = text.replace(/<style[\s\S]*?<\/style>/gi,"");
-    text = text.replace(/<br\s*\/?>/gi,"\n");
-    text = text.replace(/<\/p>/gi,"\n");
-    text = text.replace(/<[^>]+>/g,"");
-    text = text.replace(/<[^>\n]*/g,"");
-  }
-
-  text = text.replace(/\*\*(.*?)\*\*/g,"$1");
-  text = text.replace(/__(.*?)__/g,"$1");
-
-  const chunks = parseChunks(text);
+  const chunks = structuredChunks || parseChunks(text);
   const deleteTokens = getDeleteContainsTokens();
   currentDuplicateGroups = [];
   duplicateReviewPanel.classList.add("hidden");
@@ -2563,6 +2578,62 @@ function structuredItemsToMarkdown(items){
     return `<!-- rofan:owner=${owner};kind=${kind} -->\n${item.text || ""}`;
   }).join("\n\n");
 }
+
+function chunksToStructuredMarkdown(chunks){
+  return structuredItemsToMarkdown((chunks || []).filter(c => c && String(c.text || '').trim()).map(c => ({
+    owner: c.owner || 'character',
+    kind: c.kind || 'normal',
+    text: c.text || ''
+  })));
+}
+function parseStructuredMarkdownToChunks(raw){
+  const text = String(raw || '').replace(/\r/g, '');
+  const re = /<!--\s*rofan:owner=([^;>]*);kind=([^>]*?)\s*-->/gi;
+  let match, last = 0, items = [];
+  while((match = re.exec(text))){
+    if(items.length){ items[items.length - 1].body = text.slice(last, match.index).trim(); }
+    items.push({owner:(match[1] || '').trim() || 'character', kind:(match[2] || 'normal').trim() || 'normal', body:''});
+    last = re.lastIndex;
+  }
+  if(!items.length) return null;
+  items[items.length - 1].body = text.slice(last).trim();
+  const chunks = [];
+  let seq = 0;
+  items.forEach((it, idx) => {
+    const blockId = 'md-' + idx;
+    String(it.body || '').split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean).forEach(p => {
+      chunks.push({id:'mdc-' + (seq++), kind:it.kind || 'normal', owner:it.owner || 'character', text:p, color:'', fromTable:false, fromDetails:false, blockId});
+    });
+  });
+  return chunks.length ? chunks : null;
+}
+function structuredMarkdownToHtml(raw){
+  const chunks = parseStructuredMarkdownToChunks(raw);
+  return chunks ? structuredItemsToHtml(chunks.map(c => ({owner:c.owner, kind:c.kind, text:c.text}))) : '';
+}
+function parseHtmlToRofanChunks(html){
+  const holder = document.createElement('div');
+  holder.innerHTML = sanitizePastedHTML(extractLikelyChatHTML(String(html || '')));
+  return parseRofanChatChunks(holder).chunks || [];
+}
+function fileContentToStructuredMarkdown(raw, fileName){
+  const lower = String(fileName || '').toLowerCase();
+  const text = String(raw || '');
+  if(/\.(md|markdown)$/i.test(lower) || /<!--\s*rofan:owner=/i.test(text)){
+    const chunks = parseStructuredMarkdownToChunks(text);
+    if(chunks && chunks.length) return chunksToStructuredMarkdown(chunks);
+  }
+  if(/\.(mht|mhtml)$/i.test(lower) || /MIME-Version:\s*1\.0/i.test(text) || /Content-Type:\s*multipart\/related/i.test(text)){
+    const html = extractHTMLFromMHT(text);
+    const chunks = parseHtmlToRofanChunks(html);
+    if(chunks.length) return chunksToStructuredMarkdown(chunks);
+  }
+  if(/\.(html|htm)$/i.test(lower) || looksLikeHTML(text)){
+    const chunks = parseHtmlToRofanChunks(text);
+    if(chunks.length) return chunksToStructuredMarkdown(chunks);
+  }
+  return text;
+}
 function exportedBodyHtml(){
   if(activeMode !== "epubedit" && lastStructuredItems && lastStructuredItems.length){
     return structuredItemsToHtml(lastStructuredItems);
@@ -2805,10 +2876,7 @@ async function loadClassicFile(){
   if(!file) return;
   try{
     const raw = await readFileAsTextSmart(file);
-    const lower = (file.name || "").toLowerCase();
-    let text = raw;
-    if(/\.(mht|mhtml)$/i.test(lower) || /MIME-Version:\s*1\.0/i.test(raw)) text = htmlToPlainText(extractLikelyChatHTML(extractHTMLFromMHT(raw)));
-    else if(/\.(html|htm)$/i.test(lower) || looksLikeHTML(raw)) text = htmlToPlainText(raw);
+    const text = fileContentToStructuredMarkdown(raw, file.name || "");
     classicLoadedFileText = text || "";
     applyClassicExcerpt();
     showToast("파일을 불러왔습니다.");
@@ -2997,52 +3065,60 @@ function replaceAllInEpubEditor(){
 }
 function rememberEditorSelection(){
   const sel = window.getSelection();
-  if(sel && sel.rangeCount && epubEditEditor && epubEditEditor.contains(sel.anchorNode)){
-    savedEditorRange = sel.getRangeAt(0).cloneRange();
-  }
+  if(!sel || !sel.rangeCount || !epubEditEditor) return;
+  const range = sel.getRangeAt(0);
+  if(epubEditEditor.contains(range.commonAncestorContainer)) savedEditorRange = range.cloneRange();
 }
 function restoreEditorSelection(){
-  const sel = window.getSelection();
-  if(savedEditorRange && epubEditEditor){
+  if(!savedEditorRange || !epubEditEditor) return false;
+  try{
+    const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(savedEditorRange.cloneRange());
+    epubEditEditor.focus({preventScroll:true});
     return true;
+  }catch(_err){ return false; }
+}
+function getActiveEditorRange(){
+  let sel = window.getSelection();
+  if(sel && sel.rangeCount){
+    const range = sel.getRangeAt(0);
+    if(epubEditEditor && epubEditEditor.contains(range.commonAncestorContainer)){
+      savedEditorRange = range.cloneRange();
+      return range;
+    }
   }
-  return false;
+  if(restoreEditorSelection()){
+    sel = window.getSelection();
+    if(sel && sel.rangeCount) return sel.getRangeAt(0);
+  }
+  return null;
 }
 function getSelectedHtml(){
-  let sel = window.getSelection();
-  if((!sel || sel.rangeCount === 0 || sel.isCollapsed) && savedEditorRange){
-    restoreEditorSelection();
-    sel = window.getSelection();
-  }
-  if(!sel || sel.rangeCount === 0 || sel.isCollapsed) return "";
-  const range = sel.getRangeAt(0);
-  if(epubEditEditor && !epubEditEditor.contains(range.commonAncestorContainer)) return "";
+  const range = getActiveEditorRange();
+  if(!range || range.collapsed) return "";
   const div = document.createElement("div");
   div.appendChild(range.cloneContents());
   return div.innerHTML || escapeHTML(range.toString());
 }
 function replaceSelectionWithHtml(html){
-  let sel = window.getSelection();
-  if((!sel || sel.rangeCount === 0 || sel.isCollapsed) && savedEditorRange){
-    restoreEditorSelection();
-    sel = window.getSelection();
-  }
-  if(!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
-  const range = sel.getRangeAt(0);
+  const range = getActiveEditorRange();
+  if(!range || range.collapsed) return false;
   if(epubEditEditor && !epubEditEditor.contains(range.commonAncestorContainer)) return false;
   range.deleteContents();
   const frag = range.createContextualFragment(html);
   const last = frag.lastChild;
   range.insertNode(frag);
+  const sel = window.getSelection();
   if(last){
-    range.setStartAfter(last);
-    range.collapse(true);
+    const next = document.createRange();
+    next.setStartAfter(last);
+    next.collapse(true);
     sel.removeAllRanges();
-    sel.addRange(range);
-    savedEditorRange = range.cloneRange();
+    sel.addRange(next);
+    savedEditorRange = next.cloneRange();
   }
+  epubEditEditor.focus({preventScroll:true});
   return true;
 }
 function makeQuoteHtml(type, content){
@@ -3055,7 +3131,6 @@ function getCustomQuoteTemplate(){
 }
 function applyQuoteStyle(type){
   if(!epubEditEditor) return;
-  restoreEditorSelection();
   const selected = getSelectedHtml();
   if(!selected){ showToast("인용할 문장을 드래그하세요."); return; }
   let html = "";
@@ -3067,35 +3142,50 @@ function applyQuoteStyle(type){
     html = makeQuoteHtml(type, selected);
   }
   const ok = replaceSelectionWithHtml(html);
-  if(ok){ rememberEditorSelection(); updateEpubPreview(); scheduleAutosave(); showToast("인용구를 적용했습니다."); }
+  if(ok){ updateEpubPreview(); scheduleAutosave(); showToast("인용구를 적용했습니다."); }
   else showToast("선택 영역을 다시 드래그해 주세요.");
 }
 function selectionInsideEditor(){
   const sel = window.getSelection();
   return sel && sel.rangeCount && epubEditEditor && epubEditEditor.contains(sel.anchorNode);
 }
+function wrapRangeWithSpan(range, styleText){
+  const html = getSelectedHtml();
+  if(!html) return false;
+  return replaceSelectionWithHtml(`<span style="${styleText}">${html}</span>`);
+}
 function applyEpubTextFormat(){
   if(!epubEditEditor) return;
-  const size = Math.max(8, Math.min(40, parseInt(epubEditFontSizeEl ? epubEditFontSizeEl.value : "15",10) || 15));
+  const size = Math.max(8, Math.min(60, parseInt(epubEditFontSizeEl ? epubEditFontSizeEl.value : "15",10) || 15));
   const color = epubEditTextColorEl ? epubEditTextColorEl.value : "#1f2d36";
-  restoreEditorSelection();
-  const selected = getSelectedHtml();
-  if(selected){
-    const ok = replaceSelectionWithHtml(`<span style="font-size:${size}px;color:${color}">${selected}</span>`);
-    if(!ok){ epubEditEditor.style.fontSize = size + "px"; epubEditEditor.style.color = color; }
+  const range = getActiveEditorRange();
+  if(range && !range.collapsed){
+    const ok = wrapRangeWithSpan(range, `font-size:${size}px;color:${color}`);
+    if(!ok){ showToast("선택 영역을 다시 드래그해 주세요."); return; }
   }else{
+    epubEditEditor.querySelectorAll('.epub-global-style').forEach(n => n.classList.remove('epub-global-style'));
     epubEditEditor.style.fontSize = size + "px";
     epubEditEditor.style.color = color;
   }
-  rememberEditorSelection(); updateEpubPreview(); scheduleAutosave();
+  updateEpubPreview(); scheduleAutosave(); showToast("서식을 적용했습니다.");
+}
+function adjustEpubFontSize(delta){
+  if(!epubEditFontSizeEl) return;
+  const cur = parseInt(epubEditFontSizeEl.value || '15', 10) || 15;
+  epubEditFontSizeEl.value = String(Math.max(8, Math.min(60, cur + delta)));
+  applyEpubTextFormat();
 }
 function clearEpubInlineFormat(){
   if(!epubEditEditor) return;
-  restoreEditorSelection();
-  const selected = getSelectedHtml();
-  if(selected){ document.execCommand("removeFormat", false, null); }
-  else { epubEditEditor.querySelectorAll("span,font").forEach(n => n.replaceWith(...n.childNodes)); epubEditEditor.style.fontSize=""; epubEditEditor.style.color=""; }
-  updateEpubPreview(); scheduleAutosave();
+  const range = getActiveEditorRange();
+  if(range && !range.collapsed){
+    document.execCommand("removeFormat", false, null);
+  }else {
+    epubEditEditor.querySelectorAll("span,font").forEach(n => n.replaceWith(...n.childNodes));
+    epubEditEditor.style.fontSize="";
+    epubEditEditor.style.color="";
+  }
+  updateEpubPreview(); scheduleAutosave(); showToast("서식을 제거했습니다.");
 }
 async function loadEpubFontFile(){
   const file = epubFontInputEl && epubFontInputEl.files && epubFontInputEl.files[0];
