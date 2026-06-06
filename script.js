@@ -1428,21 +1428,50 @@ function getChunkKey(chunk, index){
 function getContainsGroupKey(chunk){
   return "contains-" + hashString((chunk.owner || "") + "|" + (chunk.kind || "") + "|" + String(chunk.text || ""));
 }
+function getContainsSnippet(text){
+  const t = normalizeParagraphText(text || "");
+  if(!t) return "빈 문단";
+  return t.length > 25 ? t.slice(0, 25) + "…" : t;
+}
+function getTokenKey(token){
+  return "token-" + hashString(String(token || "").toLowerCase());
+}
+function tokenMatchesText(text, token){
+  if(!text || !token) return false;
+  return String(text).toLowerCase().includes(String(token).toLowerCase());
+}
 function buildContainsReviewItems(chunks, dropBlockIds, deleteTokens){
   const tokens = getProtectTokens();
   if(!deleteContainsEnabledEl.checked || deleteContainsModeEl.value !== "review" || !deleteTokens.length) return [];
-  const grouped = new Map();
+  const tokenGroups = new Map();
+  deleteTokens.forEach(rawToken => {
+    const token = String(rawToken || "").trim();
+    if(!token) return;
+    const tokenKey = getTokenKey(token);
+    if(!tokenGroups.has(tokenKey)) tokenGroups.set(tokenKey, { token, tokenKey, rows:new Map(), count:0 });
+  });
+
   chunks.map((chunk, index) => ({chunk, index, key:getChunkKey(chunk, index), groupKey:getContainsGroupKey(chunk)}))
     .filter(item => !dropBlockIds.has(item.chunk.blockId))
-    .filter(item => shouldDeleteByContains(item.chunk.text, deleteTokens))
     .filter(item => !isProtectedText(item.chunk.text, tokens))
     .forEach(item => {
-      if(!grouped.has(item.groupKey)) grouped.set(item.groupKey, {...item, count:0, keys:[]});
-      const row = grouped.get(item.groupKey);
-      row.count++;
-      row.keys.push(item.key);
+      deleteTokens.forEach(rawToken => {
+        const token = String(rawToken || "").trim();
+        if(!token || !tokenMatchesText(item.chunk.text, token)) return;
+        const tokenKey = getTokenKey(token);
+        const group = tokenGroups.get(tokenKey);
+        if(!group) return;
+        if(!group.rows.has(item.groupKey)) group.rows.set(item.groupKey, {...item, count:0, keys:[]});
+        const row = group.rows.get(item.groupKey);
+        row.count++;
+        row.keys.push(item.key);
+        group.count++;
+      });
     });
-  return Array.from(grouped.values());
+
+  return Array.from(tokenGroups.values())
+    .map(group => ({...group, rows:Array.from(group.rows.values())}))
+    .filter(group => group.rows.length > 0);
 }
 function updateContainsReviewPanel(items){
   currentContainsItems = items || [];
@@ -1457,14 +1486,22 @@ function updateContainsReviewPanel(items){
     return;
   }
 
-  let html = `<div class="reviewHead"><div><div class="reviewTitle">특정 글자 포함 문단 확인</div><div class="reviewMeta">각 문단을 확인한 뒤 남김/삭제를 고르세요. 기본값은 남김입니다.</div></div><div><button type="button" data-contains-bulk="keep">모두 남김</button> <button type="button" data-contains-bulk="delete">모두 삭제</button></div></div>`;
-  currentContainsItems.forEach((item, idx) => {
-    const key = item.groupKey || item.key;
-    const decision = containsDecisions[key] || "keep";
-    const chunk = item.chunk;
-    const kindLabel = chunk.kind === "scene" ? "지문" : "대사";
-    const extra = item.count && item.count > 1 ? ` 외 ${item.count - 1}개` : "";
-    html += `<details class="reviewItem foldReview"><summary><span>포함 문단${extra}</span><span class="smallMuted"><span class="pill">${escapeHTML(ownerLabel(chunk.owner))}</span><span class="pill">${kindLabel}</span></span></summary><div class="reviewBlock"><div class="previewText compactPreview">${escapeHTML(chunk.text)}</div></div><div class="field reviewRadioRow"><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" value="keep" ${decision !== "delete" ? "checked" : ""}>남김</label><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" value="delete" ${decision === "delete" ? "checked" : ""}>삭제</label></div></details>`;
+  const totalRows = currentContainsItems.reduce((sum, group) => sum + group.rows.length, 0);
+  const totalHits = currentContainsItems.reduce((sum, group) => sum + group.count, 0);
+  let html = `<div class="reviewHead"><div><div class="reviewTitle">특정 글자 포함 문단 확인</div><div class="reviewMeta">키워드별로 묶었습니다. 접힌 상태에서도 남김/삭제를 고를 수 있습니다. ${totalRows}개 묶음 · ${totalHits}개 감지</div></div><div class="bulkButtons"><button type="button" class="btn subtle" data-contains-bulk="keep">모두 남김</button><button type="button" class="btn subtle warn" data-contains-bulk="delete">모두 삭제</button></div></div>`;
+
+  currentContainsItems.forEach((group, gidx) => {
+    const open = gidx === 0 ? " open" : "";
+    html += `<details class="containsKeywordGroup"${open}><summary><span class="keywordTitle">${escapeHTML(group.token)}</span><span class="keywordMeta">${group.rows.length}개 묶음 · 총 ${group.count}개</span></summary><div class="containsRows">`;
+    group.rows.forEach((item, idx) => {
+      const key = item.groupKey || item.key;
+      const decision = containsDecisions[key] || "keep";
+      const chunk = item.chunk;
+      const kindLabel = chunk.kind === "scene" ? "지문" : "대사";
+      const extra = item.count && item.count > 1 ? ` 외 ${item.count - 1}개` : "";
+      html += `<details class="containsRow"><summary><span class="containsPreview">${escapeHTML(getContainsSnippet(chunk.text))}${escapeHTML(extra)}</span><span class="containsRight"><span class="pill">${escapeHTML(ownerLabel(chunk.owner))}</span><span class="pill">${kindLabel}</span><span class="inlineChoice" data-stop-summary><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" value="keep" ${decision !== "delete" ? "checked" : ""}>남김</label><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" value="delete" ${decision === "delete" ? "checked" : ""}>삭제</label></span></span></summary><div class="reviewBlock"><div class="previewText compactPreview">${escapeHTML(chunk.text)}</div></div></details>`;
+    });
+    html += `</div></details>`;
   });
   containsReviewPanel.classList.remove("hidden");
   containsReviewPanel.innerHTML = html;
@@ -1476,10 +1513,16 @@ function handleContainsReviewChange(e){
   transformText();
 }
 function handleContainsReviewClick(e){
+  const control = e.target.closest('[data-stop-summary]');
+  if(control){
+    e.stopPropagation();
+  }
   const button = e.target.closest("button[data-contains-bulk]");
   if(!button) return;
   const value = button.dataset.containsBulk === "delete" ? "delete" : "keep";
-  currentContainsItems.forEach(item => { containsDecisions[item.groupKey || item.key] = value; });
+  currentContainsItems.forEach(group => {
+    (group.rows || []).forEach(item => { containsDecisions[item.groupKey || item.key] = value; });
+  });
   transformText();
 }
 
