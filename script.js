@@ -20,6 +20,8 @@ const labelSpeakersEl = document.getElementById("labelSpeakers");
 const userNameEl = document.getElementById("userName");
 const characterNameEl = document.getElementById("characterName");
 const reviewDuplicatesEl = document.getElementById("reviewDuplicates");
+const reviewOocPairsEl = document.getElementById("reviewOocPairs");
+const oocCascadeModeEl = document.getElementById("oocCascadeMode");
 const speakerMarkerPresetEl = document.getElementById("speakerMarkerPreset");
 const speakerMarkerCustomEl = document.getElementById("speakerMarkerCustom");
 const speakerLabelColorEl = document.getElementById("speakerLabelColor");
@@ -47,6 +49,7 @@ const epubStylePresetEl = document.getElementById("epubStylePreset");
 const epubTextModeEl = document.getElementById("epubTextMode");
 const duplicateReviewPanel = document.getElementById("duplicateReviewPanel");
 const containsReviewPanel = document.getElementById("containsReviewPanel");
+const oocReviewPanel = document.getElementById("oocReviewPanel");
 const chatOptions = document.getElementById("chatOptions");
 const classicPanel = document.getElementById("classicPanel");
 const chatPanel = document.getElementById("chatPanel");
@@ -55,8 +58,10 @@ const speakerOnlyEls = document.querySelectorAll(".speakerOnly");
 let activeMode = "classic";
 let duplicateDecisions = {};
 let containsDecisions = {};
+let oocDecisions = {};
 let currentDuplicateGroups = [];
 let currentContainsItems = [];
+let currentOocItems = [];
 let duplicatePageByGroup = {};
 
 input.addEventListener("input", transformText);
@@ -78,6 +83,8 @@ chatPaste.addEventListener("paste", handleRichPaste);
   removeTablesEl,
   labelSpeakersEl,
   reviewDuplicatesEl,
+  reviewOocPairsEl,
+  oocCascadeModeEl,
   speakerMarkerPresetEl,
   speakerColorTargetEl
 ].forEach(el => el.addEventListener("change", transformText));
@@ -102,6 +109,8 @@ duplicateReviewPanel.addEventListener("change", handleDuplicateReviewChange);
 duplicateReviewPanel.addEventListener("click", handleDuplicateReviewClick);
 containsReviewPanel.addEventListener("change", handleContainsReviewChange);
 containsReviewPanel.addEventListener("click", handleContainsReviewClick);
+oocReviewPanel.addEventListener("change", handleOocReviewChange);
+oocReviewPanel.addEventListener("click", handleOocReviewClick);
 
 
 function updateModeVisibility(){
@@ -158,6 +167,7 @@ function shouldDeleteByContains(t, tokens){
 function resetReviewDecisions(){
   duplicateDecisions = {};
   containsDecisions = {};
+  oocDecisions = {};
   duplicatePageByGroup = {};
 }
 
@@ -994,7 +1004,7 @@ function updateDuplicateReviewPanel(groups){
     const answer = occ.answerBlock || occ.promptBlock;
     const answerId = answer ? answer.id : "";
     const title = group.type === "prompt" ? "같은 입력에 대한 답변 후보" : "반복된 답변 후보";
-    html += `<div class="reviewItem"><div class="reviewTitle">${title} · ${gIdx + 1}/${currentDuplicateGroups.length}</div>`;
+    html += `<details class="reviewItem foldReview"><summary><span>${title}</span><span class="smallMuted">${gIdx + 1}/${currentDuplicateGroups.length} · 후보 ${group.occurrences.length}개</span></summary>`;
     if(group.type === "prompt"){
       html += `<div class="reviewBlock"><span class="pill">대표 입력</span><div class="previewText">${escapeHTML(previewText(group.promptText, 450))}</div></div>`;
       html += `<div class="reviewBlock"><span class="pill">이 후보에 연결된 입력</span><div class="previewText">${escapeHTML(previewText(occ.promptBlock ? occ.promptBlock.text : "", 450))}</div></div>`;
@@ -1004,7 +1014,7 @@ function updateDuplicateReviewPanel(groups){
     html += `<div class="reviewChoices">`;
     html += `<label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="all" ${selected === "all" ? "checked" : ""}>모두 유지</label>`;
     html += `<label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="${escapeAttr(answerId)}" ${selected === answerId ? "checked" : ""}>현재 후보만 유지<div class="reviewBlock"><span class="pill">${escapeHTML(ownerLabel(answer ? answer.owner : ""))}</span><span class="pill">답변 ${current + 1}/${group.occurrences.length}</span><div class="previewText">${escapeHTML(previewText(answer ? answer.text : "", 900))}</div></div></label>`;
-    html += `</div><div class="reviewNav"><div class="smallMuted">후보 ${current + 1} / ${group.occurrences.length}</div><div class="navButtons"><button type="button" data-dupe-page="prev" data-dupe-key="${escapeAttr(group.key)}">이전 후보</button><button type="button" data-dupe-page="next" data-dupe-key="${escapeAttr(group.key)}">다음 후보</button></div></div></div>`;
+    html += `</div><div class="reviewNav"><div class="smallMuted">후보 ${current + 1} / ${group.occurrences.length}</div><div class="navButtons"><button type="button" data-dupe-page="prev" data-dupe-key="${escapeAttr(group.key)}">이전 후보</button><button type="button" data-dupe-page="next" data-dupe-key="${escapeAttr(group.key)}">다음 후보</button></div></div></details>`;
   });
   duplicateReviewPanel.classList.remove("hidden");
   duplicateReviewPanel.innerHTML = html;
@@ -1029,13 +1039,24 @@ function handleDuplicateReviewClick(e){
 function getChunkKey(chunk, index){
   return "chunk-" + (chunk.blockId || "x") + "-" + hashString((chunk.owner || "") + "|" + (chunk.kind || "") + "|" + normalizeForCompare(chunk.text)) + "-" + index;
 }
+function getContainsGroupKey(chunk){
+  return "contains-" + hashString((chunk.owner || "") + "|" + (chunk.kind || "") + "|" + String(chunk.text || ""));
+}
 function buildContainsReviewItems(chunks, dropBlockIds, deleteTokens){
   const tokens = getProtectTokens();
   if(!deleteContainsEnabledEl.checked || deleteContainsModeEl.value !== "review" || !deleteTokens.length) return [];
-  return chunks.map((chunk, index) => ({chunk, index, key:getChunkKey(chunk, index)}))
+  const grouped = new Map();
+  chunks.map((chunk, index) => ({chunk, index, key:getChunkKey(chunk, index), groupKey:getContainsGroupKey(chunk)}))
     .filter(item => !dropBlockIds.has(item.chunk.blockId))
     .filter(item => shouldDeleteByContains(item.chunk.text, deleteTokens))
-    .filter(item => !isProtectedText(item.chunk.text, tokens));
+    .filter(item => !isProtectedText(item.chunk.text, tokens))
+    .forEach(item => {
+      if(!grouped.has(item.groupKey)) grouped.set(item.groupKey, {...item, count:0, keys:[]});
+      const row = grouped.get(item.groupKey);
+      row.count++;
+      row.keys.push(item.key);
+    });
+  return Array.from(grouped.values());
 }
 function updateContainsReviewPanel(items){
   currentContainsItems = items || [];
@@ -1052,10 +1073,12 @@ function updateContainsReviewPanel(items){
 
   let html = `<div class="reviewHead"><div><div class="reviewTitle">특정 글자 포함 문단 확인</div><div class="reviewMeta">각 문단을 확인한 뒤 남김/삭제를 고르세요. 기본값은 남김입니다.</div></div><div><button type="button" data-contains-bulk="keep">모두 남김</button> <button type="button" data-contains-bulk="delete">모두 삭제</button></div></div>`;
   currentContainsItems.forEach((item, idx) => {
-    const decision = containsDecisions[item.key] || "keep";
+    const key = item.groupKey || item.key;
+    const decision = containsDecisions[key] || "keep";
     const chunk = item.chunk;
     const kindLabel = chunk.kind === "scene" ? "지문" : "대사";
-    html += `<div class="reviewItem"><div class="reviewTitle">포함 문단</div><div class="smallMuted"><span class="pill">${escapeHTML(ownerLabel(chunk.owner))}</span><span class="pill">${kindLabel}</span></div><div class="reviewBlock"><div class="previewText">${escapeHTML(chunk.text)}</div></div><div class="field" style="margin-top:8px;"><label><input type="radio" name="contains_${escapeAttr(item.key)}" data-contains-key="${escapeAttr(item.key)}" value="keep" ${decision !== "delete" ? "checked" : ""}>남김</label><label><input type="radio" name="contains_${escapeAttr(item.key)}" data-contains-key="${escapeAttr(item.key)}" value="delete" ${decision === "delete" ? "checked" : ""}>삭제</label></div></div>`;
+    const extra = item.count && item.count > 1 ? ` 외 ${item.count - 1}개` : "";
+    html += `<details class="reviewItem foldReview"><summary><span>포함 문단${extra}</span><span class="smallMuted"><span class="pill">${escapeHTML(ownerLabel(chunk.owner))}</span><span class="pill">${kindLabel}</span></span></summary><div class="reviewBlock"><div class="previewText compactPreview">${escapeHTML(chunk.text)}</div></div><div class="field reviewRadioRow"><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" value="keep" ${decision !== "delete" ? "checked" : ""}>남김</label><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" value="delete" ${decision === "delete" ? "checked" : ""}>삭제</label></div></details>`;
   });
   containsReviewPanel.classList.remove("hidden");
   containsReviewPanel.innerHTML = html;
@@ -1070,8 +1093,118 @@ function handleContainsReviewClick(e){
   const button = e.target.closest("button[data-contains-bulk]");
   if(!button) return;
   const value = button.dataset.containsBulk === "delete" ? "delete" : "keep";
-  currentContainsItems.forEach(item => { containsDecisions[item.key] = value; });
+  currentContainsItems.forEach(item => { containsDecisions[item.groupKey || item.key] = value; });
   transformText();
+}
+
+
+function countSimpleSentences(text){
+  const parts = String(text || "").split(/[.!?。！？\n]+/).map(s => s.trim()).filter(Boolean);
+  return Math.max(1, parts.length || 0);
+}
+function isOocPrompt(text){
+  return /ooc/i.test(String(text || ""));
+}
+function isTrivialContinuationPrompt(text){
+  const t = normalizeParagraphText(text || "");
+  if(!t) return true;
+  if(/^[\s*＊·•・.。…\-—_]+$/.test(t)) return true;
+  if(/이어|이어서|계속|계속해서|다음|출력|응답/.test(t) && countSimpleSentences(t) <= 1 && t.length <= 90) return true;
+  return false;
+}
+function getOocReviewKey(block){
+  return "ooc-" + (block && block.id ? block.id : hashString(block ? block.text : ""));
+}
+function buildOocReviewItems(blocks, alreadyDropped){
+  if(activeMode !== "chat" || !reviewOocPairsEl || !reviewOocPairsEl.checked) return [];
+  const cascade = oocCascadeModeEl && oocCascadeModeEl.value === "cascade";
+  const items = [];
+  for(let i=0; i<blocks.length; i++){
+    const block = blocks[i];
+    if(!block || block.owner !== "user" || !isOocPrompt(block.text) || (alreadyDropped && alreadyDropped.has(block.id))) continue;
+    const answerBlocks = [];
+    let j = i + 1;
+    while(j < blocks.length){
+      const cur = blocks[j];
+      if(!cur) { j++; continue; }
+      if(alreadyDropped && alreadyDropped.has(cur.id)){ j++; continue; }
+      if(cur.owner === "character"){
+        answerBlocks.push(cur);
+        j++;
+        continue;
+      }
+      if(cur.owner === "user"){
+        if(cascade && isTrivialContinuationPrompt(cur.text)){
+          j++;
+          continue;
+        }
+        break;
+      }
+      j++;
+    }
+    items.push({key:getOocReviewKey(block), promptBlock:block, answerBlocks});
+  }
+  return items.slice(0, 120);
+}
+function updateOocReviewPanel(items){
+  currentOocItems = items || [];
+  if(activeMode !== "chat" || !reviewOocPairsEl || !reviewOocPairsEl.checked){
+    oocReviewPanel.classList.add("hidden");
+    oocReviewPanel.innerHTML = "";
+    return;
+  }
+  if(!currentOocItems.length){
+    oocReviewPanel.classList.remove("hidden");
+    oocReviewPanel.innerHTML = `<div class="reviewHead"><div><div class="reviewTitle">OOC 응답 검토</div><div class="reviewMeta">OOC가 들어간 유저 지문을 찾지 못했습니다.</div></div></div>`;
+    return;
+  }
+  let html = `<div class="reviewHead"><div><div class="reviewTitle">OOC 응답 검토</div><div class="reviewMeta">OOC 유저 지문은 제거됩니다. 연결된 캐릭터 응답을 남길지 삭제할지 고르세요.</div></div><div><button type="button" data-ooc-bulk="keep">응답 모두 남김</button> <button type="button" data-ooc-bulk="delete">응답 모두 삭제</button></div></div>`;
+  currentOocItems.forEach((item, idx) => {
+    const decision = oocDecisions[item.key] || "keep";
+    const answerCount = item.answerBlocks.length;
+    const answersText = item.answerBlocks.map((b, n) => `응답 ${n + 1}\n${b.text}`).join("\n\n");
+    html += `<details class="reviewItem foldReview"><summary><span>OOC 지문 ${idx + 1}</span><span class="smallMuted">연결 응답 ${answerCount}개</span></summary>`;
+    html += `<div class="reviewBlock"><span class="pill">OOC 내용</span><div class="previewText compactPreview">${escapeHTML(item.promptBlock.text)}</div></div>`;
+    if(answerCount){
+      html += `<div class="reviewBlock"><span class="pill">연결된 캐릭터 응답</span><div class="previewText compactPreview">${escapeHTML(answersText)}</div></div>`;
+    }else{
+      html += `<div class="emptyState">연결된 캐릭터 응답이 없습니다.</div>`;
+    }
+    html += `<div class="field reviewRadioRow"><label><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="keep" ${decision !== "delete" ? "checked" : ""}>OOC만 삭제</label><label><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="delete" ${decision === "delete" ? "checked" : ""}>응답까지 삭제</label></div></details>`;
+  });
+  oocReviewPanel.classList.remove("hidden");
+  oocReviewPanel.innerHTML = html;
+}
+function handleOocReviewChange(e){
+  const target = e.target;
+  if(!target || !target.matches('input[type="radio"][data-ooc-key]')) return;
+  oocDecisions[target.dataset.oocKey] = target.value;
+  transformText();
+}
+function handleOocReviewClick(e){
+  const button = e.target.closest("button[data-ooc-bulk]");
+  if(!button) return;
+  const value = button.dataset.oocBulk === "delete" ? "delete" : "keep";
+  currentOocItems.forEach(item => { oocDecisions[item.key] = value; });
+  transformText();
+}
+function getDroppedBlockIdsFromOocDecisions(items){
+  const dropped = new Set();
+  (items || []).forEach(item => {
+    if(item.promptBlock) dropped.add(item.promptBlock.id);
+    if((oocDecisions[item.key] || "keep") === "delete"){
+      item.answerBlocks.forEach(b => dropped.add(b.id));
+    }
+  });
+  return dropped;
+}
+function mergeSets(){
+  const merged = new Set();
+  Array.from(arguments).forEach(set => {
+    if(!set) return;
+    set.forEach(v => merged.add(v));
+  });
+  return merged;
 }
 
 // ------------------ 출력 공통 렌더러 ------------------
@@ -1111,8 +1244,9 @@ function renderChunks(chunks, options){
 
     if(shouldDeleteByContains(t, deleteTokens) && !protectedHere){
       if(options.deleteContainsMode === "review"){
-        const key = getChunkKey(chunk, index);
-        if(options.containsDecisions && options.containsDecisions[key] === "delete") return "";
+        const key = getContainsGroupKey(chunk);
+        const legacyKey = getChunkKey(chunk, index);
+        if(options.containsDecisions && (options.containsDecisions[key] === "delete" || options.containsDecisions[legacyKey] === "delete")) return "";
       }else{
         return "";
       }
@@ -1166,8 +1300,13 @@ function transformText(){
   if(activeMode === "chat"){
     const parsed = parseRofanChatChunks(chatPaste);
     const duplicateGroups = reviewDuplicatesEl.checked ? buildDuplicateAnswerGroups(parsed.blocks) : [];
-    const dropBlockIds = getDroppedBlockIdsFromDuplicateDecisions(duplicateGroups);
+    const duplicateDropBlockIds = getDroppedBlockIdsFromDuplicateDecisions(duplicateGroups);
     updateDuplicateReviewPanel(duplicateGroups);
+
+    const oocItems = buildOocReviewItems(parsed.blocks, duplicateDropBlockIds);
+    updateOocReviewPanel(oocItems);
+    const oocDropBlockIds = getDroppedBlockIdsFromOocDecisions(oocItems);
+    const dropBlockIds = mergeSets(duplicateDropBlockIds, oocDropBlockIds);
 
     const deleteTokens = getDeleteContainsTokens();
     const containsItems = buildContainsReviewItems(parsed.chunks, dropBlockIds, deleteTokens);
@@ -1211,6 +1350,7 @@ function transformText(){
   currentDuplicateGroups = [];
   duplicateReviewPanel.classList.add("hidden");
   duplicateReviewPanel.innerHTML = "";
+  if(oocReviewPanel){ oocReviewPanel.classList.add("hidden"); oocReviewPanel.innerHTML = ""; }
   const emptyDrop = new Set();
   const containsItems = buildContainsReviewItems(chunks, emptyDrop, deleteTokens);
   updateContainsReviewPanel(containsItems);
@@ -1658,7 +1798,7 @@ function createZipBlob(entries, type){
   return new Blob(chunks, {type:type || "application/zip"});
 }
 function collectPresetValues(){
-  const ids = ["removeDetails","removeEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","epubStylePreset","epubTextMode"];
+  const ids = ["removeDetails","removeEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","epubStylePreset","epubTextMode"];
   const data = {};
   ids.forEach(id => {
     const el = document.getElementById(id);
