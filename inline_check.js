@@ -4033,3 +4033,92 @@ refreshColorWidgets();
 syncResultPreview(output);
 syncResultPreview(chatOutput);
 requestAnimationFrame(syncActiveResultHeight);
+
+/* height hardening patch: keep result panes aligned with input panes */
+(function(){
+  function qs(sel, root){ return (root || document).querySelector(sel); }
+  function mode(){ return (typeof activeMode === 'string' && activeMode) || 'classic'; }
+  function activePanel(){
+    if(mode() === 'chat') return typeof chatPanel !== 'undefined' ? chatPanel : qs('#chatPanel');
+    if(mode() === 'classic') return typeof classicPanel !== 'undefined' ? classicPanel : qs('#classicPanel');
+    return null;
+  }
+  function leftInputForPanel(panel){
+    if(!panel) return null;
+    if(mode() === 'chat') return qs('#chatPaste', panel) || qs('.pastebox', panel);
+    return qs('#inputTextPreview', panel) || qs('#inputText', panel) || qs('textarea', panel);
+  }
+  function previewForPanel(panel){
+    if(!panel) return null;
+    return mode() === 'chat' ? qs('#chatOutputTextPreview', panel) : qs('#outputTextPreview', panel);
+  }
+  window.syncActiveResultHeight = syncActiveResultHeight = function(){
+    const panel = activePanel();
+    if(!panel || panel.classList.contains('hidden')) return;
+    const leftInput = leftInputForPanel(panel);
+    const preview = previewForPanel(panel);
+    const resultBox = preview && preview.closest('.resultBox');
+    const label = resultBox && qs('.editorLabel', resultBox);
+    if(!leftInput || !preview || !resultBox) return;
+
+    if(window.matchMedia && window.matchMedia('(max-width: 860px)').matches){
+      resultBox.style.setProperty('height', 'auto', 'important');
+      resultBox.style.setProperty('min-height', '0', 'important');
+      preview.style.setProperty('--synced-result-height', '420px');
+      preview.style.setProperty('height', '420px', 'important');
+      preview.style.setProperty('max-height', '420px', 'important');
+      preview.style.setProperty('min-height', '320px', 'important');
+      preview.style.setProperty('overflow', 'auto', 'important');
+      return;
+    }
+
+    const leftRect = leftInput.getBoundingClientRect();
+    const boxRect = resultBox.getBoundingClientRect();
+    const labelHeight = label ? Math.ceil(label.getBoundingClientRect().height) : 0;
+    let totalHeight = Math.round(leftRect.bottom - boxRect.top);
+    if(!Number.isFinite(totalHeight) || totalHeight < 360){
+      const fallback = panel.querySelector('.editorGrid > .editorBox:not(.resultBox)');
+      totalHeight = fallback ? Math.round(fallback.getBoundingClientRect().height) : 520;
+    }
+    totalHeight = Math.max(360, Math.min(totalHeight, 980));
+    const previewHeight = Math.max(300, totalHeight - labelHeight - 9);
+
+    resultBox.style.setProperty('align-self', 'start', 'important');
+    resultBox.style.setProperty('height', totalHeight + 'px', 'important');
+    resultBox.style.setProperty('min-height', '0', 'important');
+    resultBox.style.setProperty('overflow', 'visible', 'important');
+    preview.style.setProperty('--synced-result-height', previewHeight + 'px');
+    preview.style.setProperty('height', previewHeight + 'px', 'important');
+    preview.style.setProperty('max-height', previewHeight + 'px', 'important');
+    preview.style.setProperty('min-height', '0', 'important');
+    preview.style.setProperty('overflow', 'auto', 'important');
+    preview.style.setProperty('flex', '0 0 auto', 'important');
+  };
+
+  const oldSetResultOutput = typeof setResultOutput === 'function' ? setResultOutput : null;
+  if(oldSetResultOutput && !oldSetResultOutput.__heightHardened){
+    const wrapped = function(el, value){
+      oldSetResultOutput(el, value);
+      requestAnimationFrame(() => syncActiveResultHeight());
+      setTimeout(syncActiveResultHeight, 60);
+    };
+    wrapped.__heightHardened = true;
+    window.setResultOutput = setResultOutput = wrapped;
+  }
+
+  function installHeightObservers(){
+    const targets = ['#inputText', '#inputTextPreview', '#chatPaste', '#outputTextPreview', '#chatOutputTextPreview']
+      .map(sel => qs(sel)).filter(Boolean);
+    if('ResizeObserver' in window){
+      const ro = new ResizeObserver(() => requestAnimationFrame(syncActiveResultHeight));
+      targets.forEach(el => { try{ ro.observe(el); }catch(_){} });
+    }
+    ['load','resize','orientationchange'].forEach(ev => window.addEventListener(ev, () => setTimeout(syncActiveResultHeight, 80), {passive:true}));
+    document.addEventListener('input', () => setTimeout(syncActiveResultHeight, 30), true);
+    document.addEventListener('click', () => setTimeout(syncActiveResultHeight, 30), true);
+    setInterval(() => { if(mode() === 'classic' || mode() === 'chat') syncActiveResultHeight(); }, 900);
+  }
+  installHeightObservers();
+  requestAnimationFrame(syncActiveResultHeight);
+})();
+
