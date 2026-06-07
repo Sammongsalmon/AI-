@@ -1640,23 +1640,12 @@ function applyMiddleRangeDeletesToChunks(chunks){
   rules.forEach(rule => {
     const startInfo = findRangeNeedleInChunks(working, rule.start, 0, 0);
     if(!startInfo) return;
-    const endInfo = findRangeNeedleInChunks(working, rule.end, startInfo.index, startInfo.whole ? 0 : startInfo.pos);
+    const endInfo = findRangeNeedleInChunks(working, rule.end, startInfo.index, 0);
     if(!endInfo || endInfo.index < startInfo.index) return;
+    // 시작/끝 문장이 문단 안 일부만 일치하더라도, 해당 키워드가 들어간 문단 전체를 삭제합니다.
+    // 부분 문자열만 도려내면 남은 문장이 어색하게 이어질 수 있어 삭제 단위를 chunk(문단/응답 셀)로 고정합니다.
     for(let i = startInfo.index; i <= endInfo.index; i++){
-      const chunk = working[i];
-      if(!chunk) continue;
-      const text = String(chunk.text || "");
-      if(startInfo.index === endInfo.index){
-        const from = startInfo.whole ? 0 : startInfo.pos;
-        const to = endInfo.whole ? text.length : Math.max(from, endInfo.pos + endInfo.len);
-        chunk.text = (text.slice(0, from) + text.slice(to)).trim();
-      }else if(i === startInfo.index){
-        chunk.text = startInfo.whole ? "" : text.slice(0, startInfo.pos).trim();
-      }else if(i === endInfo.index){
-        chunk.text = endInfo.whole ? "" : text.slice(endInfo.pos + endInfo.len).trim();
-      }else{
-        chunk.text = "";
-      }
+      if(working[i]) working[i].text = "";
     }
     working = working.filter(chunk => String((chunk && chunk.text) || "").trim());
   });
