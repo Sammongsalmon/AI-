@@ -108,3 +108,4 @@ toc
 uploaded-font
 userName
 workflowHint
+middleRangePanel

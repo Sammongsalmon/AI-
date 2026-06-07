@@ -43,6 +43,7 @@ const indentOutputEl = document.getElementById("indentOutput");
 const deleteContainsEnabledEl = document.getElementById("deleteContainsEnabled");
 const deleteContainsTokenEl = document.getElementById("deleteContainsToken");
 const deleteContainsModeEl = document.getElementById("deleteContainsMode");
+const middleRangePanelEl = document.getElementById("middleRangePanel");
 const removeTablesEl = document.getElementById("removeTables");
 const labelSpeakersEl = document.getElementById("labelSpeakers");
 const userNameEl = document.getElementById("userName");
@@ -111,6 +112,7 @@ let duplicateOrderQuery = "";
 let oocGroupPage = 0;
 let oocFilterText = "";
 let oocOrderQuery = "";
+let middleRangeRules = [];
 let cachedChatFileName = "";
 let cachedCoverAsset = null;
 let isRestoringWork = false;
@@ -313,6 +315,11 @@ oocReviewPanel.addEventListener("change", handleOocReviewChange);
 oocReviewPanel.addEventListener("click", handleOocReviewClick);
 oocReviewPanel.addEventListener("input", handleOocReviewInput);
 oocReviewPanel.addEventListener("keydown", handleOocReviewKeydown);
+if(middleRangePanelEl){
+  middleRangePanelEl.addEventListener("input", handleMiddleRangeInput);
+  middleRangePanelEl.addEventListener("change", handleMiddleRangeInput);
+  middleRangePanelEl.addEventListener("click", handleMiddleRangeClick);
+}
 
 
 function updateModeVisibility(){
@@ -399,6 +406,7 @@ function collectWorkValues(){
     oocGroupPage,
     oocFilterText,
     oocOrderQuery,
+    middleRangeRules: sanitizeMiddleRangeRules(middleRangeRules),
     chapterKeywordQuery,
     chapterOrderQuery,
     chapterMatchPage,
@@ -508,6 +516,7 @@ async function restoreSavedWork(){
       oocGroupPage = state.oocGroupPage || 0;
       oocFilterText = state.oocFilterText || "";
       oocOrderQuery = state.oocOrderQuery || "";
+      middleRangeRules = sanitizeMiddleRangeRules((state.options && state.options.middleRangeRules) || state.middleRangeRules || []);
       chapterKeywordQuery = state.chapterKeywordQuery || "";
       chapterOrderQuery = state.chapterOrderQuery || "";
       chapterMatchPage = state.chapterMatchPage || 0;
@@ -631,6 +640,203 @@ function shouldDeleteByContains(t, tokens){
     return lowerText.includes(token.toLowerCase());
   });
 }
+
+function createMiddleRangeRule(data){
+  const source = data || {};
+  return {
+    id: source.id || ("range-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8)),
+    start: String(source.start || ""),
+    end: String(source.end || ""),
+    action: "delete",
+    unit: source.unit === "sentence" ? "sentence" : "paragraph"
+  };
+}
+function sanitizeMiddleRangeRules(rules){
+  if(!Array.isArray(rules)) return [];
+  return rules.map(createMiddleRangeRule).filter(Boolean);
+}
+function ensureMiddleRangeRows(){
+  if(!Array.isArray(middleRangeRules)) middleRangeRules = [];
+  if(!middleRangeRules.length) middleRangeRules = [createMiddleRangeRule()];
+}
+function renderMiddleRangePanel(){
+  if(!middleRangePanelEl) return;
+  ensureMiddleRangeRows();
+  middleRangePanelEl.innerHTML = middleRangeRules.map((rule, idx) => `
+    <div class="middleRangeItem" data-middle-range-id="${escapeAttr(rule.id)}">
+      <div class="middleRangeHead">
+        <strong>범위 ${idx + 1}</strong>
+        <span class="control compactControl">처리 <select data-middle-range-field="action"><option value="delete" selected>삭제</option></select></span>
+        <span class="control compactControl">삭제 단위 <select data-middle-range-field="unit"><option value="paragraph" ${rule.unit !== "sentence" ? "selected" : ""}>키워드가 포함된 문단부터 삭제</option><option value="sentence" ${rule.unit === "sentence" ? "selected" : ""}>키워드가 포함된 문장부터 삭제</option></select></span>
+        <button type="button" class="btn subtle warn" data-middle-range-remove="${escapeAttr(rule.id)}">범위 삭제</button>
+      </div>
+      <div class="middleRangeGrid">
+        <label class="control wide">시작 문장<textarea data-middle-range-field="start" placeholder="삭제 범위가 시작되는 문장 전체를 붙여넣기">${escapeHTML(rule.start)}</textarea></label>
+        <label class="control wide">끝 문장<textarea data-middle-range-field="end" placeholder="삭제 범위가 끝나는 문장 전체를 붙여넣기">${escapeHTML(rule.end)}</textarea></label>
+      </div>
+    </div>`).join("");
+}
+function addMiddleRangeRule(){
+  ensureMiddleRangeRows();
+  middleRangeRules.push(createMiddleRangeRule());
+  renderMiddleRangePanel();
+  scheduleAutosave();
+}
+function findMiddleRangeRule(id){
+  return (middleRangeRules || []).find(rule => rule.id === id);
+}
+function handleMiddleRangeInput(e){
+  const field = e.target && e.target.dataset ? e.target.dataset.middleRangeField : "";
+  if(!field) return;
+  const wrap = e.target.closest("[data-middle-range-id]");
+  if(!wrap) return;
+  const rule = findMiddleRangeRule(wrap.dataset.middleRangeId);
+  if(!rule) return;
+  if(field === "action") rule.action = "delete";
+  else rule[field] = e.target.value || "";
+  transformText();
+  scheduleAutosave();
+}
+function handleMiddleRangeClick(e){
+  const btn = e.target.closest("[data-middle-range-remove]");
+  if(!btn) return;
+  const id = btn.dataset.middleRangeRemove;
+  middleRangeRules = (middleRangeRules || []).filter(rule => rule.id !== id);
+  ensureMiddleRangeRows();
+  renderMiddleRangePanel();
+  transformText();
+  scheduleAutosave();
+}
+function normalizeRangeNeedle(text){
+  return String(text || "").replace(/\r/g, "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+}
+function buildNormalizedTextMap(text){
+  const source = String(text || "");
+  let normalized = "";
+  const map = [];
+  let pendingSpace = false;
+  let pendingSpaceIndex = 0;
+  for(let i = 0; i < source.length; i++){
+    const ch = source[i];
+    if(/\s|\u00a0/.test(ch)){
+      if(!pendingSpace){ pendingSpace = true; pendingSpaceIndex = i; }
+      continue;
+    }
+    if(pendingSpace && normalized){ normalized += " "; map.push(pendingSpaceIndex); }
+    pendingSpace = false;
+    normalized += ch;
+    map.push(i);
+  }
+  return { normalized, map };
+}
+function normalizedOriginalMatch(text, needle, fromOriginal){
+  const built = buildNormalizedTextMap(text);
+  const normalizedNeedle = normalizeRangeNeedle(needle);
+  if(!built.normalized || !normalizedNeedle) return null;
+  let fromNorm = 0;
+  while(fromNorm < built.map.length && built.map[fromNorm] < (Number(fromOriginal) || 0)) fromNorm++;
+  const pos = built.normalized.toLowerCase().indexOf(normalizedNeedle.toLowerCase(), fromNorm);
+  if(pos < 0) return null;
+  const last = Math.min(built.map.length - 1, pos + normalizedNeedle.length - 1);
+  const start = built.map[pos];
+  const end = built.map[last] + 1;
+  return {pos:start, len:Math.max(1, end - start)};
+}
+function findRangeNeedleInChunks(chunks, needle, startIndex, startPos){
+  const rawNeedle = String(needle || "").trim();
+  if(!rawNeedle) return null;
+  const normalizedNeedle = normalizeRangeNeedle(rawNeedle);
+  if(!normalizedNeedle) return null;
+  const fromIndex = Math.max(0, Number(startIndex) || 0);
+  for(let i = fromIndex; i < chunks.length; i++){
+    const text = String((chunks[i] && chunks[i].text) || "");
+    const from = i === fromIndex ? Math.max(0, Number(startPos) || 0) : 0;
+    const lowerText = text.toLowerCase();
+    const lowerNeedle = rawNeedle.toLowerCase();
+    let exact = text.indexOf(rawNeedle, from);
+    if(exact < 0) exact = lowerText.indexOf(lowerNeedle, from);
+    if(exact >= 0) return {index:i, pos:exact, len:rawNeedle.length, whole:false};
+    const normalizedMatch = normalizedOriginalMatch(text, rawNeedle, from);
+    if(normalizedMatch) return {index:i, pos:normalizedMatch.pos, len:normalizedMatch.len, whole:false};
+  }
+  return null;
+}
+function getSentenceBoundsForRange(text, pos, len){
+  const s = String(text || "");
+  const safePos = Math.max(0, Math.min(s.length, Number(pos) || 0));
+  const safeEnd = Math.max(safePos, Math.min(s.length, safePos + (Number(len) || 0)));
+  const sentenceEndChars = new Set([".", "?", "!", "。", "？", "！", "…", "\n"]);
+  const closingChars = new Set(['"', "'", "”", "’", "」", "』", "〉", ")", "]", "}"]);
+  let start = safePos;
+  while(start > 0){
+    const prev = s[start - 1];
+    if(sentenceEndChars.has(prev)) break;
+    start--;
+  }
+  while(start < s.length && /\s/.test(s[start])) start++;
+  let end = safeEnd;
+  while(end < s.length){
+    const ch = s[end];
+    end++;
+    if(sentenceEndChars.has(ch)) break;
+  }
+  while(end < s.length && closingChars.has(s[end])) end++;
+  while(end < s.length && /[ \t]/.test(s[end])) end++;
+  return {start, end};
+}
+function deleteTextRangeInChunkText(text, start, end){
+  const s = String(text || "");
+  const from = Math.max(0, Math.min(s.length, start));
+  const to = Math.max(from, Math.min(s.length, end));
+  return (s.slice(0, from) + s.slice(to)).replace(/\n{3,}/g, "\n\n").trim();
+}
+function getActiveMiddleRangeRules(){
+  return (middleRangeRules || [])
+    .filter(rule => rule && rule.action !== "keep")
+    .map(rule => ({
+      start:String(rule.start || "").trim(),
+      end:String(rule.end || "").trim(),
+      unit: rule.unit === "sentence" ? "sentence" : "paragraph"
+    }))
+    .filter(rule => rule.start && rule.end);
+}
+function applyMiddleRangeDeletesToChunks(chunks){
+  const rules = getActiveMiddleRangeRules();
+  if(!rules.length || !Array.isArray(chunks) || !chunks.length) return chunks;
+  let working = chunks.map(chunk => Object.assign({}, chunk));
+  rules.forEach(rule => {
+    const startInfo = findRangeNeedleInChunks(working, rule.start, 0, 0);
+    if(!startInfo) return;
+    const endInfo = findRangeNeedleInChunks(working, rule.end, startInfo.index, startInfo.pos + startInfo.len);
+    if(!endInfo || endInfo.index < startInfo.index) return;
+
+    if(rule.unit === "sentence"){
+      if(startInfo.index === endInfo.index){
+        const text = String((working[startInfo.index] && working[startInfo.index].text) || "");
+        const startBounds = getSentenceBoundsForRange(text, startInfo.pos, startInfo.len);
+        const endBounds = getSentenceBoundsForRange(text, endInfo.pos, endInfo.len);
+        working[startInfo.index].text = deleteTextRangeInChunkText(text, startBounds.start, Math.max(startBounds.start, endBounds.end));
+      }else{
+        const startText = String((working[startInfo.index] && working[startInfo.index].text) || "");
+        const endText = String((working[endInfo.index] && working[endInfo.index].text) || "");
+        const startBounds = getSentenceBoundsForRange(startText, startInfo.pos, startInfo.len);
+        const endBounds = getSentenceBoundsForRange(endText, endInfo.pos, endInfo.len);
+        if(working[startInfo.index]) working[startInfo.index].text = deleteTextRangeInChunkText(startText, startBounds.start, startText.length);
+        for(let i = startInfo.index + 1; i < endInfo.index; i++){
+          if(working[i]) working[i].text = "";
+        }
+        if(working[endInfo.index]) working[endInfo.index].text = deleteTextRangeInChunkText(endText, 0, endBounds.end);
+      }
+    }else{
+      for(let i = startInfo.index; i <= endInfo.index; i++){
+        if(working[i]) working[i].text = "";
+      }
+    }
+    working = working.filter(chunk => String((chunk && chunk.text) || "").trim());
+  });
+  return working;
+}
+
 function resetReviewDecisions(){
   duplicateDecisions = {};
   containsDecisions = {};
@@ -1985,8 +2191,17 @@ function countSimpleSentences(text){
   const parts = String(text || "").split(/[.!?。！？\n]+/).map(s => s.trim()).filter(Boolean);
   return Math.max(1, parts.length || 0);
 }
+function normalizeOocMarkerText(text){
+  return String(text || "")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\u00a0/g, " ");
+}
+function containsOocMarker(text){
+  return /ooc/i.test(normalizeOocMarkerText(text));
+}
 function isOocPrompt(text){
-  return /ooc/i.test(String(text || ""));
+  return containsOocMarker(text);
 }
 function isTrivialContinuationPrompt(text){
   const t = normalizeParagraphText(text || "");
@@ -2007,7 +2222,7 @@ function stripBracketedOocText(text){
   t = stripInline(t);
   const paragraphs = t.split(/\n\s*\n/).map(part => {
     const cleaned = stripInline(part).trim();
-    if(/ooc/i.test(cleaned)) return "";
+    if(containsOocMarker(cleaned)) return "";
     return cleaned;
   }).filter(Boolean);
   return paragraphs.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -2343,13 +2558,14 @@ function transformText(){
     const oocDropBlockIds = getDroppedBlockIdsFromOocDecisions(oocItems);
     const oocStripMap = getOocStripMap(oocItems);
     const dropBlockIds = mergeSets(duplicateDropBlockIds, oocDropBlockIds);
-    const structuralPlan = createStructuralDeletePlan(parsed.chunks, dropBlockIds);
+    const rangeAdjustedChunks = applyMiddleRangeDeletesToChunks(parsed.chunks);
+    const structuralPlan = createStructuralDeletePlan(rangeAdjustedChunks, dropBlockIds);
 
     const deleteTokens = getDeleteContainsTokens();
-    const containsItems = buildContainsReviewItems(parsed.chunks, dropBlockIds, deleteTokens, structuralPlan.dropChunkIds);
+    const containsItems = buildContainsReviewItems(rangeAdjustedChunks, dropBlockIds, deleteTokens, structuralPlan.dropChunkIds);
     updateContainsReviewPanel(containsItems);
 
-    const renderedPack = renderChunks(parsed.chunks, {
+    const renderedPack = renderChunks(rangeAdjustedChunks, {
       removeTables: removeTablesEl.checked,
       deleteTokens,
       deleteContainsMode: deleteContainsModeEl.value,
@@ -2363,7 +2579,7 @@ function transformText(){
     const rendered = renderedPack.text;
     lastStructuredItems = renderedPack.items || [];
     setResultOutput(chatOutput, rendered);
-    afterTransform(parsed.chunks, parsed.blocks, rendered);
+    afterTransform(rangeAdjustedChunks, parsed.blocks, rendered);
     return;
   }
 
@@ -2391,16 +2607,17 @@ function transformText(){
   }
 
   const chunks = (classicActiveChunks && classicActiveChunks.length) ? cloneChunks(classicActiveChunks) : (structuredChunks || parseChunks(text));
+  const rangeAdjustedChunks = applyMiddleRangeDeletesToChunks(chunks);
   const deleteTokens = getDeleteContainsTokens();
   currentDuplicateGroups = [];
   duplicateReviewPanel.classList.add("hidden");
   duplicateReviewPanel.innerHTML = "";
   if(oocReviewPanel){ oocReviewPanel.classList.add("hidden"); oocReviewPanel.innerHTML = ""; }
   const emptyDrop = new Set();
-  const structuralPlan = createStructuralDeletePlan(chunks, emptyDrop);
-  const containsItems = buildContainsReviewItems(chunks, emptyDrop, deleteTokens, structuralPlan.dropChunkIds);
+  const structuralPlan = createStructuralDeletePlan(rangeAdjustedChunks, emptyDrop);
+  const containsItems = buildContainsReviewItems(rangeAdjustedChunks, emptyDrop, deleteTokens, structuralPlan.dropChunkIds);
   updateContainsReviewPanel(containsItems);
-  const renderedPack = renderChunks(chunks, {
+  const renderedPack = renderChunks(rangeAdjustedChunks, {
     removeTables: removeTablesEl.checked,
     deleteTokens,
     deleteContainsMode: deleteContainsModeEl.value,
@@ -2413,7 +2630,7 @@ function transformText(){
   const rendered = renderedPack.text;
   lastStructuredItems = renderedPack.items || [];
   setResultOutput(output, rendered);
-  afterTransform(chunks, [], rendered);
+  afterTransform(rangeAdjustedChunks, [], rendered);
 }
 
 // ------------------ UI ------------------
@@ -2486,6 +2703,8 @@ function clearAll(){
   oocGroupPage = 0;
   oocFilterText = "";
   oocOrderQuery = "";
+  middleRangeRules = [createMiddleRangeRule()];
+  renderMiddleRangePanel();
   chapterKeywordQuery = "";
   chapterOrderQuery = "";
   chapterMatchPage = 0;
@@ -2603,7 +2822,7 @@ function updateResultStats(chunks, blocks, renderedText){
     workflowHintEl.textContent = missing;
   }
 }
-const RISK_TERMS = ["OOC", "시스템", "기록지", "설정", "요약", "이전 대화", "AI", "모델", "검열", "�"];
+const RISK_TERMS = ["OOC", "시스템", "기록지", "설정", "요약", "이전 대화", "AI", "모델", "검열", "�", "제3자 개입", "분위기 반전", "복선 회수", "상황 주도", "장면 전환", "시간 경과", "사건 발생", "이어서 진행"];
 function countTermInsensitive(text, term){
   const hay = String(text || "").toLowerCase();
   const needle = String(term || "").toLowerCase();
@@ -3289,6 +3508,7 @@ function collectPresetValues(){
     if(!el) return;
     data[id] = el.type === "checkbox" ? el.checked : el.value;
   });
+  data.middleRangeRules = sanitizeMiddleRangeRules(middleRangeRules);
   return data;
 }
 function refreshColorWidgets(){
@@ -3304,6 +3524,8 @@ function applyPresetValues(data){
     if(el.type === "checkbox") el.checked = !!value;
     else el.value = value;
   });
+  if(data && Object.prototype.hasOwnProperty.call(data, "middleRangeRules")) middleRangeRules = sanitizeMiddleRangeRules(data.middleRangeRules);
+  renderMiddleRangePanel();
   refreshColorWidgets();
 }
 function saveCurrentPreset(){
@@ -3848,6 +4070,7 @@ function chapterBodyToXhtml(ch){
 window.addEventListener("resize", () => requestAnimationFrame(syncActiveResultHeight));
 restoreSavedWork();
 refreshColorWidgets();
+renderMiddleRangePanel();
 syncResultPreview(output);
 syncResultPreview(chatOutput);
 requestAnimationFrame(syncActiveResultHeight);
