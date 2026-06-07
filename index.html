@@ -4826,7 +4826,35 @@ requestAnimationFrame(syncActiveResultHeight);
     }).filter(u => u.text || u.html);
   }
   function splitTextUnits(text){
-    return String(text || "").replace(/\r/g, "").split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean).map(p => ({ text: stripTagsLocal(p).trim(), body: p }));
+    const raw = String(text || "").replace(/\r/g, "");
+    const first = raw.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
+    const pieces = [];
+    first.forEach(part => {
+      const plain = stripTagsLocal(part).replace(/\s+/g, " ").trim();
+      if(!plain) return;
+      // 파일/백업 결과가 한 덩어리로 붙어 들어온 경우 검색 카드에 전문이 뜨지 않도록
+      // 줄 단위 → 문장 단위 순서로 안전하게 잘라 챕터 끝 지점 후보를 만듭니다.
+      const lines = part.split(/\n+/).map(v => v.trim()).filter(Boolean);
+      if(lines.length > 1){
+        lines.forEach(line => {
+          const t = stripTagsLocal(line).replace(/\s+/g, " ").trim();
+          if(t) pieces.push({ text:t, body:line });
+        });
+        return;
+      }
+      if(plain.length > 900){
+        const sentences = part.split(/(?<=[.!?。！？…]|[다요죠네까오음임함됨니다였다었다한다된다했다]|[”"])\s+/).map(v => v.trim()).filter(Boolean);
+        if(sentences.length > 1){
+          sentences.forEach(seg => {
+            const t = stripTagsLocal(seg).replace(/\s+/g, " ").trim();
+            if(t) pieces.push({ text:t, body:seg });
+          });
+          return;
+        }
+      }
+      pieces.push({ text:plain, body:part });
+    });
+    return pieces;
   }
   function getChapterUnits(){
     if(mode() === "epubedit") return getEditorUnits();
@@ -4934,13 +4962,30 @@ requestAnimationFrame(syncActiveResultHeight);
     }
     return matches;
   }
+  function chapterMatchPreviewText(item){
+    const text = String((item && item.text) || "").replace(/\s+/g, " ").trim();
+    const q = String(chapterSearch.keyword || "").trim();
+    if(!text || text.length <= 900) return text;
+    if(q){
+      const pos = text.toLowerCase().indexOf(q.toLowerCase());
+      if(pos >= 0){
+        const before = text.lastIndexOf(".", Math.max(0, pos - 1));
+        const afterDot = text.indexOf(".", pos + q.length);
+        const start = before >= 0 && pos - before < 450 ? before + 1 : Math.max(0, pos - 220);
+        const end = afterDot >= 0 && afterDot - pos < 520 ? afterDot + 1 : Math.min(text.length, pos + q.length + 520);
+        return `${start > 0 ? "…" : ""}${text.slice(start, end).trim()}${end < text.length ? "…" : ""}`;
+      }
+    }
+    return text.slice(0, 900) + "…";
+  }
+
   function renderManualChapterSearchResultsHtml(){
     const matches = chapterSearchMatches();
     const total = matches.length;
     chapterSearch.page = Math.max(0, Math.min(Math.max(0, total - 1), chapterSearch.page || 0));
     const current = total ? matches[chapterSearch.page] : null;
     return `<div class="miniToolHead"><div><strong>챕터 끝 지점</strong><span>검색한 문단을 이 챕터의 마지막 문단으로 설정합니다.</span></div><span>${total ? `${chapterSearch.page + 1}/${total}` : "0개"}</span></div>
-      ${current ? `<div class="chapterMatchCard"><div class="dupeSummary withNav"><span><span class="pill">문단 ${current.index + 1}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-manual-chapter-page="prev" ${chapterSearch.page <= 0 ? "disabled" : ""}>‹</button><button type="button" class="navIconBtn" data-manual-chapter-page="next" ${chapterSearch.page >= total - 1 ? "disabled" : ""}>›</button></span></div><div class="previewText fullPreview">${safeHtml(current.text)}</div><div class="chapterInsertRow"><button type="button" class="btn primary" data-chapter-set-end="${current.index}">이 문단을 끝 지점으로 설정</button><button type="button" class="btn subtle" data-chapter-clear-end="1">끝 지점 비우기</button></div></div>` : `<div class="emptyState">검색 결과가 없습니다. 키워드나 번호를 바꿔 보세요.</div>`}`;
+      ${current ? `<div class="chapterMatchCard"><div class="dupeSummary withNav"><span><span class="pill">문단 ${current.index + 1}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-manual-chapter-page="prev" ${chapterSearch.page <= 0 ? "disabled" : ""}>‹</button><button type="button" class="navIconBtn" data-manual-chapter-page="next" ${chapterSearch.page >= total - 1 ? "disabled" : ""}>›</button></span></div><div class="previewText fullPreview chapterSearchPreview">${safeHtml(chapterMatchPreviewText(current))}</div><div class="chapterInsertRow"><button type="button" class="btn primary" data-chapter-set-end="${current.index}">이 문단을 끝 지점으로 설정</button><button type="button" class="btn subtle" data-chapter-clear-end="1">끝 지점 비우기</button></div></div>` : `<div class="emptyState">검색 결과가 없습니다. 키워드나 번호를 바꿔 보세요.</div>`}`;
   }
   function refreshManualChapterSearchResults(){
     const target = qs("#manualChapterSearchResults");
@@ -5159,6 +5204,12 @@ requestAnimationFrame(syncActiveResultHeight);
     return plan;
   };
 
+  function removeWorkflowBlock(){
+    qsa("aside.sidebar").forEach(n => n.remove());
+    qsa(".sideCard").forEach(n => { if(qs(".flowList", n) || /입력과 결과|정리 옵션|검토 보드|EPUB 제작|내보내기/.test(n.textContent || "")) n.remove(); });
+    qsa(".flowList").forEach(n => { const card = n.closest(".sideCard,.card,aside"); (card || n).remove(); });
+  }
+
   function applyModeLayout(){
     const isEdit = mode() === "epubedit";
     const options = qs("#optionsBoard");
@@ -5199,22 +5250,38 @@ requestAnimationFrame(syncActiveResultHeight);
     if(!panel || panel.classList.contains("hidden")) return;
     const leftInput = mode() === "chat" ? qs("#chatPaste", panel) : qs("#inputText", panel);
     const preview = mode() === "chat" ? qs("#chatOutputTextPreview", panel) : qs("#outputTextPreview", panel);
+    const resultBox = preview ? preview.closest(".resultBox") : null;
     if(!leftInput || !preview) return;
-    if(window.matchMedia("(max-width: 860px)").matches){
-      preview.style.height = "420px";
-      preview.style.maxHeight = "420px";
-      preview.style.minHeight = "320px";
-      return;
-    }
-    requestAnimationFrame(() => {
+    const apply = () => {
+      preview.style.overflow = "auto";
+      preview.style.boxSizing = "border-box";
+      preview.style.flex = "0 0 auto";
+      if(window.matchMedia("(max-width: 860px)").matches){
+        preview.style.height = "420px";
+        preview.style.maxHeight = "420px";
+        preview.style.minHeight = "320px";
+        if(resultBox) resultBox.style.height = "auto";
+        return;
+      }
+      // 왼쪽 입력창의 실제 밑변을 기준으로 오른쪽 결과창 밑변을 고정합니다.
+      // 결과 내용이 길어져도 카드 자체가 늘어나지 않고 내부 스크롤만 생기게 합니다.
       const bottom = leftInput.getBoundingClientRect().bottom;
       const top = preview.getBoundingClientRect().top;
       const h = Math.max(320, Math.round(bottom - top));
+      preview.style.setProperty("--synced-result-height", h + "px");
       preview.style.height = h + "px";
       preview.style.maxHeight = h + "px";
       preview.style.minHeight = "0";
-      preview.style.overflow = "auto";
-    });
+      if(resultBox){
+        resultBox.style.height = Math.round(leftInput.getBoundingClientRect().bottom - resultBox.getBoundingClientRect().top) + "px";
+        resultBox.style.minHeight = "0";
+        resultBox.style.alignSelf = "start";
+        resultBox.style.overflow = "visible";
+      }
+    };
+    requestAnimationFrame(apply);
+    setTimeout(apply, 80);
+    setTimeout(apply, 240);
   };
   const originalSetResultOutput = (typeof setResultOutput === "function") ? setResultOutput : null;
   if(originalSetResultOutput){
@@ -5226,10 +5293,16 @@ requestAnimationFrame(syncActiveResultHeight);
     const style = document.createElement("style");
     style.id = "rofanFinalPatchCss";
     style.textContent = `
+      aside.sidebar,.sideCard:has(.flowList),.workflowBlock,.flowList{display:none!important;}
       #epubBoard.epubCollapsed .epubGrid,#epubBoard.epubCollapsed .epubPreviewGrid{display:none!important;}
+      .chapterTitleControl{grid-column:1/-1!important;}
+      .actionDock .downloadNameControl{white-space:nowrap!important;}
       #epubBoardToggleBtn{margin-left:auto;}
       #optionsBoard.hidden,#reviewBoard.hidden,.flowItem.hidden{display:none!important;}
-      .editorBox.resultBox .richResultBox{height:var(--synced-result-height,520px)!important;min-height:0!important;max-height:var(--synced-result-height,520px)!important;overflow:auto!important;flex:0 0 auto!important;}
+      .editorGrid{align-items:start!important;}
+      .editorBox.resultBox{align-self:start!important;min-height:0!important;overflow:visible!important;}
+      .editorBox.resultBox .rawResultStorage{display:none!important;}
+      .editorBox.resultBox .richResultBox{display:block!important;height:var(--synced-result-height,520px)!important;min-height:0!important;max-height:var(--synced-result-height,520px)!important;overflow:auto!important;flex:0 0 auto!important;box-sizing:border-box!important;}
       .manualChapterIntro{padding:10px 12px;border:1px dashed var(--line);border-radius:14px;background:var(--paper2);color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:12px;}
       .manualChapterHead{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px;}
       .manualChapterRows{display:grid;gap:8px;}
@@ -5278,10 +5351,23 @@ requestAnimationFrame(syncActiveResultHeight);
     if(typeof epubEditEditor !== "undefined" && epubEditEditor) epubEditEditor.addEventListener(evt, () => setTimeout(() => { renderManualChapterRows(); renderManualChapterSeparatorsInEditor(); updateEpubPreview(); }, 0));
   });
 
+
+  function installResultHeightWatchers(){
+    const targets = [qs("#chatPaste"), qs("#inputText"), qs("#chatOutputTextPreview"), qs("#outputTextPreview")].filter(Boolean);
+    if(window.ResizeObserver){
+      const ro = new ResizeObserver(() => syncActiveResultHeight());
+      targets.forEach(t => ro.observe(t));
+    }
+    ["load","resize","orientationchange"].forEach(ev => window.addEventListener(ev, () => setTimeout(syncActiveResultHeight, 60), {passive:true}));
+    setInterval(() => { if(mode() === "classic" || mode() === "chat") syncActiveResultHeight(); }, 800);
+  }
+
   function initFinalPatch(){
+    removeWorkflowBlock();
     installPatchCss();
     installEmojiControl();
     installEpubBoardCollapse();
+    installResultHeightWatchers();
     closeEpubEditToolsOnLoad();
     installChapterManagerUi();
     renderManualChapterManager();
