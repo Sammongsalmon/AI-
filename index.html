@@ -6076,6 +6076,367 @@ requestAnimationFrame(syncActiveResultHeight);
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();
 
+
+/* --- 2026-06-07 chapter boundary isolation final patch --- */
+(function(){
+  const KEY = 'rofan-manual-chapters-v2';
+  const OPEN_KEY = 'rofan-chapter-preview-open-v1';
+  let activeId = null;
+  let page = 0;
+
+  function qs(sel, root=document){ return root.querySelector(sel); }
+  function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+  function mode(){ return (typeof activeMode === 'string' && activeMode) ? activeMode : 'classic'; }
+  function esc(v){
+    if(typeof escapeHTML === 'function') return escapeHTML(v || '');
+    return String(v || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+  function attr(v){
+    if(typeof escapeAttr === 'function') return escapeAttr(v || '');
+    return esc(v).replace(/`/g, '&#096;');
+  }
+  function strip(v){
+    if(typeof stripHTMLTags === 'function') return stripHTMLTags(v || '');
+    const d = document.createElement('div');
+    d.innerHTML = String(v || '');
+    return d.textContent || d.innerText || '';
+  }
+  function htmlToText(html){
+    if(typeof blockHtmlToText === 'function') return blockHtmlToText(html || '');
+    const d = document.createElement('div');
+    d.innerHTML = html || '';
+    return (d.innerText || d.textContent || '').trim();
+  }
+  function titleFor(idx){ return idx === 0 ? 'Prologue' : 'Chapter ' + (idx + 1); }
+  function uid(){ return 'ch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7); }
+  function defaultChapter(idx){ return {id:uid(), title:titleFor(idx), endPara:null, note:'', imageData:'', imageName:'', imageType:'', imagePos:'belowTitle'}; }
+
+  function state(){
+    try{ return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; }
+    catch(_){ return {}; }
+  }
+  function saveState(st){
+    try{ localStorage.setItem(KEY, JSON.stringify(st || {})); }catch(_){ }
+    if(typeof scheduleAutosave === 'function') scheduleAutosave();
+  }
+  function plan(){
+    const st = state();
+    const m = mode();
+    if(!st[m]) st[m] = {chapters:[]};
+    if(!Array.isArray(st[m].chapters)) st[m].chapters = [];
+    if(!st[m].chapters.length) st[m].chapters.push(defaultChapter(0));
+    st[m].chapters.forEach((ch, idx) => { if(!ch.id) ch.id = uid(); if(!ch.title) ch.title = titleFor(idx); });
+    saveState(st);
+    return st[m];
+  }
+  function savePlan(pl){ const st = state(); st[mode()] = pl; saveState(st); }
+
+  function sourceText(){
+    if(mode() === 'epubedit') return (typeof epubEditEditor !== 'undefined' && epubEditEditor) ? (epubEditEditor.innerText || epubEditEditor.textContent || '') : '';
+    if(mode() === 'chat' && typeof chatOutput !== 'undefined' && chatOutput && chatOutput.value) return chatOutput.value;
+    if(mode() === 'classic' && typeof output !== 'undefined' && output && output.value) return output.value;
+    if(typeof getPreparedOutputForExport === 'function') return getPreparedOutputForExport() || '';
+    return '';
+  }
+  function splitLong(piece){
+    const text = String(piece || '').trim();
+    if(!text) return [];
+    if(strip(text).replace(/\s+/g,' ').trim().length <= 700) return [text];
+    const out = [];
+    let rest = text;
+    while(strip(rest).replace(/\s+/g,' ').trim().length > 700){
+      let cut = Math.max(
+        rest.lastIndexOf('。', 680), rest.lastIndexOf('.', 680), rest.lastIndexOf('?', 680), rest.lastIndexOf('!', 680), rest.lastIndexOf('…', 680),
+        rest.lastIndexOf('다 ', 680), rest.lastIndexOf('요 ', 680), rest.lastIndexOf('죠 ', 680), rest.lastIndexOf('네 ', 680), rest.lastIndexOf('까 ', 680)
+      );
+      if(cut < 220) cut = rest.lastIndexOf(' ', 680);
+      if(cut < 220) cut = 680;
+      const head = rest.slice(0, cut + 1).trim();
+      if(head) out.push(head);
+      rest = rest.slice(cut + 1).trim();
+      if(!rest) break;
+    }
+    if(rest) out.push(rest);
+    return out.filter(Boolean);
+  }
+  function splitUnitsFromText(txt){
+    const raw = String(txt || '').replace(/\r/g,'').replace(/<!--\s*rofan:[\s\S]*?-->/gi,'').replace(/<hr[^>]*data-manual-chapter[^>]*>/gi,'\n\n').trim();
+    if(!raw) return [];
+    const units = [];
+    const addPiece = (p) => {
+      splitLong(p).forEach(x => {
+        const t = strip(x).replace(/\s+/g,' ').trim();
+        if(t) units.push({text:t, body:x});
+      });
+    };
+    raw.split(/\n\s*\n+/).map(v=>v.trim()).filter(Boolean).forEach(block => {
+      const lines = block.split(/\n+/).map(v=>v.trim()).filter(Boolean);
+      if(lines.length > 1){ lines.forEach(addPiece); return; }
+      const marked = block
+        .replace(/([.!?。！？…]+[”"'’]?)(\s+)/g, '$1\n')
+        .replace(/((?:습니다|습니까|입니다|입니까|했다|한다|된다|였다|었다|이다|다|요|죠|네|까|오|음|임|함|됨)[”"'’]?)(\s+)/g, '$1\n')
+        .replace(/([”"])(\s+)(?=[가-힣A-Za-z0-9“"])/g, '$1\n');
+      const parts = marked.split(/\n+/).map(v=>v.trim()).filter(Boolean);
+      if(parts.length > 1){ parts.forEach(addPiece); return; }
+      addPiece(block);
+    });
+    return units;
+  }
+  function editorUnits(){
+    if(typeof epubEditEditor === 'undefined' || !epubEditEditor) return [];
+    const nodes = Array.from(epubEditEditor.childNodes).filter(n => {
+      if(n.nodeType === Node.ELEMENT_NODE && n.classList && n.classList.contains('manual-chapter-separator')) return false;
+      return (n.textContent || '').trim() || n.nodeType === Node.ELEMENT_NODE;
+    });
+    if(!nodes.length) return splitUnitsFromText(epubEditEditor.innerText || epubEditEditor.textContent || '');
+    const out = [];
+    nodes.forEach(node => {
+      const html = node.outerHTML || esc(node.textContent || '');
+      const text = htmlToText(html).replace(/\s+/g,' ').trim();
+      if(!text) return;
+      if(text.length > 900) splitUnitsFromText(text).forEach(u => out.push(u));
+      else out.push({text, body:text, html});
+    });
+    return out;
+  }
+  function units(){ return mode() === 'epubedit' ? editorUnits() : splitUnitsFromText(sourceText()); }
+
+  function sanitizePlan(pl, unitList){
+    if(!pl || !Array.isArray(pl.chapters)) pl = {chapters:[]};
+    if(!pl.chapters.length) pl.chapters.push(defaultChapter(0));
+    const max = Math.max(0, unitList.length - 1);
+    pl.chapters.forEach((ch, idx) => {
+      if(!ch.id) ch.id = uid();
+      if(!ch.title) ch.title = titleFor(idx);
+      if(ch.endPara === '' || ch.endPara === undefined || ch.endPara === null){ ch.endPara = null; return; }
+      ch.endPara = Math.max(0, Math.min(max, Number(ch.endPara) || 0));
+    });
+    return pl;
+  }
+  function fixLaterChapters(pl, editedIdx, unitList){
+    const editedEnd = Number(pl.chapters[editedIdx].endPara);
+    for(let i = editedIdx + 1; i < pl.chapters.length; i++){
+      const val = pl.chapters[i].endPara;
+      if(val !== null && val !== undefined && val !== '' && Number(val) <= editedEnd){
+        pl.chapters[i].endPara = null;
+      }
+    }
+    const max = Math.max(0, unitList.length - 1);
+    const last = pl.chapters[pl.chapters.length - 1];
+    if(unitList.length && last && last.endPara !== null && last.endPara !== undefined && Number(last.endPara) < max){
+      pl.chapters.push(defaultChapter(pl.chapters.length));
+    }
+  }
+  function chapterRanges(pl, unitList){
+    pl = sanitizePlan(pl, unitList);
+    const ranges = [];
+    let start = 0;
+    pl.chapters.forEach((ch, idx) => {
+      let end = ch.endPara;
+      if(end === null || end === undefined || end === '') end = (idx === pl.chapters.length - 1) ? unitList.length - 1 : start - 1;
+      end = Math.max(start - 1, Math.min(unitList.length - 1, Number(end)));
+      ranges.push({start, end});
+      start = end + 1;
+    });
+    return ranges;
+  }
+  function paraHtml(u){
+    if(u && u.html) return u.html;
+    const body = (u && (u.body || u.text)) || '';
+    if(typeof paragraphToXhtml === 'function') return paragraphToXhtml(body);
+    return '<p>' + esc(body).replace(/\n/g,'<br>') + '</p>';
+  }
+  function imageHtml(ch){ return ch && ch.imageData ? `<figure class="chapterImage"><img src="${attr(ch.imageData)}" alt="${attr(ch.imageName || ch.title || 'chapter image')}"></figure>` : ''; }
+  function fullHtml(ch, includeTitle){
+    const note = ch.note ? `<p class="chapterNote">${esc(ch.note).replace(/\n/g,'<br>')}</p>` : '';
+    const img = imageHtml(ch);
+    return `${ch.imagePos === 'aboveTitle' ? img : ''}${includeTitle ? `<h1>${esc(ch.title || '')}</h1>` : ''}${note}${(!ch.imagePos || ch.imagePos === 'belowTitle') ? img : ''}${ch.bodyHtml || ''}${ch.imagePos === 'bottom' ? img : ''}`;
+  }
+  function chaptersFromPlan(){
+    const unitList = units();
+    const pl = sanitizePlan(plan(), unitList);
+    const ranges = chapterRanges(pl, unitList);
+    const chs = pl.chapters.map((ch, idx) => {
+      const r = ranges[idx] || {start:0,end:-1};
+      const slice = r.end >= r.start ? unitList.slice(r.start, r.end + 1) : [];
+      return Object.assign({}, ch, {
+        title: ch.title || titleFor(idx),
+        body: slice.map(u => u.body || u.text || '').join('\n\n').trim(),
+        bodyHtml: slice.map(paraHtml).join('\n'),
+        startIndex: r.start,
+        endIndex: r.end
+      });
+    });
+    return chs.filter((ch, idx) => ch.body || ch.bodyHtml || ch.note || ch.imageData || idx === 0);
+  }
+
+  function getActiveId(){
+    const ed = qs('.manualChapterEditor[data-editing-id]');
+    if(ed && ed.dataset.editingId) return ed.dataset.editingId;
+    const inp = qs('[data-chapter-title][data-chapter-id]');
+    if(inp && inp.dataset.chapterId) return inp.dataset.chapterId;
+    if(activeId) return activeId;
+    const edit = qs('[data-chapter-edit]');
+    return edit ? edit.dataset.chapterEdit : null;
+  }
+  function decorateEditor(id){
+    if(!id) return;
+    activeId = id;
+    const ed = qs('.manualChapterEditor');
+    if(ed) ed.dataset.editingId = id;
+    const title = qs('[data-chapter-title]');
+    if(title) title.dataset.chapterId = id;
+  }
+
+  function renderRows(){
+    const box = qs('#manualChapterRows');
+    if(!box) return;
+    const unitList = units();
+    const pl = sanitizePlan(plan(), unitList);
+    savePlan(pl);
+    const ranges = chapterRanges(pl, unitList);
+    box.innerHTML = pl.chapters.map((ch, idx) => {
+      const r = ranges[idx] || {start:0,end:-1};
+      const range = r.end >= r.start ? `${r.start + 1}–${Math.min(r.end + 1, unitList.length)}` : '끝 지점 미설정';
+      return `<div class="manualChapterRow" data-id="${attr(ch.id)}"><b>${idx + 1}</b><span><strong>${esc(ch.title || titleFor(idx))}</strong><small>${range}${ch.note ? ' · 문구 있음' : ''}${ch.imageData ? ' · 이미지 있음' : ''}</small></span><button type="button" class="btn subtle" data-chapter-edit="${attr(ch.id)}">편집</button>${pl.chapters.length > 1 ? `<button type="button" class="btn subtle warn" data-chapter-delete="${attr(ch.id)}">삭제</button>` : ''}</div>`;
+    }).join('');
+  }
+  function searchMatches(){
+    const unitList = units();
+    const q = (qs('[data-chapter-end-keyword]') || {}).value || '';
+    const order = (qs('[data-chapter-end-order]') || {}).value || '';
+    let list = unitList.map((u, idx) => Object.assign({}, u, {index:idx}));
+    const query = String(q).trim().toLowerCase();
+    if(query) list = list.filter(u => String(u.text || '').toLowerCase().includes(query));
+    const n = Number(String(order).trim());
+    if(Number.isFinite(n) && n > 0) list = query ? list.filter((_u, idx) => idx + 1 === n) : list.filter(u => u.index + 1 === n);
+    return list;
+  }
+  function previewText(item){
+    const t = String((item && item.text) || '').replace(/\s+/g,' ').trim();
+    const q = ((qs('[data-chapter-end-keyword]') || {}).value || '').trim().toLowerCase();
+    if(!q || t.length <= 450) return t;
+    const pos = t.toLowerCase().indexOf(q);
+    if(pos < 0) return t.slice(0,450) + '…';
+    const s = Math.max(0, pos - 160), e = Math.min(t.length, pos + q.length + 260);
+    return `${s ? '…' : ''}${t.slice(s,e)}${e < t.length ? '…' : ''}`;
+  }
+  function renderSearch(){
+    const target = qs('#manualChapterSearchResults');
+    if(!target) return;
+    const matches = searchMatches();
+    page = Math.max(0, Math.min(page, Math.max(0, matches.length - 1)));
+    const cur = matches[page];
+    target.innerHTML = `<div class="miniToolHead"><div><strong>챕터 끝 지점</strong><span>검색한 문단을 이 챕터의 마지막 문단으로 설정합니다.</span></div><span>${matches.length ? `${page + 1}/${matches.length}` : '0개'}</span></div>` +
+      (cur ? `<div class="chapterMatchCard"><div class="dupeSummary withNav"><span><span class="pill">문단 ${cur.index + 1}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-stable-chapter-page="prev" ${page <= 0 ? 'disabled' : ''}>‹</button><button type="button" class="navIconBtn" data-stable-chapter-page="next" ${page >= matches.length - 1 ? 'disabled' : ''}>›</button></span></div><div class="previewText fullPreview chapterSearchPreview">${esc(previewText(cur))}</div><div class="chapterInsertRow"><button type="button" class="btn primary" data-stable-chapter-set-end="${cur.index}">이 문단을 끝 지점으로 설정</button><button type="button" class="btn subtle" data-stable-chapter-clear-end="1">끝 지점 비우기</button></div></div>` : '<div class="emptyState">검색 결과가 없습니다. 키워드나 번호를 바꿔 보세요.</div>');
+  }
+  function openIndexes(){ try{ return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '[]')); }catch(_){ return new Set(); } }
+  function saveOpenIndexes(set){ try{ localStorage.setItem(OPEN_KEY, JSON.stringify(Array.from(set))); }catch(_){} }
+  function renderToc(chs, compact){
+    if(!chs || !chs.length) return '<div class="emptyState">챕터가 아직 없습니다.</div>';
+    if(compact){
+      return `<div class="chapterTocBox"><div class="tocSummary"><strong>현재 목차</strong><span>${chs.length}개 챕터</span></div>${chs.map((ch, idx)=>{ const text = String(ch.body || htmlToText(ch.bodyHtml || '')).replace(/\s+/g,' ').trim(); return `<div class="chapterTocRow"><b>${idx+1}</b><span><strong>${esc(ch.title)}</strong><small>${esc(text.slice(0,70))}</small></span><em>${Number(text.length).toLocaleString('ko-KR')}자</em></div>`; }).join('')}</div>`;
+    }
+    const opens = openIndexes();
+    return `<div class="chapterPreviewList">${chs.map((ch, idx)=>{ const text = String(ch.body || htmlToText(ch.bodyHtml || '')).replace(/\s+/g,' ').trim(); return `<details class="chapterPreviewItem" data-preview-idx="${idx}" ${opens.has(idx) ? 'open' : ''}><summary><b>${idx+1}</b><span><strong>${esc(ch.title)}</strong>${text ? `<small>${esc(text.slice(0,120))}</small>` : ''}</span><em>${Number(text.length).toLocaleString('ko-KR')}자</em></summary><div class="bookPreview chapterPreviewBody">${fullHtml(ch,false) || '<p class="mutedText">미리보기 없음</p>'}</div></details>`; }).join('')}</div>`;
+  }
+  function updatePreview(){
+    const chs = chaptersFromPlan();
+    if(typeof chapterPreviewEl !== 'undefined' && chapterPreviewEl) chapterPreviewEl.innerHTML = renderToc(chs, false);
+    const epubPrev = qs('#epubPreview');
+    if(epubPrev){ const first = chs[0]; epubPrev.innerHTML = `<div class="previewMeta"><b>미리보기</b><span>${chs.length}개 챕터</span></div><div class="bookPreview">${first ? fullHtml(first,true) : '<p class="mutedText">미리보기 없음</p>'}</div>`; }
+  }
+  function refresh(){ renderRows(); renderSearch(); updatePreview(); }
+
+  window.getExportChapters = function(){ return chaptersFromPlan(); };
+  if(typeof getExportChapters !== 'undefined') getExportChapters = window.getExportChapters;
+  window.chapterBodyToXhtml = function(ch){ return fullHtml(ch, false); };
+  if(typeof chapterBodyToXhtml !== 'undefined') chapterBodyToXhtml = window.chapterBodyToXhtml;
+  window.renderChapterTocHtml = function(chs, compact){ return renderToc(chs, compact); };
+  if(typeof renderChapterTocHtml !== 'undefined') renderChapterTocHtml = window.renderChapterTocHtml;
+  const prevUpdate = window.updateEpubPreview;
+  window.updateEpubPreview = function(){ try{ if(typeof prevUpdate === 'function') prevUpdate(); }catch(_){} refresh(); };
+  if(typeof updateEpubPreview !== 'undefined') updateEpubPreview = window.updateEpubPreview;
+
+  window.addEventListener('click', function(ev){
+    const summary = ev.target.closest && ev.target.closest('#chapterPreview .chapterPreviewItem > summary');
+    if(summary){
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      const d = summary.parentElement;
+      const idx = Number(d.dataset.previewIdx);
+      d.open = !d.open;
+      const set = openIndexes();
+      if(d.open) set.add(idx); else set.delete(idx);
+      saveOpenIndexes(set);
+      return;
+    }
+    const edit = ev.target.closest && ev.target.closest('[data-chapter-edit]');
+    if(edit){ activeId = edit.dataset.chapterEdit; setTimeout(()=>{ decorateEditor(activeId); page = 0; renderSearch(); }, 20); return; }
+    const nav = ev.target.closest && ev.target.closest('[data-stable-chapter-page], [data-final-chapter-page], [data-patch-chapter-page], [data-manual-chapter-page]');
+    if(nav){
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      const len = searchMatches().length;
+      const v = nav.dataset.stableChapterPage || nav.dataset.finalChapterPage || nav.dataset.patchChapterPage || nav.dataset.manualChapterPage;
+      page += v === 'next' ? 1 : -1;
+      page = Math.max(0, Math.min(page, Math.max(0, len - 1)));
+      renderSearch(); return;
+    }
+    const setBtn = ev.target.closest && ev.target.closest('[data-stable-chapter-set-end], [data-final-chapter-set-end], [data-patch-chapter-set-end], [data-chapter-set-end]');
+    if(setBtn){
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      const end = Number(setBtn.dataset.stableChapterSetEnd || setBtn.dataset.finalChapterSetEnd || setBtn.dataset.patchChapterSetEnd || setBtn.dataset.chapterSetEnd);
+      const unitList = units();
+      const pl = sanitizePlan(plan(), unitList);
+      const id = getActiveId() || (pl.chapters[0] && pl.chapters[0].id);
+      const idx = Math.max(0, pl.chapters.findIndex(ch => ch.id === id));
+      pl.chapters[idx].endPara = Math.max(0, Math.min(Math.max(0, unitList.length - 1), end || 0));
+      fixLaterChapters(pl, idx, unitList);
+      savePlan(pl);
+      activeId = pl.chapters[idx].id;
+      if(typeof showToast === 'function') showToast('챕터 끝 지점을 설정했습니다.');
+      refresh();
+      setTimeout(()=>{ decorateEditor(activeId); renderSearch(); refresh(); }, 40);
+      return;
+    }
+    const clearBtn = ev.target.closest && ev.target.closest('[data-stable-chapter-clear-end], [data-final-chapter-clear-end], [data-patch-chapter-clear-end], [data-chapter-clear-end]');
+    if(clearBtn){
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      const unitList = units();
+      const pl = sanitizePlan(plan(), unitList);
+      const id = getActiveId() || (pl.chapters[0] && pl.chapters[0].id);
+      const ch = pl.chapters.find(c => c.id === id);
+      if(ch) ch.endPara = null;
+      savePlan(pl); refresh(); setTimeout(()=>decorateEditor(id), 30); return;
+    }
+    const add = ev.target.closest && ev.target.closest('[data-chapter-add]');
+    if(add){
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      const unitList = units();
+      const pl = sanitizePlan(plan(), unitList);
+      pl.chapters.push(defaultChapter(pl.chapters.length));
+      savePlan(pl); activeId = pl.chapters[pl.chapters.length-1].id; refresh();
+      setTimeout(()=>{ const btn = qs(`[data-chapter-edit="${CSS.escape(activeId)}"]`); if(btn) btn.click(); }, 40);
+      return;
+    }
+  }, true);
+
+  document.addEventListener('input', function(ev){
+    if(ev.target.matches && ev.target.matches('[data-chapter-title]')){
+      const pl = plan(); const id = getActiveId(); const ch = pl.chapters.find(c => c.id === id); if(ch){ ch.title = ev.target.value; savePlan(pl); renderRows(); updatePreview(); }
+    }
+    if(ev.target.matches && ev.target.matches('[data-chapter-end-keyword], [data-chapter-end-order]')){ page = 0; setTimeout(renderSearch,0); }
+  }, true);
+
+  function enforceBoards(){
+    if(mode() === 'epubedit') return;
+    qsa('#optionsBoard details.foldBlock, #reviewBoard details.foldBlock').forEach(d => d.open = true);
+  }
+  function boot(){ refresh(); enforceBoards(); setTimeout(()=>{ refresh(); enforceBoards(); }, 120); }
+  qsa('.tab').forEach(tab => tab.addEventListener('click', () => setTimeout(boot, 60)));
+  window.addEventListener('beforeunload', () => savePlan(plan()));
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+
 </script>
 </body>
 </html>
