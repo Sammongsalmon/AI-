@@ -4189,8 +4189,8 @@ requestAnimationFrame(syncActiveResultHeight);
   }
   function handleChapterManagerInput(ev){
     const ch = findChapterById(chapterSearch.editingId);
-    if(ev.target.matches("[data-chapter-title]") && ch){ ch.title = ev.target.value; saveState(); renderManualChapterRows(); refreshChapterOutputs(); return; }
-    if(ev.target.matches("[data-chapter-note]") && ch){ ch.note = ev.target.value; saveState(); refreshChapterOutputs(); return; }
+    if(ev.target.matches("[data-chapter-title]")){ if(window.__rofanChapterTitleOnlyInput && window.__rofanChapterTitleOnlyInput(ev)) return; }
+    if(ev.target.matches("[data-chapter-note]")){ return; }
     if(ev.target.matches("[data-chapter-image-pos]") && ch){ ch.imagePos = ev.target.value; saveState(); refreshChapterOutputs(); return; }
     if(ev.target.matches("[data-chapter-end-keyword]")){ chapterSearch.keyword = ev.target.value; chapterSearch.page = 0; refreshManualChapterSearchResults(); saveState(); return; }
     if(ev.target.matches("[data-chapter-end-order]")){ chapterSearch.order = ev.target.value; chapterSearch.page = 0; refreshManualChapterSearchResults(); saveState(); return; }
@@ -4843,7 +4843,10 @@ requestAnimationFrame(syncActiveResultHeight);
     hardSyncResultHeight();
   }
   document.addEventListener('click', () => setTimeout(() => { hideEditOnlyBoards(); hardSyncResultHeight(); updatePreviewPatch(); }, 20), true);
-  document.addEventListener('input', () => setTimeout(() => { hideEditOnlyBoards(); hardSyncResultHeight(); updatePreviewPatch(); }, 20), true);
+  document.addEventListener('input', ev => {
+    if(ev.target && ev.target.matches && ev.target.matches('[data-chapter-title], [data-chapter-note]')) return;
+    setTimeout(() => { hideEditOnlyBoards(); hardSyncResultHeight(); updatePreviewPatch(); }, 20);
+  }, true);
   window.addEventListener('resize', () => setTimeout(hardSyncResultHeight, 50), {passive:true});
   setInterval(() => { hideEditOnlyBoards(); hardSyncResultHeight(); }, 700);
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootFinalFix); else bootFinalFix();
@@ -5160,7 +5163,7 @@ requestAnimationFrame(syncActiveResultHeight);
   }, true);
   document.addEventListener('input', ev => {
     if(ev.target.matches && ev.target.matches('[data-chapter-title]')){
-      const got = getPlan(); const id = currentEditId(); const ch = got.plan.chapters.find(c => c.id === id); if(ch){ ch.title = ev.target.value; savePlan(got.plan); renderRows(); updatePreview(); }
+      if(window.__rofanChapterTitleOnlyInput && window.__rofanChapterTitleOnlyInput(ev)) return;
     }
     if(ev.target.matches && ev.target.matches('[data-chapter-end-keyword], [data-chapter-end-order]')){ localSearchPage = 0; setTimeout(renderSearch, 0); }
   }, true);
@@ -5522,7 +5525,7 @@ requestAnimationFrame(syncActiveResultHeight);
 
   document.addEventListener('input', function(ev){
     if(ev.target.matches && ev.target.matches('[data-chapter-title]')){
-      const pl = plan(); const id = getActiveId(); const ch = pl.chapters.find(c => c.id === id); if(ch){ ch.title = ev.target.value; savePlan(pl); renderRows(); updatePreview(); }
+      if(window.__rofanChapterTitleOnlyInput && window.__rofanChapterTitleOnlyInput(ev)) return;
     }
     if(ev.target.matches && ev.target.matches('[data-chapter-end-keyword], [data-chapter-end-order]')){ page = 0; setTimeout(renderSearch,0); }
   }, true);
@@ -5862,7 +5865,10 @@ requestAnimationFrame(syncActiveResultHeight);
     }
     scheduleRepair();
   }, true);
-  document.addEventListener('input', scheduleRepair, true);
+  document.addEventListener('input', ev => {
+    if(ev.target && ev.target.matches && ev.target.matches('[data-chapter-title], [data-chapter-note]')) return;
+    scheduleRepair();
+  }, true);
   document.addEventListener('change', scheduleRepair, true);
   window.addEventListener('resize', scheduleRepair, {passive:true});
   if(typeof MutationObserver !== 'undefined' && typeof epubEditEditor !== 'undefined' && epubEditEditor){
@@ -6056,6 +6062,7 @@ requestAnimationFrame(syncActiveResultHeight);
     if(ev.target && ev.target.closest && (ev.target.closest('#chapterTocInline') || ev.target.closest('#chapterDividerPanel') || ev.target.closest('#chapterPreview'))) scheduleClean();
   }, true);
   document.addEventListener('input', ev => {
+    if(ev.target && ev.target.matches && ev.target.matches('[data-chapter-title], [data-chapter-note]')) return;
     if(ev.target && ev.target.closest && (ev.target.closest('#chapterTocInline') || ev.target.closest('#chapterDividerPanel'))) scheduleClean();
   }, true);
   qsa('.tab').forEach(tab => tab.addEventListener('click', scheduleClean));
@@ -6063,3 +6070,184 @@ requestAnimationFrame(syncActiveResultHeight);
   else scheduleClean();
 })();
 
+
+/* --- 2026-06-07 final chapter title edit isolation patch ---
+   챕터명 입력은 제목 값만 저장합니다. 기존 챕터 끝 지점/endPara는 건드리지 않고,
+   무거운 챕터 재계산·미리보기 재렌더를 입력마다 실행하지 않도록 window capture 단계에서 차단합니다. */
+(function(){
+  const KEY = 'rofan-manual-chapters-v2';
+  let activeChapterId = null;
+  let titleSaveTimer = null;
+  const titleBoundarySnapshots = {};
+
+  function mode(){ return (typeof activeMode === 'string' && activeMode) ? activeMode : 'classic'; }
+  function qs(sel, root=document){ return root.querySelector(sel); }
+  function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+  function readAll(){ try{ return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; }catch(_){ return {}; } }
+  function writeAll(all){ try{ localStorage.setItem(KEY, JSON.stringify(all || {})); }catch(_){} }
+  function getPlan(all){ const m = mode(); if(!all[m]) all[m] = {chapters:[]}; if(!Array.isArray(all[m].chapters)) all[m].chapters = []; return all[m]; }
+  function captureTitleBoundarySnapshot(){
+    const all = readAll();
+    const pl = getPlan(all);
+    const snap = {};
+    (pl.chapters || []).forEach(ch => { if(ch && ch.id) snap[ch.id] = (ch.endPara === undefined ? null : ch.endPara); });
+    titleBoundarySnapshots[mode()] = snap;
+  }
+  function restoreTitleBoundarySnapshot(all, pl){
+    const snap = titleBoundarySnapshots[mode()];
+    if(!snap || !pl || !Array.isArray(pl.chapters)) return;
+    pl.chapters.forEach(ch => {
+      if(ch && ch.id && Object.prototype.hasOwnProperty.call(snap, ch.id)){
+        ch.endPara = snap[ch.id];
+      }
+    });
+  }
+  function restoreTitleBoundarySnapshotSoon(){
+    [0, 80, 220].forEach(delay => setTimeout(() => {
+      const all = readAll();
+      const pl = getPlan(all);
+      restoreTitleBoundarySnapshot(all, pl);
+      writeAll(all);
+    }, delay));
+  }
+  function cssEscape(v){ if(window.CSS && CSS.escape) return CSS.escape(String(v || '')); return String(v || '').replace(/[^a-zA-Z0-9_-]/g, '\\$&'); }
+  function textEscape(v){ return String(v || ''); }
+
+  function markEditor(id){
+    if(!id) return;
+    activeChapterId = id;
+    const editor = qs('.manualChapterEditor');
+    if(editor) editor.dataset.editingId = id;
+    const input = qs('[data-chapter-title]', editor || document);
+    if(input){
+      input.dataset.chapterId = id;
+      input.dataset.chapterTitleBound = '1';
+    }
+  }
+
+  function activeIdFromDom(input){
+    if(input && input.dataset && input.dataset.chapterId) return input.dataset.chapterId;
+    const editor = input && input.closest ? input.closest('.manualChapterEditor') : qs('.manualChapterEditor');
+    if(editor && editor.dataset && editor.dataset.editingId) return editor.dataset.editingId;
+    if(activeChapterId) return activeChapterId;
+    const openEditor = qs('.manualChapterEditor[open]');
+    if(openEditor && openEditor.dataset && openEditor.dataset.editingId) return openEditor.dataset.editingId;
+    return null;
+  }
+
+  function saveTitleOnly(input){
+    const id = activeIdFromDom(input);
+    if(!id) return;
+    markEditor(id);
+    const title = input.value || '';
+    const all = readAll();
+    const plan = getPlan(all);
+    const endSnapshot = {};
+    (plan.chapters || []).forEach(ch => {
+      if(ch && ch.id) endSnapshot[ch.id] = (ch.endPara === undefined ? null : ch.endPara);
+    });
+    const ch = plan.chapters.find(c => c && c.id === id);
+    if(!ch) return;
+    // 제목 입력은 제목만 바꿉니다. endPara/이미지/문구/챕터 순서는 현재 저장값 그대로 보존합니다.
+    ch.title = title;
+    (plan.chapters || []).forEach(item => {
+      if(item && item.id && Object.prototype.hasOwnProperty.call(endSnapshot, item.id)){
+        item.endPara = endSnapshot[item.id];
+      }
+    });
+    titleBoundarySnapshots[mode()] = Object.assign({}, endSnapshot);
+    writeAll(all);
+    if(typeof scheduleAutosave === 'function'){
+      clearTimeout(titleSaveTimer);
+      titleSaveTimer = setTimeout(() => { try{ scheduleAutosave(); }catch(_){} }, 250);
+    }
+    updateTitleDom(id, title);
+  }
+
+  function updateTitleDom(id, title){
+    const rowStrong = qs(`.manualChapterRow[data-id="${cssEscape(id)}"] strong`);
+    if(rowStrong) rowStrong.textContent = title || rowStrong.textContent || 'Chapter';
+    const editor = qs('.manualChapterEditor');
+    if(editor && editor.dataset && editor.dataset.editingId === id){
+      const summary = qs('summary', editor);
+      if(summary) summary.textContent = `${title || '챕터'} 편집`;
+      const input = qs('[data-chapter-title]', editor);
+      if(input && input.dataset) input.dataset.chapterId = id;
+    }
+    const rows = (() => { const all = readAll(); const plan = getPlan(all); return plan.chapters || []; })();
+    const idx = rows.findIndex(c => c && c.id === id);
+    if(idx >= 0){
+      qsa(`#chapterPreview .chapterPreviewItem[data-preview-idx="${idx}"] summary strong, #chapterTocInline .chapterTocRow:nth-child(${idx + 2}) strong`).forEach(el => { el.textContent = title || textEscape(el.textContent); });
+      if(idx === 0){
+        const h1 = qs('#epubPreview .bookPreview h1');
+        if(h1) h1.textContent = title || h1.textContent;
+      }
+    }
+  }
+
+  // 편집 버튼을 누르는 순간 현재 챕터 ID를 별도로 보관합니다.
+  window.addEventListener('click', ev => {
+    const edit = ev.target && ev.target.closest ? ev.target.closest('[data-chapter-edit]') : null;
+    if(edit && edit.dataset && edit.dataset.chapterEdit){
+      activeChapterId = edit.dataset.chapterEdit;
+      setTimeout(() => markEditor(activeChapterId), 0);
+      setTimeout(() => markEditor(activeChapterId), 60);
+    }
+  }, true);
+
+  window.addEventListener('focusin', ev => {
+    const input = ev.target && ev.target.matches && ev.target.matches('[data-chapter-title]') ? ev.target : null;
+    if(!input) return;
+    const id = activeIdFromDom(input);
+    if(id){ markEditor(id); captureTitleBoundarySnapshot(); }
+  }, true);
+
+  window.__rofanChapterTitleOnlyInput = function(ev){
+    const input = ev && ev.target && ev.target.matches && ev.target.matches('[data-chapter-title]') ? ev.target : null;
+    if(!input) return false;
+    if(!titleBoundarySnapshots[mode()]) captureTitleBoundarySnapshot();
+    saveTitleOnly(input);
+    return true;
+  };
+
+  // window capture 단계에서 제목 input 이벤트를 처리하고 아래의 기존 무거운 핸들러로 내려가지 않게 막습니다.
+  // 이렇게 해야 입력마다 챕터 경계 재계산/렌더링이 반복되며 endPara가 보정되는 문제를 피할 수 있습니다.
+  window.addEventListener('input', ev => {
+    const input = ev.target && ev.target.matches && ev.target.matches('[data-chapter-title]') ? ev.target : null;
+    if(!input) return;
+    saveTitleOnly(input);
+    ev.stopImmediatePropagation();
+  }, true);
+
+  function saveNoteOnly(textarea){
+    const editor = textarea && textarea.closest ? textarea.closest('.manualChapterEditor') : null;
+    const titleInput = editor ? qs('[data-chapter-title]', editor) : null;
+    const id = (titleInput && titleInput.dataset && titleInput.dataset.chapterId) || (editor && editor.dataset && editor.dataset.editingId) || activeChapterId;
+    if(!id) return false;
+    const all = readAll();
+    const plan = getPlan(all);
+    const ch = plan.chapters.find(c => c && c.id === id);
+    if(!ch) return false;
+    ch.note = textarea.value || '';
+    writeAll(all);
+    if(typeof scheduleAutosave === 'function'){
+      clearTimeout(titleSaveTimer);
+      titleSaveTimer = setTimeout(() => { try{ scheduleAutosave(); }catch(_){} }, 250);
+    }
+    return true;
+  }
+
+  window.addEventListener('input', ev => {
+    const textarea = ev.target && ev.target.matches && ev.target.matches('[data-chapter-note]') ? ev.target : null;
+    if(!textarea) return;
+    if(saveNoteOnly(textarea)) ev.stopImmediatePropagation();
+  }, true);
+
+  // blur 때 한 번 더 저장해 IME 조합 입력도 안전하게 보존합니다.
+  window.addEventListener('change', ev => {
+    const input = ev.target && ev.target.matches && ev.target.matches('[data-chapter-title]') ? ev.target : null;
+    if(!input) return;
+    saveTitleOnly(input);
+    ev.stopImmediatePropagation();
+  }, true);
+})();
