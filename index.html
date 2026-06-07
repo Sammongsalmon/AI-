@@ -5017,7 +5017,7 @@ requestAnimationFrame(syncActiveResultHeight);
     const toc = qs("#chapterTocInline");
     const div = qs("#chapterDividerPanel");
     if(!toc || !div) return;
-    toc.innerHTML = `<div class="manualChapterHead"><strong>현재 챕터</strong><button type="button" class="btn primary" data-chapter-add="1">챕터 추가</button></div><div id="manualChapterRows" class="manualChapterRows"></div>`;
+    toc.innerHTML = `<div class="manualChapterHead"><strong>현재 챕터</strong><span class="manualChapterHeadActions"><button type="button" class="btn subtle" data-chapter-reset-current="1">챕터 초기화</button><button type="button" class="btn subtle warn" data-chapter-reset-cache="1">챕터 캐시 삭제</button><button type="button" class="btn primary" data-chapter-add="1">챕터 추가</button></span></div><div id="manualChapterRows" class="manualChapterRows"></div>`;
     div.innerHTML = `<div id="manualChapterEditHost"><div class="emptyState">편집을 누르면 챕터 끝 지점, 문구, 이미지를 설정할 수 있습니다.</div></div>`;
     renderManualChapterRows();
   }
@@ -5031,12 +5031,41 @@ requestAnimationFrame(syncActiveResultHeight);
     renderManualChapterManager();
   }
   function findChapterById(id){ return currentPlan().chapters.find(ch => ch.id === id); }
-  function addChapter(){
-    const plan = currentPlan();
-    plan.chapters.push({ id: uid(), title: getChapterTitleFallback(plan.chapters.length), endPara: null, note:"", imageData:"", imageName:"", imageType:"", imagePos:"belowTitle" });
+  function resetCurrentChapterPlan(){
+    const state = ensureState();
+    state[mode()] = { chapters: [{ id: uid(), title: getChapterTitleFallback(0), endPara: null, note:"", imageData:"", imageName:"", imageType:"", imagePos:"belowTitle" }] };
+    chapterSearch = { keyword:"", order:"", page:0, editingId:null };
     saveState();
     renderManualChapterManager();
-    renderChapterEditPanel(plan.chapters[plan.chapters.length - 1].id);
+    refreshChapterOutputs();
+    toast("현재 탭의 챕터 설정을 초기화했습니다.");
+  }
+  function clearAllChapterCache(){
+    chapterStateCache = {};
+    try{ localStorage.removeItem(CHAPTER_STATE_KEY); }catch(_){ }
+    chapterSearch = { keyword:"", order:"", page:0, editingId:null };
+    renderManualChapterManager();
+    saveState();
+    refreshChapterOutputs();
+    toast("챕터 캐시를 삭제했습니다.");
+  }
+  function addChapter(){
+    const plan = currentPlan();
+    const units = getChapterUnits();
+    clampPlanToUnits(plan, units);
+    // 새 챕터는 항상 현재 목록의 맨 뒤에 붙입니다.
+    // 마지막 챕터가 '끝까지 이어짐(null)' 상태라면 그 범위를 명시적으로 글 끝으로 고정한 뒤,
+    // 새 빈 챕터를 뒤에 붙여 기존 챕터 사이에 끼어드는 현상을 막습니다.
+    const previousLast = plan.chapters[plan.chapters.length - 1];
+    if(previousLast && units.length && (previousLast.endPara === null || previousLast.endPara === undefined || previousLast.endPara === "")){
+      previousLast.endPara = units.length - 1;
+    }
+    const next = { id: uid(), title: getChapterTitleFallback(plan.chapters.length), endPara: null, note:"", imageData:"", imageName:"", imageType:"", imagePos:"belowTitle" };
+    plan.chapters.push(next);
+    chapterSearch = { keyword:"", order:"", page:0, editingId:next.id };
+    saveState();
+    renderManualChapterManager();
+    renderChapterEditPanel(next.id);
     refreshChapterOutputs();
   }
   function deleteChapter(id){
@@ -5071,6 +5100,10 @@ requestAnimationFrame(syncActiveResultHeight);
     });
   }
   function handleChapterManagerClick(ev){
+    const resetCurrent = ev.target.closest("[data-chapter-reset-current]");
+    if(resetCurrent){ if(confirm("현재 탭의 챕터 설정을 초기화하시겠습니까?")) resetCurrentChapterPlan(); return; }
+    const resetCache = ev.target.closest("[data-chapter-reset-cache]");
+    if(resetCache){ if(confirm("모든 탭의 챕터 캐시를 삭제하시겠습니까?")) clearAllChapterCache(); return; }
     const add = ev.target.closest("[data-chapter-add]");
     if(add){ addChapter(); return; }
     const edit = ev.target.closest("[data-chapter-edit]");
@@ -5305,6 +5338,7 @@ requestAnimationFrame(syncActiveResultHeight);
       .editorBox.resultBox .richResultBox{display:block!important;height:var(--synced-result-height,520px)!important;min-height:0!important;max-height:var(--synced-result-height,520px)!important;overflow:auto!important;flex:0 0 auto!important;box-sizing:border-box!important;}
       .manualChapterIntro{padding:10px 12px;border:1px dashed var(--line);border-radius:14px;background:var(--paper2);color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:12px;}
       .manualChapterHead{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px;}
+      .manualChapterHeadActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
       .manualChapterRows{display:grid;gap:8px;}
       .manualChapterRow{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:14px;background:#fff;padding:9px 10px;}
       .manualChapterRow b{width:24px;height:24px;border-radius:8px;background:var(--paper2);display:grid;place-items:center;color:var(--sub);font-size:12px;}
