@@ -28,19 +28,3 @@
   color:var(--muted);
   font-size:11px;
 }
-
-/* middle range delete */
-.middleRangePanel{display:grid;gap:12px;margin-top:12px;}
-.middleRangeItem{border:1px solid var(--line2);border-radius:16px;background:var(--paper2);padding:12px;}
-.middleRangeHead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
-.middleRangeHead strong{font-weight:760;color:rgba(31,45,54,.78);}
-.middleRangeGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;}
-.middleRangeGrid textarea{height:78px;min-height:78px;resize:vertical;line-height:1.6;}
-@media(max-width:720px){.middleRangeGrid{grid-template-columns:1fr}.middleRangeHead{align-items:flex-start}.middleRangeGrid textarea{height:70px;min-height:70px}}
-
-/* result panes must never grow with content; content scrolls inside */
-.editorGrid{align-items:start!important;}
-.editorBox.resultBox{align-self:start!important;min-height:0!important;height:auto!important;overflow:visible!important;display:flex!important;flex-direction:column!important;}
-.editorBox.resultBox .rawResultStorage{display:none!important;}
-.editorBox.resultBox .richResultBox{display:block!important;height:var(--synced-result-height,520px)!important;min-height:0!important;max-height:var(--synced-result-height,520px)!important;overflow:auto!important;overflow-x:hidden!important;flex:0 0 auto!important;box-sizing:border-box!important;}
-@media(max-width:860px){.editorBox.resultBox .richResultBox{height:420px!important;max-height:420px!important;min-height:320px!important;}}
