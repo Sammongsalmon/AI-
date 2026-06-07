@@ -5259,147 +5259,47 @@ requestAnimationFrame(syncActiveResultHeight);
     if(rest) out.push(rest);
     return out.filter(Boolean);
   }
-  function isLegacyChapterDividerText(value){
-    const t = String(value || '').replace(/\u00a0/g,' ').trim();
-    if(!t) return false;
-    if(/ROFAN_CHAPTER_BREAK|챕터\s*구분선/i.test(t)) return true;
-    const compact = strip(t).replace(/\s+/g,'').trim();
-    return /^[\-—―─━_]{3,}$/.test(compact);
-  }
-  function splitStructuredItemsToUnits(items){
-    if(!Array.isArray(items) || !items.length) return [];
-    const grouped = [];
-    const byId = new Map();
-    items.forEach((item, idx) => {
-      const id = item.blockId || item.block || item.id || ('seq-' + idx);
-      let bucket = byId.get(id);
-      if(!bucket){
-        bucket = {id, parts:[], owner:item.owner || '', kind:item.kind || ''};
-        byId.set(id, bucket);
-        grouped.push(bucket);
-      }
-      const text = String(item.text || item.body || '').trim();
-      if(text) bucket.parts.push(text);
-    });
-    return grouped.map(bucket => {
-      const text = bucket.parts.join('\n').trim();
-      return text ? {
-        text: strip(text).replace(/\s+/g,' ').trim(),
-        body: text,
-        html: bucket.parts.map(part => paraHtml({body:part, text:part})).join('\n'),
-        blockId: bucket.id,
-        owner: bucket.owner,
-        kind: bucket.kind
-      } : null;
-    }).filter(Boolean);
-  }
   function splitUnitsFromText(txt){
-    const rawOriginal = String(txt || '').replace(/\r/g,'');
-    if(!rawOriginal.trim()) return [];
-    try{
-      if(/<!--\s*rofan:/i.test(rawOriginal) && typeof parseStructuredMarkdownToChunks === 'function'){
-        const chunks = parseStructuredMarkdownToChunks(rawOriginal);
-        if(chunks && chunks.length){
-          return splitStructuredItemsToUnits(chunks.map(c => ({blockId:c.blockId, owner:c.owner, kind:c.kind, text:c.text})));
-        }
-      }
-    }catch(_){ }
-    const raw = rawOriginal
-      .replace(/<!--\s*rofan:[\s\S]*?-->/gi,'')
-      .replace(/<hr[^>]*(?:manual-chapter|chapter-separator|data-chapter)[^>]*>/gi,'\n')
-      .replace(/<br\s*\/?\s*>/gi,'\n')
-      .trim();
+    const raw = String(txt || '').replace(/\r/g,'').replace(/<!--\s*rofan:[\s\S]*?-->/gi,'').replace(/<hr[^>]*data-manual-chapter[^>]*>/gi,'\n\n').trim();
     if(!raw) return [];
-    const looksLikeHtml = /<\/?(?:p|div|section|article|blockquote|li|h[1-6]|span)\b/i.test(raw);
-    if(looksLikeHtml){
-      const temp = document.createElement('div');
-      temp.innerHTML = raw;
-      const structured = Array.from(temp.querySelectorAll('[data-owner][data-kind], .rofan-block, [data-block-id]')).filter(el => (el.innerText || el.textContent || '').trim());
-      if(structured.length){
-        const grouped = [];
-        const byId = new Map();
-        structured.forEach((el, idx) => {
-          if(el.closest('[data-owner][data-kind], .rofan-block, [data-block-id]') !== el) return;
-          const id = el.getAttribute('data-block-id') || el.getAttribute('data-block') || ('html-' + idx);
-          let bucket = byId.get(id);
-          if(!bucket){ bucket = {id, nodes:[], owner:el.getAttribute('data-owner') || '', kind:el.getAttribute('data-kind') || ''}; byId.set(id,bucket); grouped.push(bucket); }
-          bucket.nodes.push(el);
-        });
-        const units = grouped.map(bucket => {
-          const html = bucket.nodes.map(n => n.outerHTML).join('\n');
-          const text = htmlToText(html).replace(/\s+/g,' ').trim();
-          return text && !isLegacyChapterDividerText(text) ? {text, body:bucket.nodes.map(n => n.innerText || n.textContent || '').join('\n').trim(), html, blockId:bucket.id, owner:bucket.owner, kind:bucket.kind} : null;
-        }).filter(Boolean);
-        if(units.length) return units;
-      }
-      const blockEls = Array.from(temp.querySelectorAll('p, div, blockquote, li, h1, h2, h3, h4, h5, h6')).filter(el => {
-        if(el.querySelector('p, div, blockquote, li, h1, h2, h3, h4, h5, h6')) return false;
-        const t = (el.innerText || el.textContent || '').trim();
-        return t && !isLegacyChapterDividerText(t);
+    const units = [];
+    const addPiece = (p) => {
+      splitLong(p).forEach(x => {
+        const t = strip(x).replace(/\s+/g,' ').trim();
+        if(t) units.push({text:t, body:x});
       });
-      if(blockEls.length){
-        return blockEls.map(el => {
-          const html = el.outerHTML;
-          const text = htmlToText(html).replace(/\s+/g,' ').trim();
-          return text ? {text, body:(el.innerText || el.textContent || '').trim(), html} : null;
-        }).filter(Boolean);
-      }
-    }
-    // TXT는 문장 단위로 강제로 쪼개지 않고, 실제 줄바꿈을 기준으로 챕터 단위를 만듭니다.
-    return raw.split(/\n+/)
-      .map(line => line.trim())
-      .filter(line => line && !isLegacyChapterDividerText(line))
-      .map(line => ({ text: strip(line).replace(/\s+/g,' ').trim(), body: line }))
-      .filter(u => u.text);
+    };
+    raw.split(/\n\s*\n+/).map(v=>v.trim()).filter(Boolean).forEach(block => {
+      const lines = block.split(/\n+/).map(v=>v.trim()).filter(Boolean);
+      if(lines.length > 1){ lines.forEach(addPiece); return; }
+      const marked = block
+        .replace(/([.!?。！？…]+[”"'’]?)(\s+)/g, '$1\n')
+        .replace(/((?:습니다|습니까|입니다|입니까|했다|한다|된다|였다|었다|이다|다|요|죠|네|까|오|음|임|함|됨)[”"'’]?)(\s+)/g, '$1\n')
+        .replace(/([”"])(\s+)(?=[가-힣A-Za-z0-9“"])/g, '$1\n');
+      const parts = marked.split(/\n+/).map(v=>v.trim()).filter(Boolean);
+      if(parts.length > 1){ parts.forEach(addPiece); return; }
+      addPiece(block);
+    });
+    return units;
   }
   function editorUnits(){
     if(typeof epubEditEditor === 'undefined' || !epubEditEditor) return [];
-    const structured = Array.from(epubEditEditor.querySelectorAll('[data-owner][data-kind], .rofan-block, [data-block-id]')).filter(el => (el.innerText || el.textContent || '').trim());
-    if(structured.length){
-      const grouped = [];
-      const byId = new Map();
-      structured.forEach((el, idx) => {
-        if(el.closest('[data-owner][data-kind], .rofan-block, [data-block-id]') !== el) return;
-        const id = el.getAttribute('data-block-id') || el.getAttribute('data-block') || ('editor-block-' + idx);
-        let bucket = byId.get(id);
-        if(!bucket){ bucket = {id, nodes:[], owner:el.getAttribute('data-owner') || '', kind:el.getAttribute('data-kind') || ''}; byId.set(id, bucket); grouped.push(bucket); }
-        bucket.nodes.push(el);
-      });
-      const out = grouped.map(bucket => {
-        const html = bucket.nodes.map(n => n.outerHTML).join('\n');
-        const text = htmlToText(html).replace(/\s+/g,' ').trim();
-        return text && !isLegacyChapterDividerText(text) ? {text, body:bucket.nodes.map(n => n.innerText || n.textContent || '').join('\n').trim(), html, blockId:bucket.id, owner:bucket.owner, kind:bucket.kind} : null;
-      }).filter(Boolean);
-      if(out.length) return out;
-    }
     const nodes = Array.from(epubEditEditor.childNodes).filter(n => {
       if(n.nodeType === Node.ELEMENT_NODE && n.classList && n.classList.contains('manual-chapter-separator')) return false;
-      if(n.nodeType === Node.ELEMENT_NODE && n.tagName === 'HR') return false;
-      const txt = (n.innerText || n.textContent || '').trim();
-      return (txt && !isLegacyChapterDividerText(txt)) || n.nodeType === Node.ELEMENT_NODE;
+      return (n.textContent || '').trim() || n.nodeType === Node.ELEMENT_NODE;
     });
     if(!nodes.length) return splitUnitsFromText(epubEditEditor.innerText || epubEditEditor.textContent || '');
     const out = [];
     nodes.forEach(node => {
       const html = node.outerHTML || esc(node.textContent || '');
       const text = htmlToText(html).replace(/\s+/g,' ').trim();
-      if(!text || isLegacyChapterDividerText(text)) return;
-      out.push({text, body:text, html});
+      if(!text) return;
+      if(text.length > 900) splitUnitsFromText(text).forEach(u => out.push(u));
+      else out.push({text, body:text, html});
     });
-    return out.length ? out : splitUnitsFromText(epubEditEditor.innerText || epubEditEditor.textContent || '');
+    return out;
   }
-  function units(){
-    if(mode() === 'epubedit') return editorUnits();
-    if(Array.isArray(window.lastStructuredItems) && window.lastStructuredItems.length){
-      const grouped = splitStructuredItemsToUnits(window.lastStructuredItems);
-      if(grouped.length) return grouped;
-    }
-    if(typeof lastStructuredItems !== 'undefined' && Array.isArray(lastStructuredItems) && lastStructuredItems.length){
-      const grouped = splitStructuredItemsToUnits(lastStructuredItems);
-      if(grouped.length) return grouped;
-    }
-    return splitUnitsFromText(sourceText());
-  }
+  function units(){ return mode() === 'epubedit' ? editorUnits() : splitUnitsFromText(sourceText()); }
 
   function sanitizePlan(pl, unitList){
     if(!pl || !Array.isArray(pl.chapters)) pl = {chapters:[]};
@@ -5441,23 +5341,10 @@ requestAnimationFrame(syncActiveResultHeight);
     return ranges;
   }
   function paraHtml(u){
-    if(u && u.html) return sanitizeChapterUnitHtml(u.html);
+    if(u && u.html) return u.html;
     const body = (u && (u.body || u.text)) || '';
-    const cleanLines = String(body || '').replace(/\r/g,'').split(/\n+/).map(v => v.trim()).filter(Boolean);
-    if(cleanLines.length > 1){
-      return cleanLines.map(line => {
-        if(typeof paragraphToXhtml === 'function') return paragraphToXhtml(line);
-        return '<p>' + esc(line) + '</p>';
-      }).join('\n');
-    }
     if(typeof paragraphToXhtml === 'function') return paragraphToXhtml(body);
     return '<p>' + esc(body).replace(/\n/g,'<br>') + '</p>';
-  }
-  function sanitizeChapterUnitHtml(html){
-    const temp = document.createElement('div');
-    temp.innerHTML = html || '';
-    temp.querySelectorAll('hr,.manual-chapter-separator,.chapter-editor-separator').forEach(n => n.remove());
-    return temp.innerHTML;
   }
   function imageHtml(ch){ return ch && ch.imageData ? `<figure class="chapterImage"><img src="${attr(ch.imageData)}" alt="${attr(ch.imageName || ch.title || 'chapter image')}"></figure>` : ''; }
   function fullHtml(ch, includeTitle){
@@ -5547,12 +5434,11 @@ requestAnimationFrame(syncActiveResultHeight);
   function saveOpenIndexes(set){ try{ localStorage.setItem(OPEN_KEY, JSON.stringify(Array.from(set))); }catch(_){} }
   function renderToc(chs, compact){
     if(!chs || !chs.length) return '<div class="emptyState">챕터가 아직 없습니다.</div>';
-    const chapterText = (ch) => String(ch.body || htmlToText(ch.bodyHtml || '')).replace(/\s+/g,' ').trim();
     if(compact){
-      return `<div class="chapterTocBox"><div class="tocSummary"><strong>현재 목차</strong><span>${chs.length}개 챕터</span></div>${chs.map((ch, idx)=>{ const text = chapterText(ch); return `<div class="chapterTocRow"><b>${idx+1}</b><span><strong>${esc(ch.title)}</strong><small>${esc(text.slice(0,90))}</small></span><em>${Number(text.length).toLocaleString('ko-KR')}자</em></div>`; }).join('')}</div>`;
+      return `<div class="chapterTocBox"><div class="tocSummary"><strong>현재 목차</strong><span>${chs.length}개 챕터</span></div>${chs.map((ch, idx)=>{ const text = String(ch.body || htmlToText(ch.bodyHtml || '')).replace(/\s+/g,' ').trim(); return `<div class="chapterTocRow"><b>${idx+1}</b><span><strong>${esc(ch.title)}</strong><small>${esc(text.slice(0,70))}</small></span><em>${Number(text.length).toLocaleString('ko-KR')}자</em></div>`; }).join('')}</div>`;
     }
     const opens = openIndexes();
-    return `<div class="chapterPreviewList readableChapterPreview">${chs.map((ch, idx)=>{ const text = chapterText(ch); return `<details class="chapterPreviewItem" data-preview-idx="${idx}" ${opens.has(idx) ? 'open' : ''}><summary><b>${idx+1}</b><span><strong>${esc(ch.title)}</strong>${text ? `<small>${esc(text.slice(0,150))}</small>` : ''}</span><em>${Number(text.length).toLocaleString('ko-KR')}자</em></summary><div class="chapterPreviewBodyWrap"><div class="bookPreview chapterPreviewBody">${fullHtml(ch,false) || '<p class="mutedText">미리보기 없음</p>'}</div></div></details>`; }).join('')}</div>`;
+    return `<div class="chapterPreviewList">${chs.map((ch, idx)=>{ const text = String(ch.body || htmlToText(ch.bodyHtml || '')).replace(/\s+/g,' ').trim(); return `<details class="chapterPreviewItem" data-preview-idx="${idx}" ${opens.has(idx) ? 'open' : ''}><summary><b>${idx+1}</b><span><strong>${esc(ch.title)}</strong>${text ? `<small>${esc(text.slice(0,120))}</small>` : ''}</span><em>${Number(text.length).toLocaleString('ko-KR')}자</em></summary><div class="bookPreview chapterPreviewBody">${fullHtml(ch,false) || '<p class="mutedText">미리보기 없음</p>'}</div></details>`; }).join('')}</div>`;
   }
   function updatePreview(){
     const chs = chaptersFromPlan();
@@ -5641,36 +5527,396 @@ requestAnimationFrame(syncActiveResultHeight);
     if(ev.target.matches && ev.target.matches('[data-chapter-end-keyword], [data-chapter-end-order]')){ page = 0; setTimeout(renderSearch,0); }
   }, true);
 
-
-
-  function injectChapterPreviewPolish(){
-    if(document.getElementById('chapterPreviewPolishCss')) return;
-    const style = document.createElement('style');
-    style.id = 'chapterPreviewPolishCss';
-    style.textContent = `
-      .readableChapterPreview{display:grid;gap:10px;}
-      .chapterPreviewItem{border:1px solid var(--line);border-radius:16px;background:#fff;overflow:hidden;box-shadow:0 6px 18px rgba(63,107,128,.04);}
-      .chapterPreviewItem>summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 14px;}
-      .chapterPreviewItem>summary::-webkit-details-marker{display:none;}
-      .chapterPreviewItem>summary b{width:26px;height:26px;border-radius:9px;background:var(--paper2);color:var(--accent);display:grid;place-items:center;font-size:12px;}
-      .chapterPreviewItem>summary span{display:grid;gap:3px;min-width:0;}
-      .chapterPreviewItem>summary strong{font-weight:760;color:rgba(31,45,54,.78);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-      .chapterPreviewItem>summary small{color:var(--muted);font-size:12px;line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-      .chapterPreviewItem>summary em{font-style:normal;color:var(--muted);font-size:12px;white-space:nowrap;}
-      .chapterPreviewBodyWrap{border-top:1px solid var(--line2);padding:14px;background:#fbfdfe;}
-      .chapterPreviewBody{max-height:520px;overflow:auto;line-height:1.9;white-space:normal;}
-      .chapterPreviewBody p{margin:0 0 1em;}
-      .chapterPreviewBody br{display:block;content:"";margin:.35em 0;}
-      @media(max-width:860px){.chapterPreviewItem>summary{grid-template-columns:28px minmax(0,1fr);}.chapterPreviewItem>summary em{grid-column:2}.chapterPreviewBody{max-height:420px;}}
-    `;
-    document.head.appendChild(style);
-  }
   function enforceBoards(){
     if(mode() === 'epubedit') return;
     qsa('#optionsBoard details.foldBlock, #reviewBoard details.foldBlock').forEach(d => d.open = true);
   }
-  function boot(){ injectChapterPreviewPolish(); refresh(); enforceBoards(); setTimeout(()=>{ injectChapterPreviewPolish(); refresh(); enforceBoards(); }, 120); }
+  function boot(){ refresh(); enforceBoards(); setTimeout(()=>{ refresh(); enforceBoards(); }, 120); }
   qsa('.tab').forEach(tab => tab.addEventListener('click', () => setTimeout(boot, 60)));
   window.addEventListener('beforeunload', () => savePlan(plan()));
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+
+/* --- 2026-06-07 final chapter unit + preview cleanup --- */
+(function(){
+  const KEY = 'rofan-manual-chapters-v2';
+  const OPEN_KEY = 'rofan-chapter-preview-open-v2';
+  let localPage = 0;
+  let localActiveId = null;
+
+  function qs(sel, root=document){ return root.querySelector(sel); }
+  function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+  function mode(){ return (typeof activeMode === 'string' && activeMode) ? activeMode : 'classic'; }
+  function esc(v){
+    if(typeof escapeHTML === 'function') return escapeHTML(v == null ? '' : String(v));
+    return String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+  function attr(v){
+    if(typeof escapeAttr === 'function') return escapeAttr(v == null ? '' : String(v));
+    return esc(v).replace(/`/g,'&#096;');
+  }
+  function strip(v){
+    if(typeof stripHTMLTags === 'function') return stripHTMLTags(v == null ? '' : String(v));
+    const d = document.createElement('div');
+    d.innerHTML = String(v == null ? '' : v);
+    return d.textContent || d.innerText || '';
+  }
+  function htmlToText(html){
+    if(typeof blockHtmlToText === 'function') return blockHtmlToText(html || '');
+    const d = document.createElement('div');
+    d.innerHTML = html || '';
+    return (d.innerText || d.textContent || '').trim();
+  }
+  function titleFor(idx){ return idx === 0 ? 'Prologue' : 'Chapter ' + (idx + 1); }
+  function uid(){ return 'ch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8); }
+  function newChapter(idx){ return {id:uid(), title:titleFor(idx), endPara:null, note:'', imageData:'', imageName:'', imageType:'', imagePos:'belowTitle'}; }
+  function fileNameHint(){
+    const name = (typeof cachedEpubEditFileName === 'string' && cachedEpubEditFileName) ? cachedEpubEditFileName : ((qs('#epubEditFileName') || {}).textContent || '');
+    return String(name || '').toLowerCase();
+  }
+  function isTxtLike(){ return /\.txt(?:$|\?)/i.test(fileNameHint()); }
+  function isMdHtmlLike(){ return /\.(md|markdown|html|htm|epub)(?:$|\?)/i.test(fileNameHint()); }
+  function cleanSourceText(text){
+    return String(text || '')
+      .replace(/\r/g,'')
+      .replace(/<!--\s*rofan:[\s\S]*?-->/gi,'')
+      .replace(/⟦ROFAN_CHAPTER_BREAK⟧/g,'')
+      .replace(/<hr[^>]*(?:data-manual-chapter|data-chapter-separator)[^>]*>/gi,'')
+      .replace(/<[^>]+class=["'][^"']*(?:manual-chapter-separator|chapter-editor-separator)[^"']*["'][^>]*>[\s\S]*?<\/[^>]+>/gi,'')
+      .replace(/^\s*(?:챕터\s*구분선?|—————|────+|-----+)\s*$/gm,'')
+      .trim();
+  }
+  function makeTextUnit(text, body){
+    const raw = String(body != null ? body : text || '').replace(/\r/g,'').trim();
+    const plain = strip(raw).replace(/\u00a0/g,' ').replace(/[ \t]+/g,' ').replace(/\n[ \t]+/g,'\n').trim();
+    return plain ? { text: plain.replace(/\s+/g,' ').trim(), body: raw } : null;
+  }
+  function unitsFromLines(text){
+    return cleanSourceText(text).split(/\n+/).map(v => makeTextUnit(v, v)).filter(Boolean);
+  }
+  function unitsFromBlankParagraphs(text){
+    return cleanSourceText(text).split(/\n\s*\n+/).map(v => makeTextUnit(v, v)).filter(Boolean);
+  }
+  function htmlFromPlainTextBlock(text){
+    const blocks = String(text || '').replace(/\r/g,'').split(/\n\s*\n+/).map(v => v.trim()).filter(Boolean);
+    return blocks.map(block => `<p>${esc(block).replace(/\n/g,'<br>')}</p>`).join('\n');
+  }
+  function structuredUnitsFromItems(items){
+    if(!Array.isArray(items) || !items.length) return [];
+    const merged = (typeof mergeStructuredItemsByBlock === 'function') ? mergeStructuredItemsByBlock(items) : items;
+    return merged.map((item, idx) => {
+      const text = String(item && item.text || '').trim();
+      if(!text) return null;
+      let html = '';
+      try{
+        html = (typeof structuredItemsToHtml === 'function') ? structuredItemsToHtml([item]) : `<div class="rofan-block" data-block-id="${attr(item.blockId || 'block-' + idx)}" data-owner="${attr(item.owner || 'character')}" data-kind="${attr(item.kind || 'normal')}">${htmlFromPlainTextBlock(text)}</div>`;
+      }catch(_){ html = htmlFromPlainTextBlock(text); }
+      return { text: strip(text).replace(/\s+/g,' ').trim(), body: text, html, source:'structured' };
+    }).filter(Boolean);
+  }
+  function rofanBlockUnits(root){
+    if(!root) return [];
+    let blocks = qsa('.rofan-block', root);
+    if(!blocks.length){
+      blocks = qsa('[data-owner][data-kind]', root).filter(el => !el.closest('.rofan-block'));
+    }
+    return blocks.map((el, idx) => {
+      const html = el.outerHTML || htmlFromPlainTextBlock(el.innerText || el.textContent || '');
+      const text = (el.innerText || el.textContent || htmlToText(html) || '').trim();
+      return text ? { text:text.replace(/\s+/g,' ').trim(), body:text, html, source:'rofan-block', index:idx } : null;
+    }).filter(Boolean);
+  }
+  function editorChildBlockUnits(){
+    if(typeof epubEditEditor === 'undefined' || !epubEditEditor) return [];
+    const nodes = Array.from(epubEditEditor.childNodes).filter(node => {
+      if(node.nodeType === Node.ELEMENT_NODE && node.classList && (node.classList.contains('manual-chapter-separator') || node.classList.contains('chapter-editor-separator'))) return false;
+      return (node.textContent || '').trim() || node.nodeType === Node.ELEMENT_NODE;
+    });
+    return nodes.map((node, idx) => {
+      const html = node.outerHTML || htmlFromPlainTextBlock(node.textContent || '');
+      const text = htmlToText(html).trim();
+      return text ? { text:text.replace(/\s+/g,' ').trim(), body:text, html, source:'html-node', index:idx } : null;
+    }).filter(Boolean);
+  }
+  function textTabStructuredUnits(){
+    if(mode() !== 'classic' && mode() !== 'chat') return [];
+    if(typeof lastStructuredItems !== 'undefined' && Array.isArray(lastStructuredItems) && lastStructuredItems.length){
+      const units = structuredUnitsFromItems(lastStructuredItems);
+      if(units.length) return units;
+    }
+    if(mode() === 'chat' && typeof chatPaste !== 'undefined' && chatPaste){
+      const units = rofanBlockUnits(chatPaste);
+      if(units.length) return units;
+    }
+    return [];
+  }
+  function activeTextOutput(){
+    if(mode() === 'chat' && typeof chatOutput !== 'undefined' && chatOutput) return chatOutput.value || '';
+    if(mode() === 'classic' && typeof output !== 'undefined' && output) return output.value || '';
+    if(typeof getPreparedOutputForExport === 'function') return getPreparedOutputForExport() || '';
+    return '';
+  }
+  function chapterUnitsV4(){
+    if(mode() === 'epubedit'){
+      if(typeof epubEditEditor === 'undefined' || !epubEditEditor) return [];
+      const structured = rofanBlockUnits(epubEditEditor);
+      if(structured.length) return structured;
+      const text = epubEditEditor.innerText || epubEditEditor.textContent || '';
+      if(isTxtLike()) return unitsFromLines(text);
+      if(isMdHtmlLike()){
+        const children = editorChildBlockUnits();
+        if(children.length) return children;
+      }
+      return unitsFromLines(text).length > 1 ? unitsFromLines(text) : unitsFromBlankParagraphs(text);
+    }
+    const structured = textTabStructuredUnits();
+    if(structured.length) return structured;
+    const text = activeTextOutput();
+    return unitsFromBlankParagraphs(text);
+  }
+  function state(){
+    try{ return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; }
+    catch(_){ return {}; }
+  }
+  function saveState(st){
+    try{ localStorage.setItem(KEY, JSON.stringify(st || {})); }catch(_){ }
+    if(typeof scheduleAutosave === 'function') scheduleAutosave();
+  }
+  function plan(){
+    const st = state();
+    const m = mode();
+    if(!st[m]) st[m] = {chapters:[]};
+    if(!Array.isArray(st[m].chapters)) st[m].chapters = [];
+    if(!st[m].chapters.length) st[m].chapters.push(newChapter(0));
+    st[m].chapters.forEach((ch, idx) => { if(!ch.id) ch.id = uid(); if(!ch.title) ch.title = titleFor(idx); });
+    saveState(st);
+    return st[m];
+  }
+  function savePlan(pl){ const st = state(); st[mode()] = pl; saveState(st); }
+  function sanitizePlan(pl, units){
+    if(!pl || !Array.isArray(pl.chapters)) pl = {chapters:[]};
+    if(!pl.chapters.length) pl.chapters.push(newChapter(0));
+    const max = Math.max(0, units.length - 1);
+    pl.chapters.forEach((ch, idx) => {
+      if(!ch.id) ch.id = uid();
+      if(!ch.title) ch.title = titleFor(idx);
+      if(ch.endPara === '' || ch.endPara === undefined || ch.endPara === null){ ch.endPara = null; return; }
+      ch.endPara = Math.max(0, Math.min(max, Number(ch.endPara) || 0));
+    });
+    return pl;
+  }
+  function addTrailingIfNeeded(pl, units){
+    const max = Math.max(0, units.length - 1);
+    const last = pl.chapters[pl.chapters.length - 1];
+    if(units.length && last && last.endPara !== null && last.endPara !== undefined && Number(last.endPara) < max){
+      pl.chapters.push(newChapter(pl.chapters.length));
+      return true;
+    }
+    return false;
+  }
+  function ranges(pl, units){
+    sanitizePlan(pl, units);
+    const out = [];
+    let start = 0;
+    pl.chapters.forEach((ch, idx) => {
+      let end = ch.endPara;
+      if(end === null || end === undefined || end === '') end = (idx === pl.chapters.length - 1) ? units.length - 1 : start - 1;
+      end = Math.max(start - 1, Math.min(units.length - 1, Number(end)));
+      out.push({start, end});
+      start = end + 1;
+    });
+    return out;
+  }
+  function unitHtml(u){
+    if(u && u.html) return u.html;
+    return htmlFromPlainTextBlock((u && (u.body || u.text)) || '');
+  }
+  function imageHtml(ch){ return ch && ch.imageData ? `<figure class="chapterImage"><img src="${attr(ch.imageData)}" alt="${attr(ch.imageName || ch.title || 'chapter image')}"></figure>` : ''; }
+  function fullHtml(ch, includeTitle){
+    const note = ch.note ? `<p class="chapterNote">${esc(ch.note).replace(/\n/g,'<br>')}</p>` : '';
+    const img = imageHtml(ch);
+    return `${ch.imagePos === 'aboveTitle' ? img : ''}${includeTitle ? `<h1>${esc(ch.title || '')}</h1>` : ''}${note}${(!ch.imagePos || ch.imagePos === 'belowTitle') ? img : ''}${ch.bodyHtml || htmlFromPlainTextBlock(ch.body || '')}${ch.imagePos === 'bottom' ? img : ''}`;
+  }
+  function chaptersFromPlanV4(){
+    const units = chapterUnitsV4();
+    const pl = sanitizePlan(plan(), units);
+    if(addTrailingIfNeeded(pl, units)) savePlan(pl);
+    const rs = ranges(pl, units);
+    const chapters = pl.chapters.map((ch, idx) => {
+      const r = rs[idx] || {start:0,end:-1};
+      const slice = r.end >= r.start ? units.slice(r.start, r.end + 1) : [];
+      const body = slice.map(u => u.body || u.text || '').join('\n\n').trim();
+      const bodyHtml = slice.map(unitHtml).join('\n');
+      return Object.assign({}, ch, {title:ch.title || titleFor(idx), body, bodyHtml, startIndex:r.start, endIndex:r.end});
+    });
+    return chapters.filter((ch, idx) => ch.body || ch.bodyHtml || ch.note || ch.imageData || idx === 0);
+  }
+  function activeEditId(){
+    const ed = qs('.manualChapterEditor[data-editing-id]');
+    if(ed && ed.dataset.editingId) return ed.dataset.editingId;
+    const inp = qs('[data-chapter-title][data-chapter-id]');
+    if(inp && inp.dataset.chapterId) return inp.dataset.chapterId;
+    if(localActiveId) return localActiveId;
+    const row = qs('[data-chapter-edit]');
+    return row ? row.dataset.chapterEdit : null;
+  }
+  function decorate(id){
+    if(!id) return;
+    localActiveId = id;
+    const ed = qs('.manualChapterEditor');
+    if(ed) ed.dataset.editingId = id;
+    const inp = qs('[data-chapter-title]');
+    if(inp) inp.dataset.chapterId = id;
+  }
+  function renderRowsV4(){
+    const box = qs('#manualChapterRows');
+    if(!box) return;
+    const units = chapterUnitsV4();
+    const pl = sanitizePlan(plan(), units);
+    if(addTrailingIfNeeded(pl, units)) savePlan(pl);
+    const rs = ranges(pl, units);
+    box.innerHTML = pl.chapters.map((ch, idx) => {
+      const r = rs[idx] || {start:0,end:-1};
+      const range = r.end >= r.start ? `${r.start + 1}–${Math.min(r.end + 1, units.length)}` : '끝 지점 미설정';
+      return `<div class="manualChapterRow" data-id="${attr(ch.id)}"><b>${idx + 1}</b><span><strong>${esc(ch.title || titleFor(idx))}</strong><small>${range}${ch.note ? ' · 문구 있음' : ''}${ch.imageData ? ' · 이미지 있음' : ''}</small></span><button type="button" class="btn subtle" data-chapter-edit="${attr(ch.id)}">편집</button>${pl.chapters.length > 1 ? `<button type="button" class="btn subtle warn" data-chapter-delete="${attr(ch.id)}">삭제</button>` : ''}</div>`;
+    }).join('');
+  }
+  function searchMatchesV4(){
+    const units = chapterUnitsV4();
+    const q = ((qs('[data-chapter-end-keyword]') || {}).value || '').trim().toLowerCase();
+    const order = ((qs('[data-chapter-end-order]') || {}).value || '').trim();
+    let list = units.map((u, idx) => Object.assign({}, u, {index:idx}));
+    if(q) list = list.filter(u => String(u.text || '').toLowerCase().includes(q));
+    const n = Number(order);
+    if(Number.isFinite(n) && n > 0) list = q ? list.filter((_u, idx) => idx + 1 === n) : list.filter(u => u.index + 1 === n);
+    return list;
+  }
+  function previewText(item){
+    const text = String((item && item.text) || '').replace(/\s+/g,' ').trim();
+    const q = ((qs('[data-chapter-end-keyword]') || {}).value || '').trim().toLowerCase();
+    if(!q || text.length <= 520) return text;
+    const pos = text.toLowerCase().indexOf(q);
+    if(pos < 0) return text.slice(0,520) + '…';
+    const s = Math.max(0, pos - 180), e = Math.min(text.length, pos + q.length + 300);
+    return `${s ? '…' : ''}${text.slice(s,e)}${e < text.length ? '…' : ''}`;
+  }
+  function renderSearchV4(){
+    const target = qs('#manualChapterSearchResults');
+    if(!target) return;
+    const matches = searchMatchesV4();
+    localPage = Math.max(0, Math.min(localPage, Math.max(0, matches.length - 1)));
+    const cur = matches[localPage];
+    target.innerHTML = `<div class="miniToolHead"><div><strong>챕터 끝 지점</strong><span>검색한 문단을 이 챕터의 마지막 문단으로 설정합니다.</span></div><span>${matches.length ? `${localPage + 1}/${matches.length}` : '0개'}</span></div>` +
+      (cur ? `<div class="chapterMatchCard"><div class="dupeSummary withNav"><span><span class="pill">문단 ${cur.index + 1}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-v4-chapter-page="prev" ${localPage <= 0 ? 'disabled' : ''}>‹</button><button type="button" class="navIconBtn" data-v4-chapter-page="next" ${localPage >= matches.length - 1 ? 'disabled' : ''}>›</button></span></div><div class="previewText fullPreview chapterSearchPreview">${esc(previewText(cur))}</div><div class="chapterInsertRow"><button type="button" class="btn primary" data-v4-chapter-set-end="${cur.index}">이 문단을 끝 지점으로 설정</button><button type="button" class="btn subtle" data-v4-chapter-clear-end="1">끝 지점 비우기</button></div></div>` : '<div class="emptyState">검색 결과가 없습니다. 키워드나 번호를 바꿔 보세요.</div>');
+  }
+  function openSet(){ try{ return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '[]')); }catch(_){ return new Set(); } }
+  function saveOpenSet(set){ try{ localStorage.setItem(OPEN_KEY, JSON.stringify(Array.from(set))); }catch(_){} }
+  function renderTocV4(chapters, compact){
+    if(!chapters || !chapters.length) return '<div class="emptyState">챕터가 아직 없습니다.</div>';
+    if(compact){
+      return `<div class="chapterTocBox refinedChapterToc"><div class="tocSummary"><strong>현재 목차</strong><span>${chapters.length}개 챕터</span></div>${chapters.map((ch, idx) => { const text = String(ch.body || htmlToText(ch.bodyHtml || '')).replace(/\s+/g,' ').trim(); return `<div class="chapterTocRow"><b>${idx+1}</b><span><strong>${esc(ch.title)}</strong><small>${esc(text.slice(0,90))}</small></span><em>${Number(text.length).toLocaleString('ko-KR')}자</em></div>`; }).join('')}</div>`;
+    }
+    const opens = openSet();
+    return `<div class="chapterPreviewList refinedChapterPreview">${chapters.map((ch, idx) => { const text = String(ch.body || htmlToText(ch.bodyHtml || '')).replace(/\s+/g,' ').trim(); const lead = text.slice(0,160); return `<details class="chapterPreviewItem refinedChapterPreviewItem" data-preview-idx="${idx}" ${opens.has(idx) ? 'open' : ''}><summary><b>${idx+1}</b><span><strong>${esc(ch.title)}</strong>${lead ? `<small>${esc(lead)}</small>` : ''}</span><em>${Number(text.length).toLocaleString('ko-KR')}자</em></summary><div class="bookPreview chapterPreviewBody refinedChapterPreviewBody">${fullHtml(ch,false) || '<p class="mutedText">미리보기 없음</p>'}</div></details>`; }).join('')}</div>`;
+  }
+  function updatePreviewV4(){
+    const chapters = chaptersFromPlanV4();
+    if(typeof chapterPreviewEl !== 'undefined' && chapterPreviewEl) chapterPreviewEl.innerHTML = renderTocV4(chapters, false);
+    if(typeof chapterTocInlineEl !== 'undefined' && chapterTocInlineEl && !qs('#manualChapterRows')) chapterTocInlineEl.innerHTML = renderTocV4(chapters, true);
+    const epubPrev = qs('#epubPreview');
+    if(epubPrev){ const first = chapters[0]; epubPrev.innerHTML = `<div class="previewMeta"><b>미리보기</b><span>${chapters.length}개 챕터</span></div><div class="bookPreview refinedChapterPreviewBody">${first ? fullHtml(first,true) : '<p class="mutedText">미리보기 없음</p>'}</div>`; }
+  }
+  function refreshAllV4(){ renderRowsV4(); renderSearchV4(); updatePreviewV4(); }
+  function setEndV4(end){
+    const units = chapterUnitsV4();
+    const pl = sanitizePlan(plan(), units);
+    const id = activeEditId() || (pl.chapters[0] && pl.chapters[0].id);
+    const idx = Math.max(0, pl.chapters.findIndex(ch => ch.id === id));
+    if(!pl.chapters[idx]) return;
+    pl.chapters[idx].endPara = Math.max(0, Math.min(Math.max(0, units.length - 1), Number(end) || 0));
+    for(let i = idx + 1; i < pl.chapters.length; i++){
+      const val = pl.chapters[i].endPara;
+      if(val !== null && val !== undefined && val !== '' && Number(val) <= Number(pl.chapters[idx].endPara)) pl.chapters[i].endPara = null;
+    }
+    addTrailingIfNeeded(pl, units);
+    savePlan(pl);
+    localActiveId = pl.chapters[idx].id;
+    refreshAllV4();
+    decorate(localActiveId);
+    if(typeof showToast === 'function') showToast('챕터 끝 지점을 설정했습니다.');
+  }
+  function clearEndV4(){
+    const units = chapterUnitsV4();
+    const pl = sanitizePlan(plan(), units);
+    const id = activeEditId() || (pl.chapters[0] && pl.chapters[0].id);
+    const ch = pl.chapters.find(c => c.id === id);
+    if(ch) ch.endPara = null;
+    savePlan(pl);
+    refreshAllV4();
+    decorate(id);
+  }
+  window.getExportChapters = function(){ return chaptersFromPlanV4(); };
+  if(typeof getExportChapters !== 'undefined') getExportChapters = window.getExportChapters;
+  window.chapterBodyToXhtml = function(ch){ return fullHtml(ch, false); };
+  if(typeof chapterBodyToXhtml !== 'undefined') chapterBodyToXhtml = window.chapterBodyToXhtml;
+  window.renderChapterTocHtml = function(chs, compact){ return renderTocV4(chs, compact); };
+  if(typeof renderChapterTocHtml !== 'undefined') renderChapterTocHtml = window.renderChapterTocHtml;
+  window.updateEpubPreview = function(){ refreshAllV4(); };
+  if(typeof updateEpubPreview !== 'undefined') updateEpubPreview = window.updateEpubPreview;
+
+  document.addEventListener('click', function(ev){
+    const edit = ev.target.closest && ev.target.closest('[data-chapter-edit]');
+    if(edit){ localActiveId = edit.dataset.chapterEdit; setTimeout(() => { decorate(localActiveId); renderSearchV4(); renderRowsV4(); updatePreviewV4(); }, 25); }
+    const nav = ev.target.closest && ev.target.closest('[data-v4-chapter-page]');
+    if(nav){ ev.preventDefault(); ev.stopImmediatePropagation(); const len = searchMatchesV4().length; localPage += nav.dataset.v4ChapterPage === 'next' ? 1 : -1; localPage = Math.max(0, Math.min(localPage, Math.max(0, len - 1))); renderSearchV4(); return; }
+    const set = ev.target.closest && ev.target.closest('[data-v4-chapter-set-end]');
+    if(set){ ev.preventDefault(); ev.stopImmediatePropagation(); setEndV4(set.dataset.v4ChapterSetEnd); return; }
+    const clear = ev.target.closest && ev.target.closest('[data-v4-chapter-clear-end]');
+    if(clear){ ev.preventDefault(); ev.stopImmediatePropagation(); clearEndV4(); return; }
+    const summary = ev.target.closest && ev.target.closest('#chapterPreview .chapterPreviewItem > summary');
+    if(summary){
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      const details = summary.parentElement;
+      const idx = Number(details.dataset.previewIdx);
+      details.open = !details.open;
+      const setOpen = openSet();
+      if(details.open) setOpen.add(idx); else setOpen.delete(idx);
+      saveOpenSet(setOpen);
+      return;
+    }
+  }, true);
+  document.addEventListener('input', function(ev){
+    if(ev.target.matches && ev.target.matches('[data-chapter-title]')){ setTimeout(() => { renderRowsV4(); updatePreviewV4(); }, 0); }
+    if(ev.target.matches && ev.target.matches('[data-chapter-end-keyword], [data-chapter-end-order]')){ localPage = 0; setTimeout(renderSearchV4, 0); }
+  }, true);
+  document.addEventListener('change', function(ev){
+    if(ev.target.matches && ev.target.matches('[data-chapter-image], [data-chapter-image-pos]')) setTimeout(() => { renderRowsV4(); updatePreviewV4(); }, 80);
+  }, true);
+  function installCss(){
+    if(qs('#rofanChapterUnitPreviewCss')) return;
+    const style = document.createElement('style');
+    style.id = 'rofanChapterUnitPreviewCss';
+    style.textContent = `
+      .refinedChapterPreview{display:grid;gap:10px;}
+      .refinedChapterPreviewItem{border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:0 8px 24px rgba(63,107,128,.045);overflow:hidden;}
+      .refinedChapterPreviewItem>summary{list-style:none;display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 16px;cursor:pointer;}
+      .refinedChapterPreviewItem>summary::-webkit-details-marker{display:none;}
+      .refinedChapterPreviewItem>summary b{width:28px;height:28px;border-radius:10px;background:var(--paper2);display:grid;place-items:center;color:var(--accent);font-size:12px;font-weight:760;}
+      .refinedChapterPreviewItem>summary span{min-width:0;display:grid;gap:4px;}
+      .refinedChapterPreviewItem>summary strong{font-weight:760;color:rgba(31,45,54,.78);line-height:1.25;}
+      .refinedChapterPreviewItem>summary small{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+      .refinedChapterPreviewItem>summary em{font-style:normal;font-size:12px;color:var(--muted);white-space:nowrap;}
+      .refinedChapterPreviewItem[open]>summary{border-bottom:1px solid var(--line2);background:var(--paper2);}
+      .refinedChapterPreviewBody{max-height:540px!important;overflow:auto!important;background:#fff!important;border:0!important;border-radius:0!important;padding:20px!important;line-height:1.9!important;font-size:15px;}
+      .refinedChapterPreviewBody p{margin:0 0 1em!important;white-space:pre-wrap;word-break:keep-all;overflow-wrap:break-word;}
+      .refinedChapterPreviewBody .rofan-block{margin:0 0 1.1em;}
+      .refinedChapterPreviewBody .rofan-block p{margin:0 0 .72em!important;}
+      .chapterTocRow small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      @media(max-width:860px){.refinedChapterPreviewItem>summary{grid-template-columns:28px minmax(0,1fr);}.refinedChapterPreviewItem>summary em{grid-column:2}.refinedChapterPreviewBody{font-size:13px;padding:14px!important;}}
+    `;
+    document.head.appendChild(style);
+  }
+  function boot(){ installCss(); setTimeout(refreshAllV4, 0); setTimeout(refreshAllV4, 120); }
+  qsa('.tab').forEach(tab => tab.addEventListener('click', () => setTimeout(boot, 80)));
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();
