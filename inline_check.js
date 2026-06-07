@@ -1,5 +1,5 @@
+
 const input = document.getElementById("inputText");
-const inputPreview = document.getElementById("inputTextPreview");
 const output = document.getElementById("outputText");
 const outputPreview = document.getElementById("outputTextPreview");
 const chatPaste = document.getElementById("chatPaste");
@@ -140,16 +140,14 @@ function wirePrettyFileInputs(){
     label.dataset.fileWired = '1';
     label.setAttribute('tabindex', label.getAttribute('tabindex') || '0');
     label.setAttribute('role', 'button');
-    // 파일 선택은 label 기본 동작을 그대로 사용합니다.
-    // programmatic click + preventDefault 조합은 일부 모바일 브라우저에서 파일 선택 후 change가 누락될 수 있습니다.
-    label.addEventListener('pointerdown', ev => {
-      if(ev.target !== fileInput) fileInput.value = '';
-    }, {passive:true});
-    fileInput.addEventListener('click', () => { fileInput.value = ''; });
+    label.addEventListener('click', ev => {
+      if(ev.target === fileInput) return;
+      ev.preventDefault();
+      fileInput.click();
+    });
     label.addEventListener('keydown', ev => {
       if(ev.key === 'Enter' || ev.key === ' '){
         ev.preventDefault();
-        fileInput.value = '';
         fileInput.click();
       }
     });
@@ -1123,15 +1121,20 @@ function setResultOutputScroll(el, value){
 function syncActiveResultHeight(){
   const panel = activeMode === "chat" ? chatPanel : activeMode === "classic" ? classicPanel : null;
   if(!panel || panel.classList.contains("hidden")) return;
+  if(window.matchMedia && window.matchMedia("(max-width: 860px)").matches) return;
+  const grid = panel.querySelector(".editorGrid");
   const left = panel.querySelector(".editorGrid > .editorBox:not(.resultBox)");
   const resultBox = panel.querySelector(".editorGrid > .editorBox.resultBox");
   const preview = resultBox ? resultBox.querySelector(".richResultBox") : null;
   const label = resultBox ? resultBox.querySelector(".editorLabel") : null;
-  if(!left || !resultBox || !preview) return;
-  const leftHeight = Math.max(360, Math.round(left.getBoundingClientRect().height));
+  if(!grid || !left || !resultBox || !preview) return;
+  const leftRect = left.getBoundingClientRect();
   const labelHeight = label ? Math.ceil(label.getBoundingClientRect().height) : 0;
-  resultBox.style.minHeight = leftHeight + "px";
-  preview.style.height = Math.max(300, leftHeight - labelHeight - 8) + "px";
+  const target = Math.max(320, Math.round(leftRect.height) - labelHeight - 9);
+  resultBox.style.minHeight = Math.round(leftRect.height) + "px";
+  preview.style.setProperty("--synced-result-height", target + "px");
+  preview.style.height = target + "px";
+  preview.style.maxHeight = target + "px";
 }
 function isItalicElement(el){
   if(!el || el.nodeType !== 1) return false;
@@ -3850,654 +3853,547 @@ syncResultPreview(output);
 syncResultPreview(chatOutput);
 requestAnimationFrame(syncActiveResultHeight);
 
-/* --- final stability patch: visual result, tab-safe chapters, block-height sync --- */
-const ROFAN_CHAPTER_BREAK_TOKEN = "⟦ROFAN_CHAPTER_BREAK⟧";
-const chapterSettingsByMode = window.__chapterSettingsByMode || (window.__chapterSettingsByMode = {});
-function captureChapterSettings(){
-  return {
-    split: chapterSplitModeEl ? chapterSplitModeEl.value : "none",
-    size: chapterSizeEl ? chapterSizeEl.value : "7000",
-    sep: chapterSeparatorEl ? chapterSeparatorEl.value : "—————",
-    prefix: chapterTitlePrefixEl ? chapterTitlePrefixEl.value : "Chapter",
-    first: chapterFirstTitleEl ? chapterFirstTitleEl.value : "",
-    pos: chapterPositionEl ? chapterPositionEl.value : "before",
-    keyword: chapterKeywordInputEl ? chapterKeywordInputEl.value : "",
-    order: chapterOrderInputEl ? chapterOrderInputEl.value : ""
-  };
-}
-function applyChapterSettingsPack(pack){
-  if(!pack) return;
-  if(chapterSplitModeEl) chapterSplitModeEl.value = pack.split || "none";
-  if(chapterSizeEl) chapterSizeEl.value = pack.size || "7000";
-  if(chapterSeparatorEl) chapterSeparatorEl.value = pack.sep || "—————";
-  if(chapterTitlePrefixEl) chapterTitlePrefixEl.value = pack.prefix || "Chapter";
-  if(chapterFirstTitleEl) chapterFirstTitleEl.value = pack.first || "";
-  if(chapterPositionEl) chapterPositionEl.value = pack.pos || "before";
-  if(chapterKeywordInputEl){ chapterKeywordInputEl.value = pack.keyword || ""; chapterKeywordQuery = chapterKeywordInputEl.value; }
-  if(chapterOrderInputEl){ chapterOrderInputEl.value = pack.order || ""; chapterOrderQuery = chapterOrderInputEl.value; }
-}
-function saveActiveChapterSettings(){ chapterSettingsByMode[activeMode || "classic"] = captureChapterSettings(); }
-function ensureActiveChapterSettings(){
-  const key = activeMode || "classic";
-  if(!chapterSettingsByMode[key]) chapterSettingsByMode[key] = captureChapterSettings();
-  applyChapterSettingsPack(chapterSettingsByMode[key]);
-}
-[chapterSplitModeEl,chapterSizeEl,chapterSeparatorEl,chapterTitlePrefixEl,chapterFirstTitleEl,chapterPositionEl,chapterKeywordInputEl,chapterOrderInputEl].forEach(el=>{
-  if(!el) return;
-  el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => { saveActiveChapterSettings(); refreshChapterViews(); }, true);
-});
-document.querySelectorAll(".tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    saveActiveChapterSettings();
-    const next = tab.dataset.tab || "classic";
-    setTimeout(() => {
-      if(!chapterSettingsByMode[next]) chapterSettingsByMode[next] = Object.assign({}, captureChapterSettings());
-      applyChapterSettingsPack(chapterSettingsByMode[next]);
-      refreshChapterViews();
-      requestAnimationFrame(syncActiveResultHeight);
-    }, 0);
-  }, true);
-});
-
-function isRofanChapterBreakText(text){
-  return String(text || "").includes(ROFAN_CHAPTER_BREAK_TOKEN);
-}
-function stripRofanChapterBreakText(text){
-  return String(text || "").replace(new RegExp(ROFAN_CHAPTER_BREAK_TOKEN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "").trim();
-}
-function htmlFromResultText(text){
-  let escaped = escapeHTML(text || "");
-  const tokenEsc = escapeHTML(ROFAN_CHAPTER_BREAK_TOKEN);
-  escaped = escaped.replace(new RegExp(tokenEsc, "g"), '<hr class="chapter-editor-separator" data-chapter-separator="true">');
-  return escaped.replace(/&lt;span\b([\s\S]*?)&gt;([\s\S]*?)&lt;\/span&gt;/gi, (match, rawAttrs, inner) => {
-    const attrs = String(rawAttrs || "");
-    const colorMatch = attrs.match(/color\s*:\s*(#[0-9a-fA-F]{6})/i);
-    const color = colorMatch ? colorMatch[1] : "";
-    const ownerMatch = attrs.match(/data-speaker-owner=&quot;([a-zA-Z_-]+)&quot;/i);
-    const hasSpeakerClass = /speaker-label/i.test(attrs);
-    const attrParts = [];
-    if(hasSpeakerClass) attrParts.push('class="speaker-label"');
-    if(ownerMatch) attrParts.push(`data-speaker-owner="${escapeAttr(ownerMatch[1])}"`);
-    if(color) attrParts.push(`style="color:${color}"`);
-    if(!attrParts.length) return inner;
-    return `<span ${attrParts.join(" ")}>${inner}</span>`;
-  });
-}
-function syncResultPreview(el){
-  const preview = resultPreviewFor(el);
-  if(!preview || !el) return;
-  const oldScroll = preview.scrollTop;
-  preview.innerHTML = htmlFromResultText(el.value || "");
-  preview.dataset.placeholder = el.getAttribute("placeholder") || "변환 결과";
-  preview.scrollTop = oldScroll;
-}
-function setResultOutput(el, value){
-  if(!el) return;
-  el.value = value || "";
-  syncResultPreview(el);
-  requestAnimationFrame(syncActiveResultHeight);
-}
-function getPlainActiveOutputValue(){
-  return stripHTMLTags(getActiveOutputValue()).replace(new RegExp(ROFAN_CHAPTER_BREAK_TOKEN, "g"), "").replace(/&nbsp;/gi, " ").trim();
-}
-function splitOutputParagraphsWithOffsets(text){
-  const re = /\n\s*\n+/g;
-  const parts = [];
-  let start = 0, m;
-  while((m = re.exec(text))){
-    const raw = text.slice(start, m.index);
-    if(raw.trim()) parts.push({text:raw.trim(), start, end:m.index});
-    start = re.lastIndex;
-  }
-  const raw = text.slice(start);
-  if(raw.trim()) parts.push({text:raw.trim(), start, end:text.length});
-  return parts;
-}
-function getChapterSearchMatches(){
-  const q = String(chapterKeywordQuery || "").trim().toLowerCase();
-  const order = String(chapterOrderQuery || "").trim();
-  const text = getActiveOutputValue();
-  let matches = splitOutputParagraphsWithOffsets(text)
-    .map((p, index) => ({...p, index}))
-    .filter(p => !isRofanChapterBreakText(p.text) && !isConfiguredChapterSeparator(p.text, getEpubConfig()));
-  if(q) matches = matches.filter(p => stripHTMLTags(p.text).toLowerCase().includes(q));
-  if(order){
-    const n = Number(order);
-    if(Number.isFinite(n) && n > 0) matches = matches.filter((_p, idx) => idx + 1 === n || _p.index + 1 === n);
-  }
-  return matches;
-}
-function isConfiguredChapterSeparator(text, cfg){
-  const raw = String(text || "");
-  if(isRofanChapterBreakText(raw)) return true;
-  const clean = raw.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").replace(/\s+/g, "").trim();
-  const sep = String((cfg && cfg.separator) || (chapterSeparatorEl && chapterSeparatorEl.value) || "—————").replace(/\s+/g, "").trim();
-  if(!clean || !sep) return false;
-  if(clean === sep) return true;
-  const dashLine = /^[\-—―─━_]{3,}$/;
-  return dashLine.test(clean) && dashLine.test(sep);
-}
-function insertChapterDividerAtCurrentMatch(){
-  const matches = getChapterSearchMatches();
-  if(!matches.length){ showToast("구분선을 넣을 문단을 찾지 못했습니다."); return; }
-  const current = matches[Math.max(0, Math.min(matches.length - 1, chapterMatchPage || 0))];
-  const separator = (chapterSeparatorEl && chapterSeparatorEl.value.trim()) || "—————";
-  const position = chapterPositionEl ? chapterPositionEl.value : "before";
-  if(chapterSplitModeEl) chapterSplitModeEl.value = "separator";
-  saveActiveChapterSettings();
-  if(activeMode === "epubedit" && epubEditEditor){
-    insertChapterDividerIntoEditor(current, position, separator);
-  }else{
-    const text = getActiveOutputValue();
-    const insertPos = position === "after" ? current.end : current.start;
-    const before = text.slice(0, insertPos).replace(/[\s\n]+$/g, "");
-    const after = text.slice(insertPos).replace(/^[\s\n]+/g, "");
-    const nextText = [before, ROFAN_CHAPTER_BREAK_TOKEN, after].filter(Boolean).join("\n\n");
-    const el = getActiveOutput();
-    if(el) setResultOutput(el, nextText);
-  }
-  refreshChapterViews();
-  setTimeout(refreshChapterViews, 30);
-  scheduleAutosave();
-  showToast(position === "after" ? "문단 아래에 챕터 구분선을 넣었습니다." : "문단 위에 챕터 구분선을 넣었습니다.");
-}
-function splitTextIntoChapters(text){
-  const cfg = getEpubConfig();
-  const source = String(text || "").trim();
-  if(!source) return [];
-  const chapters = [];
-  const makeTitle = idx => getChapterTitle(idx, cfg);
-  if(cfg.chapterMode === "separator"){
-    const paras = splitTextIntoParagraphs(source);
-    let bucket = [];
-    const flush = () => {
-      const body = bucket.join("\n\n").replace(new RegExp(ROFAN_CHAPTER_BREAK_TOKEN, "g"), "").trim();
-      if(body) chapters.push({title:makeTitle(chapters.length), body});
-      bucket = [];
-    };
-    paras.forEach(p => {
-      if(isConfiguredChapterSeparator(p, cfg)) flush();
-      else bucket.push(p);
-    });
-    flush();
-  }else if(cfg.chapterMode === "paragraphs"){
-    const paras = splitTextIntoParagraphs(source).filter(p => !isConfiguredChapterSeparator(p, cfg));
-    for(let i=0; i<paras.length; i += cfg.chapterSize){ chapters.push({title:makeTitle(chapters.length), body:paras.slice(i, i + cfg.chapterSize).join("\n\n")}); }
-  }else if(cfg.chapterMode === "chars"){
-    const paras = splitTextIntoParagraphs(source).filter(p => !isConfiguredChapterSeparator(p, cfg));
-    let bucket = [], count = 0;
-    paras.forEach(p => {
-      if(bucket.length && count + p.length > cfg.chapterSize){ chapters.push({title:makeTitle(chapters.length), body:bucket.join("\n\n")}); bucket=[]; count=0; }
-      bucket.push(p); count += p.length;
-    });
-    if(bucket.length) chapters.push({title:makeTitle(chapters.length), body:bucket.join("\n\n")});
-  }else{
-    const clean = splitTextIntoParagraphs(source).filter(p => !isConfiguredChapterSeparator(p, cfg)).join("\n\n");
-    chapters.push({title:cfg.firstChapterTitle || cfg.title, body:clean});
-  }
-  return chapters.filter(ch => String(ch.body || "").trim());
-}
-function editorHtmlToChapterBlocks(html){
-  const temp=document.createElement('div'); temp.innerHTML=html || '';
-  const blocks=[];
-  Array.from(temp.childNodes).forEach(node => {
-    const text = String(node.innerText || node.textContent || "").trim();
-    if(node.nodeType===Node.ELEMENT_NODE && (node.tagName==='HR' || node.getAttribute('data-chapter-separator') === 'true')) blocks.push({sep:true});
-    else if(isConfiguredChapterSeparator(text, getEpubConfig())) blocks.push({sep:true});
-    else if(text || node.nodeType===Node.ELEMENT_NODE) blocks.push({html: node.outerHTML || escapeHTML(node.textContent||'')});
-  });
-  return blocks;
-}
-function getExportChapters(markdownMode){
-  if(activeMode !== "epubedit"){
-    return splitTextIntoChapters(markdownMode ? stripHTMLTags(getPreparedOutputForExport()) : getPreparedOutputForExport());
-  }
-  const cfg = getEpubConfig();
-  const html = editorHtmlForExport();
-  const blocks = editorHtmlToChapterBlocks(html);
-  const makeTitle = idx => getChapterTitle(idx, cfg);
-  if(markdownMode){ return splitTextIntoChapters(blockHtmlToText(html)); }
-  const makeChapter = (bucket, idxTitle) => ({title: idxTitle === null ? cfg.title : makeTitle(idxTitle), bodyHtml:bucket.join("\n"), body:blockHtmlToText(bucket.join("\n"))});
-  if(cfg.chapterMode === "separator"){
-    const chapters=[]; let bucket=[];
-    blocks.forEach(b => { if(b.sep){ if(bucket.length){ chapters.push(makeChapter(bucket, chapters.length)); bucket=[]; } } else if(b.html) bucket.push(b.html); });
-    if(bucket.length) chapters.push(makeChapter(bucket, chapters.length));
-    return chapters.length ? chapters : [{title:cfg.firstChapterTitle || cfg.title, bodyHtml:html, body:blockHtmlToText(html)}];
-  }
-  if(cfg.chapterMode === "chars" || cfg.chapterMode === "paragraphs"){
-    const chapters=[]; let bucket=[]; let count=0;
-    blocks.filter(b => b.html).forEach(b => {
-      const t = blockHtmlToText(b.html);
-      const unit = cfg.chapterMode === "paragraphs" ? 1 : t.length;
-      if(bucket.length && count + unit > cfg.chapterSize){ chapters.push(makeChapter(bucket, chapters.length)); bucket=[]; count=0; }
-      bucket.push(b.html); count += unit;
-    });
-    if(bucket.length) chapters.push(makeChapter(bucket, chapters.length));
-    if(chapters.length) return chapters;
-  }
-  return html ? [{title:cfg.firstChapterTitle || cfg.title, bodyHtml:html, body:blockHtmlToText(html)}] : [];
-}
-function exportedBodyHtml(){
-  return getExportChapters().map((ch, idx) => `<section id="ch${idx+1}"><h1>${escapeXML(ch.title)}</h1>${chapterBodyToXhtml(ch)}</section>`).join("\n");
-}
-function buildStandaloneHTML(){
-  const cfg = getEpubConfig();
-  const chapters = getExportChapters();
-  const toc = chapters.map((ch, idx) => `<li><a href="#ch${idx+1}">${escapeXML(ch.title)}</a></li>`).join("\n");
-  const body = chapters.map((ch, idx) => `<section id="ch${idx+1}"><h1>${escapeXML(ch.title)}</h1>${chapterBodyToXhtml(ch)}</section>`).join("\n");
-  return `<!doctype html><html lang="${escapeXML(cfg.language)}"><head><meta charset="utf-8"><title>${escapeXML(cfg.title)}</title><style>${getEpubCss()} nav{margin-bottom:2rem;padding:1rem;border:1px solid #ddd;border-radius:12px;} section{max-width:720px;margin:0 auto 3rem;}</style></head><body><nav><strong>목차</strong><ol>${toc}</ol></nav>${body}</body></html>`;
-}
-function syncActiveResultHeight(){
-  const panel = activeMode === "chat" ? chatPanel : activeMode === "classic" ? classicPanel : null;
-  if(!panel || panel.classList.contains("hidden")) return;
-  const grid = panel.querySelector(".editorGrid");
-  const left = panel.querySelector(".editorGrid > .editorBox:not(.resultBox)");
-  const resultBox = panel.querySelector(".editorGrid > .editorBox.resultBox");
-  const preview = resultBox ? resultBox.querySelector(".richResultBox") : null;
-  const label = resultBox ? resultBox.querySelector(".editorLabel") : null;
-  if(!grid || !left || !resultBox || !preview) return;
-  const mobile = window.matchMedia("(max-width: 860px)").matches;
-  if(mobile){
-    resultBox.style.height = ""; resultBox.style.minHeight = ""; resultBox.style.overflow = "";
-    preview.style.height = "360px"; preview.style.maxHeight = ""; preview.style.flex = "";
-    return;
-  }
-  const leftRect = left.getBoundingClientRect();
-  const leftHeight = Math.max(420, Math.round(leftRect.height));
-  const labelHeight = label ? Math.ceil(label.getBoundingClientRect().height) + 9 : 0;
-  const previewHeight = Math.max(320, leftHeight - labelHeight);
-  resultBox.style.height = leftHeight + "px";
-  resultBox.style.minHeight = leftHeight + "px";
-  resultBox.style.overflow = "hidden";
-  preview.style.height = previewHeight + "px";
-  preview.style.maxHeight = previewHeight + "px";
-  preview.style.flex = "0 0 auto";
-}
-function refreshChapterViews(){
-  updateEpubPreview();
-  updateChapterDividerPanel();
-  requestAnimationFrame(() => { updateEpubPreview(); syncActiveResultHeight(); });
-}
-
-function stripRofanMetaCommentsForDisplay(text){
-  return String(text || "").replace(/<!--\s*rofan:[\s\S]*?-->/gi, "").replace(/\n{3,}/g, "\n\n").trim();
-}
-function htmlFromInputText(text){
-  return htmlFromResultText(stripRofanMetaCommentsForDisplay(text || ""));
-}
-function renderedInputToText(node){
-  if(!node) return "";
-  const clone = node.cloneNode(true);
-  clone.querySelectorAll('.rofanMetaHidden').forEach(el => el.remove());
-  clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
-  clone.querySelectorAll('div,p,blockquote,hr').forEach(el => {
-    if(el.tagName === 'HR') el.replaceWith('\n' + (chapterSeparatorEl ? chapterSeparatorEl.value : '—————') + '\n');
-    else el.insertAdjacentText('afterend', '\n\n');
-  });
-  return (clone.textContent || '').replace(/\u00a0/g, ' ').replace(/\n[ \t]+/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-}
-function syncClassicInputPreview(){
-  if(!input || !inputPreview) return;
-  const oldScroll = inputPreview.scrollTop;
-  const html = htmlFromInputText(input.value || "");
-  if(inputPreview.innerHTML !== html) inputPreview.innerHTML = html;
-  inputPreview.scrollTop = oldScroll;
-}
-function setupRenderedClassicInput(){
-  if(!input || !inputPreview || inputPreview.dataset.renderInputWired === '1') return;
-  inputPreview.dataset.renderInputWired = '1';
-  const desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
-  if(desc && desc.get && desc.set && !input.dataset.valuePatched){
-    const nativeGet = desc.get.bind(input);
-    const nativeSet = desc.set.bind(input);
-    Object.defineProperty(input, 'value', {
-      configurable:true,
-      get(){ return nativeGet(); },
-      set(v){ nativeSet(v == null ? '' : String(v)); queueMicrotask(syncClassicInputPreview); }
-    });
-    input.dataset.valuePatched = '1';
-  }
-  inputPreview.addEventListener('input', () => {
-    const desc2 = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
-    if(desc2 && desc2.set) desc2.set.call(input, renderedInputToText(inputPreview));
-    else input.value = renderedInputToText(inputPreview);
-    if(!isApplyingClassicExcerpt) classicActiveChunks = null;
-    transformText();
-    scheduleAutosave();
-  });
-  inputPreview.addEventListener('scroll', () => scheduleAutosave(), {passive:true});
-  syncClassicInputPreview();
-}
-
-(function applyFinalPatchNow(){
-  setupRenderedClassicInput();
-  ensureActiveChapterSettings();
-  syncResultPreview(output);
-  syncResultPreview(chatOutput);
-  refreshChapterViews();
-  requestAnimationFrame(syncActiveResultHeight);
-})();
-
-
-/* --- stability patch 2026-06-06: rendered inputs, file buttons, tab-local chapters --- */
+/* --- 2026-06-06 final UI/chapter hardening patch --- */
 (function(){
-  const markerToken = (typeof ROFAN_CHAPTER_BREAK_TOKEN !== 'undefined') ? ROFAN_CHAPTER_BREAK_TOKEN : '⟦ROFAN_CHAPTER_BREAK⟧';
-  const markerStore = window.__rofanChapterMarkersByMode || (window.__rofanChapterMarkersByMode = {});
-  const chapterSettingStore = window.__chapterSettingsByMode || (window.__chapterSettingsByMode = {});
-  const modeKey = () => (typeof activeMode === 'string' && activeMode) ? activeMode : 'classic';
-  const normalizeText = v => String(v || '').replace(/\r/g, '').trim();
-  const getSep = () => (typeof chapterSeparatorEl !== 'undefined' && chapterSeparatorEl && chapterSeparatorEl.value.trim()) || '—————';
-  const tokenRe = () => new RegExp(markerToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+  const CHAPTER_STATE_KEY = "rofan-manual-chapters-v2";
+  const EMOJI_RE = /(?:[\u2600-\u27BF]|[\u{1F1E6}-\u{1F1FF}]|[\u{1F300}-\u{1FAFF}])\uFE0F?/u;
+  const IMG_TYPES = "image/png,image/jpeg,image/jpg,image/webp,image/gif,image/svg+xml,.svg";
+  let chapterStateCache = null;
+  let chapterSearch = { keyword:"", order:"", page:0, editingId:null };
+  let epubBoardCollapsedForTextTabs = true;
 
-  function activeRawOutputElement(){
-    if(modeKey() === 'chat') return (typeof chatOutput !== 'undefined' ? chatOutput : null);
-    if(modeKey() === 'classic') return (typeof output !== 'undefined' ? output : null);
-    return null;
+  function qs(sel, root=document){ return root.querySelector(sel); }
+  function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+  function mode(){ return (typeof activeMode === "string" && activeMode) ? activeMode : "classic"; }
+  function safeHtml(v){ return (typeof escapeHTML === "function") ? escapeHTML(v) : String(v||"").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch])); }
+  function safeAttr(v){ return (typeof escapeAttr === "function") ? escapeAttr(v) : safeHtml(v); }
+  function toast(msg){ if(typeof showToast === "function") showToast(msg); }
+  function uid(){ return "ch-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2,8); }
+  function plainFromHtml(html){
+    if(typeof blockHtmlToText === "function") return blockHtmlToText(html);
+    const d = document.createElement("div"); d.innerHTML = html || ""; return (d.innerText || d.textContent || "").trim();
   }
-  function getVisibleSourceText(){
-    if(modeKey() === 'epubedit') return (typeof epubEditEditor !== 'undefined' && epubEditEditor) ? (epubEditEditor.innerText || epubEditEditor.textContent || '') : '';
-    const out = activeRawOutputElement();
-    if(out && out.value) return out.value;
-    if(modeKey() === 'chat' && typeof chatPaste !== 'undefined' && chatPaste) return chatPaste.innerText || chatPaste.textContent || '';
-    if(modeKey() === 'classic'){
-      if(typeof input !== 'undefined' && input && input.value) return input.value;
-      if(typeof inputPreview !== 'undefined' && inputPreview) return inputPreview.innerText || inputPreview.textContent || '';
+  function stripTagsLocal(text){
+    if(typeof stripHTMLTags === "function") return stripHTMLTags(text || "");
+    return String(text || "").replace(/<[^>]*>/g, "");
+  }
+  function getChapterTitleFallback(idx){
+    if(idx === 0 && typeof chapterFirstTitleEl !== "undefined" && chapterFirstTitleEl && chapterFirstTitleEl.value.trim()) return chapterFirstTitleEl.value.trim();
+    const prefix = (typeof chapterTitlePrefixEl !== "undefined" && chapterTitlePrefixEl && chapterTitlePrefixEl.value.trim()) || "Chapter";
+    return `${prefix} ${idx + 1}`;
+  }
+  function ensureState(){
+    if(chapterStateCache) return chapterStateCache;
+    try{ chapterStateCache = JSON.parse(localStorage.getItem(CHAPTER_STATE_KEY) || "{}"); }
+    catch(_){ chapterStateCache = {}; }
+    return chapterStateCache;
+  }
+  function saveState(){
+    try{ localStorage.setItem(CHAPTER_STATE_KEY, JSON.stringify(ensureState())); }catch(_){ }
+    if(typeof scheduleAutosave === "function") scheduleAutosave();
+  }
+  function getPlan(modeName=mode()){
+    const state = ensureState();
+    if(!state[modeName]) state[modeName] = { chapters: [] };
+    if(!Array.isArray(state[modeName].chapters)) state[modeName].chapters = [];
+    if(!state[modeName].chapters.length){
+      state[modeName].chapters.push({ id: uid(), title: getChapterTitleFallback(0), endPara: null, note: "", imageData: "", imageName: "", imageType: "", imagePos: "belowTitle" });
     }
-    return '';
+    state[modeName].chapters.forEach((ch, idx) => { if(!ch.id) ch.id = uid(); if(!ch.title) ch.title = getChapterTitleFallback(idx); });
+    return state[modeName];
   }
-  function paragraphsOf(text){
-    return String(text || '')
-      .replace(tokenRe(), '\n\n' + markerToken + '\n\n')
-      .replace(/\r/g, '')
-      .split(/\n\s*\n+/)
-      .map(p => p.trim())
-      .filter(Boolean);
-  }
-  function isSeparatorParagraph(p){
-    const raw = String(p || '');
-    if(raw.includes(markerToken)) return true;
-    const clean = raw.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, '').trim();
-    const sep = getSep().replace(/\s+/g, '').trim();
-    if(clean && sep && clean === sep) return true;
-    return /^[\-—―─━_]{3,}$/.test(clean) && /^[\-—―─━_]{3,}$/.test(sep || '—————');
-  }
-  function htmlRenderLimited(text){
-    if(typeof htmlFromResultText === 'function') return htmlFromResultText(text || '');
-    if(typeof escapeHTML === 'function') return escapeHTML(text || '');
-    const d=document.createElement('div'); d.textContent=text||''; return d.innerHTML;
-  }
-
-  // File buttons: label 기본 파일 선택 동작을 보존하고, 같은 파일을 다시 선택해도 change가 발생하도록 값만 초기화합니다.
-  document.addEventListener('pointerdown', function(ev){
-    const label = ev.target && ev.target.closest ? ev.target.closest('label.prettyFile, .fileControl') : null;
-    if(!label || (ev.target.matches && ev.target.matches('input[type="file"]'))) return;
-    const file = label.querySelector('input[type="file"]');
-    if(file) file.value = '';
-  }, true);
-
-  // 앱에서 만든 Markdown/HTML 주석은 입력창에서 숨기고, 색상/이름표는 렌더링해서 보여줍니다.
-  window.htmlFromInputText = htmlFromInputText = function(text){
-    const raw = String(text || '');
-    try{
-      if(/<!--\s*rofan:/i.test(raw) && typeof parseStructuredMarkdownToChunks === 'function' && typeof structuredItemsToHtml === 'function'){
-        const chunks = parseStructuredMarkdownToChunks(raw);
-        if(chunks && chunks.length){
-          return structuredItemsToHtml(chunks.map(c => ({blockId:c.blockId, owner:c.owner, kind:c.kind, text:c.text}))).replace(tokenRe(), '<hr class="chapter-editor-separator" data-chapter-separator="true">');
-        }
-      }
-    }catch(err){ console.warn('input structured render failed', err); }
-    return htmlRenderLimited(String(raw).replace(/<!--\s*rofan:[\s\S]*?-->/gi, '').replace(/\n{3,}/g, '\n\n').trim());
-  };
-
-  window.syncClassicInputPreview = syncClassicInputPreview = function(){
-    if(typeof input === 'undefined' || typeof inputPreview === 'undefined' || !input || !inputPreview) return;
-    const old = inputPreview.scrollTop;
-    const html = htmlFromInputText(input.value || '');
-    if(inputPreview.innerHTML !== html) inputPreview.innerHTML = html;
-    inputPreview.scrollTop = old;
-  };
-
-  // 결과창은 항상 코드 대신 렌더링된 화면으로 보여줍니다.
-  window.syncResultPreview = syncResultPreview = function(el){
-    if(typeof resultPreviewFor !== 'function') return;
-    const preview = resultPreviewFor(el);
-    if(!preview || !el) return;
-    const old = preview.scrollTop;
-    preview.innerHTML = htmlRenderLimited(el.value || '');
-    preview.dataset.placeholder = el.getAttribute('placeholder') || '변환 결과';
-    preview.scrollTop = old;
-  };
-  window.setResultOutput = setResultOutput = function(el, value){
-    if(!el) return;
-    el.value = value || '';
-    syncResultPreview(el);
-    requestAnimationFrame(() => { if(typeof syncActiveResultHeight === 'function') syncActiveResultHeight(); });
-  };
-
-  // 좌우 입력/결과 하단 정렬을 다시 계산합니다.
-  window.syncActiveResultHeight = syncActiveResultHeight = function(){
-    const key = modeKey();
-    const panel = key === 'chat' ? (typeof chatPanel !== 'undefined' ? chatPanel : null) : key === 'classic' ? (typeof classicPanel !== 'undefined' ? classicPanel : null) : null;
-    if(!panel || panel.classList.contains('hidden')) return;
-    const left = panel.querySelector('.editorGrid > .editorBox:not(.resultBox)');
-    const resultBox = panel.querySelector('.editorGrid > .editorBox.resultBox');
-    const preview = resultBox ? resultBox.querySelector('.richResultBox') : null;
-    const label = resultBox ? resultBox.querySelector('.editorLabel') : null;
-    if(!left || !resultBox || !preview) return;
-    if(window.matchMedia('(max-width: 860px)').matches){
-      resultBox.style.height=''; resultBox.style.minHeight=''; resultBox.style.overflow='';
-      preview.style.height='430px'; preview.style.maxHeight=''; preview.style.flex='';
-      return;
+  function currentPlan(){ return getPlan(mode()); }
+  function sourceTextForChapters(){
+    if(mode() === "epubedit"){
+      return (typeof epubEditEditor !== "undefined" && epubEditEditor) ? (epubEditEditor.innerText || epubEditEditor.textContent || "") : "";
     }
-    const h = Math.max(420, Math.ceil(left.getBoundingClientRect().height));
-    const lh = label ? Math.ceil(label.getBoundingClientRect().height) + 9 : 0;
-    resultBox.style.height = h + 'px';
-    resultBox.style.minHeight = h + 'px';
-    resultBox.style.overflow = 'hidden';
-    preview.style.height = Math.max(320, h - lh) + 'px';
-    preview.style.maxHeight = Math.max(320, h - lh) + 'px';
-    preview.style.flex = '0 0 auto';
-  };
-
-  // 변환이 실패하거나 빈 결과가 되는 경우를 방지하는 가드.
-  const baseTransform = (typeof transformText === 'function') ? transformText : null;
-  window.transformText = transformText = function(){
-    try{
-      if(modeKey() === 'classic' && typeof input !== 'undefined' && input && (!input.value || !input.value.trim()) && typeof inputPreview !== 'undefined' && inputPreview){
-        input.value = inputPreview.innerText || inputPreview.textContent || '';
-      }
-      if(baseTransform) baseTransform();
-      if(modeKey() === 'classic') syncClassicInputPreview();
-      if(typeof syncResultPreview === 'function'){
-        if(typeof output !== 'undefined') syncResultPreview(output);
-        if(typeof chatOutput !== 'undefined') syncResultPreview(chatOutput);
-      }
-      syncActiveResultHeight();
-    }catch(err){
-      console.error('transformText failed', err);
-      const target = activeRawOutputElement();
-      if(target && !target.value){
-        const src = getVisibleSourceText();
-        if(src) setResultOutput(target, src);
-      }
-      if(typeof showToast === 'function') showToast('변환 중 오류가 있어 원문 기준으로 표시했습니다.');
-    }
-  };
-
-  // 챕터는 문자열 장식선에 의존하지 않고 탭별 marker index로 관리합니다.
-  function getMarkerSet(){
-    const key = modeKey();
-    if(!markerStore[key]) markerStore[key] = [];
-    markerStore[key] = Array.from(new Set(markerStore[key].map(Number).filter(n => Number.isFinite(n) && n >= 0))).sort((a,b)=>a-b);
-    return markerStore[key];
+    if(typeof getPreparedOutputForExport === "function") return getPreparedOutputForExport();
+    if(mode() === "chat" && typeof chatOutput !== "undefined" && chatOutput) return chatOutput.value || "";
+    if(typeof output !== "undefined" && output) return output.value || "";
+    return "";
   }
-  function textWithoutMarkerParas(text){ return paragraphsOf(text).filter(p => !isSeparatorParagraph(p)); }
-  window.getChapterSearchMatches = getChapterSearchMatches = function(){
-    const q = String((typeof chapterKeywordQuery !== 'undefined' && chapterKeywordQuery) || '').trim().toLowerCase();
-    const order = String((typeof chapterOrderQuery !== 'undefined' && chapterOrderQuery) || '').trim();
-    let matches = textWithoutMarkerParas(getVisibleSourceText()).map((text, index) => ({text, index, start:index, end:index+1}));
-    if(q) matches = matches.filter(p => (typeof stripHTMLTags === 'function' ? stripHTMLTags(p.text) : p.text).toLowerCase().includes(q));
-    if(order){ const n = Number(order); if(Number.isFinite(n) && n > 0) matches = matches.filter(p => p.index + 1 === n); }
-    return matches;
-  };
-  window.updateChapterDividerPanel = updateChapterDividerPanel = function(){
-    if(typeof chapterDividerPanelEl === 'undefined' || !chapterDividerPanelEl) return;
-    const matches = getChapterSearchMatches();
-    currentChapterMatches = matches;
-    chapterMatchPage = Math.max(0, Math.min(Math.max(0, matches.length - 1), chapterMatchPage || 0));
-    const current = matches[chapterMatchPage];
-    const total = matches.length;
-    let html = `<div class="miniToolHead"><div><strong>구분선 삽입</strong><span>검색한 지문 위/아래를 새 챕터 시작점으로 지정합니다.</span></div><span class="smallMuted">${total ? `${chapterMatchPage+1}/${total}` : '0개'}</span></div>`;
-    if(!current){ html += `<div class="emptyState">키워드를 입력하면 해당 문단을 확인하고 구분선을 넣을 수 있습니다.</div>`; }
-    else{
-      html += `<div class="chapterMatchCard"><div class="dupeSummary withNav"><span><span class="pill">문단 ${current.index+1}</span><span class="pill">구분선 ${escapeHTML ? escapeHTML(getSep()) : getSep()}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-chapter-match-page="prev" ${chapterMatchPage<=0?'disabled':''}>‹</button><button type="button" class="navIconBtn" data-chapter-match-page="next" ${chapterMatchPage>=total-1?'disabled':''}>›</button></span></div><div class="previewText fullPreview">${typeof escapeHTML==='function'?escapeHTML(current.text):current.text}</div><div class="chapterInsertRow"><button type="button" class="btn primary" data-chapter-insert="1">현재 문단에 구분선 넣기</button></div></div>`;
-    }
-    chapterDividerPanelEl.innerHTML = html;
-  };
-  window.insertChapterDividerAtCurrentMatch = insertChapterDividerAtCurrentMatch = function(){
-    const matches = getChapterSearchMatches();
-    if(!matches.length){ if(typeof showToast === 'function') showToast('구분선을 넣을 문단을 찾지 못했습니다.'); return; }
-    const current = matches[Math.max(0, Math.min(matches.length - 1, chapterMatchPage || 0))];
-    const position = (typeof chapterPositionEl !== 'undefined' && chapterPositionEl) ? chapterPositionEl.value : 'before';
-    if(typeof chapterSplitModeEl !== 'undefined' && chapterSplitModeEl) chapterSplitModeEl.value = 'separator';
-    const idx = position === 'after' ? current.index + 1 : current.index;
-    const markers = getMarkerSet();
-    if(!markers.includes(idx)) markers.push(idx);
-    markerStore[modeKey()] = markers.sort((a,b)=>a-b);
-    if(modeKey() !== 'epubedit'){
-      const el = activeRawOutputElement();
-      const paras = textWithoutMarkerParas(getVisibleSourceText());
-      const visual = paras.slice();
-      Array.from(markerStore[modeKey()]).sort((a,b)=>b-a).forEach(i => visual.splice(Math.max(0, Math.min(i, visual.length)), 0, markerToken));
-      if(el) setResultOutput(el, visual.join('\n\n'));
-    }else if(typeof insertChapterDividerIntoEditor === 'function'){
-      insertChapterDividerIntoEditor(current, position, getSep());
-    }
-    if(typeof saveActiveChapterSettings === 'function') saveActiveChapterSettings();
-    if(typeof refreshChapterViews === 'function') refreshChapterViews(); else { if(typeof updateEpubPreview === 'function') updateEpubPreview(); updateChapterDividerPanel(); }
-    setTimeout(() => { if(typeof updateEpubPreview === 'function') updateEpubPreview(); updateChapterDividerPanel(); }, 50);
-    if(typeof scheduleAutosave === 'function') scheduleAutosave();
-    if(typeof showToast === 'function') showToast(position === 'after' ? '문단 아래를 새 챕터로 지정했습니다.' : '문단 위를 새 챕터로 지정했습니다.');
-  };
-
-  function splitByMarkers(paras, cfg){
-    const markers = cfg.chapterMode === 'separator' ? getMarkerSet().filter(i => i > 0 && i < paras.length) : [];
-    const starts = [0, ...markers].filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>a-b);
-    if(!starts.length) starts.push(0);
-    const chapters=[];
-    starts.forEach((s, idx) => {
-      const e = idx + 1 < starts.length ? starts[idx+1] : paras.length;
-      const body = paras.slice(s,e).join('\n\n').trim();
-      if(body) chapters.push({title: getChapterTitle(idx, cfg), body});
+  function getEditorUnits(){
+    if(typeof epubEditEditor === "undefined" || !epubEditEditor) return [];
+    const nodes = Array.from(epubEditEditor.childNodes).filter(node => {
+      if(node.nodeType === Node.ELEMENT_NODE && node.classList && node.classList.contains("manual-chapter-separator")) return false;
+      return (node.textContent || "").trim() || node.nodeType === Node.ELEMENT_NODE;
     });
-    return chapters;
-  }
-  window.splitTextIntoChapters = splitTextIntoChapters = function(text){
-    const cfg = getEpubConfig();
-    let paras = paragraphsOf(text).filter(p => !isSeparatorParagraph(p));
-    if(!paras.length) return [];
-    if(cfg.chapterMode === 'separator') return splitByMarkers(paras, cfg);
-    const chapters=[];
-    if(cfg.chapterMode === 'paragraphs'){
-      for(let i=0;i<paras.length;i+=cfg.chapterSize){ chapters.push({title:getChapterTitle(chapters.length,cfg), body:paras.slice(i,i+cfg.chapterSize).join('\n\n')}); }
-    }else if(cfg.chapterMode === 'chars'){
-      let bucket=[], count=0;
-      paras.forEach(p => { if(bucket.length && count + p.length > cfg.chapterSize){ chapters.push({title:getChapterTitle(chapters.length,cfg), body:bucket.join('\n\n')}); bucket=[]; count=0; } bucket.push(p); count += p.length; });
-      if(bucket.length) chapters.push({title:getChapterTitle(chapters.length,cfg), body:bucket.join('\n\n')});
-    }else chapters.push({title:cfg.firstChapterTitle || cfg.title, body:paras.join('\n\n')});
-    return chapters;
-  };
-  window.getExportChapters = getExportChapters = function(markdownMode){
-    if(modeKey() === 'epubedit'){
-      const html = (typeof editorHtmlForExport === 'function') ? editorHtmlForExport() : ((typeof epubEditEditor !== 'undefined' && epubEditEditor) ? epubEditEditor.innerHTML : '');
-      if(markdownMode) return splitTextIntoChapters((typeof blockHtmlToText === 'function') ? blockHtmlToText(html) : html);
-      const cfg = getEpubConfig();
-      const blocks = (typeof editorHtmlToChapterBlocks === 'function') ? editorHtmlToChapterBlocks(html) : [];
-      if(cfg.chapterMode === 'separator' && blocks.length){
-        const chapters=[]; let bucket=[];
-        blocks.forEach(b => { if(b.sep){ if(bucket.length){ const h=bucket.join('\n'); chapters.push({title:getChapterTitle(chapters.length,cfg), bodyHtml:h, body:(typeof blockHtmlToText==='function'?blockHtmlToText(h):h)}); bucket=[]; } } else if(b.html) bucket.push(b.html); });
-        if(bucket.length){ const h=bucket.join('\n'); chapters.push({title:getChapterTitle(chapters.length,cfg), bodyHtml:h, body:(typeof blockHtmlToText==='function'?blockHtmlToText(h):h)}); }
-        if(chapters.length) return chapters;
-      }
-      return splitTextIntoChapters((typeof blockHtmlToText === 'function') ? blockHtmlToText(html) : html);
+    if(!nodes.length){
+      const text = (epubEditEditor.innerText || epubEditEditor.textContent || "").trim();
+      return splitTextUnits(text);
     }
-    const raw = (typeof getPreparedOutputForExport === 'function') ? getPreparedOutputForExport() : getVisibleSourceText();
-    return splitTextIntoChapters(markdownMode && typeof stripHTMLTags === 'function' ? stripHTMLTags(raw) : raw);
-  };
+    return nodes.map(node => {
+      const html = node.outerHTML || safeHtml(node.textContent || "");
+      return { text: plainFromHtml(html), html };
+    }).filter(u => u.text || u.html);
+  }
+  function splitTextUnits(text){
+    return String(text || "").replace(/\r/g, "").split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean).map(p => ({ text: stripTagsLocal(p).trim(), body: p }));
+  }
+  function getChapterUnits(){
+    if(mode() === "epubedit") return getEditorUnits();
+    return splitTextUnits(sourceTextForChapters());
+  }
+  function clampPlanToUnits(plan, units){
+    const max = Math.max(0, units.length - 1);
+    plan.chapters.forEach(ch => {
+      if(ch.endPara === "" || ch.endPara === undefined) ch.endPara = null;
+      if(ch.endPara !== null){
+        ch.endPara = Math.max(0, Math.min(max, Number(ch.endPara) || 0));
+      }
+    });
+  }
+  function ensureTrailingChapter(plan, units){
+    if(!plan || !Array.isArray(plan.chapters) || !units || !units.length) return false;
+    const last = plan.chapters[plan.chapters.length - 1];
+    if(!last) return false;
+    if(last.endPara !== null && last.endPara !== undefined && Number(last.endPara) < units.length - 1){
+      plan.chapters.push({ id: uid(), title: getChapterTitleFallback(plan.chapters.length), endPara: null, note:"", imageData:"", imageName:"", imageType:"", imagePos:"belowTitle" });
+      return true;
+    }
+    return false;
+  }
+  function chaptersFromManualPlan(markdownMode){
+    const cfg = (typeof getEpubConfig === "function") ? getEpubConfig() : { title:"정리한 로그" };
+    const plan = currentPlan();
+    const units = getChapterUnits();
+    clampPlanToUnits(plan, units);
+    if(!units.length) return [];
+    const chapters = [];
+    let start = 0;
+    plan.chapters.forEach((ch, idx) => {
+      const lastChapter = idx === plan.chapters.length - 1;
+      let end = ch.endPara;
+      if(end === null || end === undefined) end = lastChapter ? units.length - 1 : start - 1;
+      end = Math.max(start - 1, Math.min(units.length - 1, Number(end)));
+      const slice = end >= start ? units.slice(start, end + 1) : [];
+      const title = ch.title || getChapterTitleFallback(idx) || cfg.title;
+      const body = slice.map(u => u.body !== undefined ? u.body : u.text).join("\n\n").trim();
+      const bodyHtml = slice.map(u => u.html || (typeof paragraphToXhtml === "function" ? paragraphToXhtml(u.body || u.text || "") : `<p>${safeHtml(u.body || u.text || "")}</p>`)).join("\n");
+      chapters.push({
+        id: ch.id, title, body, bodyHtml, note: ch.note || "", imageData: ch.imageData || "", imageName: ch.imageName || "", imageType: ch.imageType || "", imagePos: ch.imagePos || "belowTitle"
+      });
+      start = end + 1;
+    });
+    if(start < units.length){
+      const idx = chapters.length;
+      const slice = units.slice(start);
+      chapters.push({ id: uid(), title: getChapterTitleFallback(idx), body: slice.map(u => u.body !== undefined ? u.body : u.text).join("\n\n"), bodyHtml: slice.map(u => u.html || `<p>${safeHtml(u.body || u.text || "")}</p>`).join("\n"), note:"", imageData:"", imageName:"", imageType:"", imagePos:"belowTitle" });
+    }
+    return chapters.filter(ch => ch.body || ch.bodyHtml || ch.note || ch.imageData || chapters.length === 1);
+  }
+  function imageHtml(ch){
+    if(!ch || !ch.imageData) return "";
+    return `<figure class="chapterImage"><img src="${safeAttr(ch.imageData)}" alt="${safeAttr(ch.imageName || ch.title || "chapter image")}"></figure>`;
+  }
+  function noteHtml(ch){ return ch && ch.note ? `<p class="chapterNote">${safeHtml(ch.note).replace(/\n/g,"<br>")}</p>` : ""; }
+  function bodyToHtml(ch){
+    if(ch && ch.bodyHtml) return (typeof sanitizeEditorHTML === "function") ? sanitizeEditorHTML(ch.bodyHtml).replace(/<br>/g,"<br/>") : ch.bodyHtml;
+    if(typeof textToXhtmlBody === "function") return textToXhtmlBody((ch && ch.body) || "");
+    return splitTextUnits((ch && ch.body) || "").map(u => `<p>${safeHtml(u.body || u.text)}</p>`).join("\n");
+  }
+  function fullChapterHtml(ch, includeTitle=true){
+    const above = ch.imagePos === "aboveTitle" ? imageHtml(ch) : "";
+    const below = ch.imagePos === "belowTitle" ? imageHtml(ch) : "";
+    const bottom = ch.imagePos === "bottom" ? imageHtml(ch) : "";
+    return `${above}${includeTitle ? `<h1>${safeHtml(ch.title)}</h1>` : ""}${noteHtml(ch)}${below}${bodyToHtml(ch)}${bottom}`;
+  }
 
+  const originalGetExportChapters = (typeof getExportChapters === "function") ? getExportChapters : null;
+  window.getExportChapters = getExportChapters = function(markdownMode){
+    const chapters = chaptersFromManualPlan(markdownMode);
+    if(chapters.length) return chapters;
+    return originalGetExportChapters ? originalGetExportChapters(markdownMode) : [];
+  };
+  window.chapterBodyToXhtml = chapterBodyToXhtml = function(ch){ return fullChapterHtml(ch, false); };
+
+  function renderManualChapterRows(){
+    const box = qs("#manualChapterRows");
+    if(!box) return;
+    const plan = currentPlan();
+    const units = getChapterUnits();
+    clampPlanToUnits(plan, units);
+    if(ensureTrailingChapter(plan, units)){ saveState(); }
+    let start = 0;
+    box.innerHTML = plan.chapters.map((ch, idx) => {
+      const end = ch.endPara === null || ch.endPara === undefined ? (idx === plan.chapters.length - 1 ? units.length - 1 : start - 1) : Number(ch.endPara);
+      const range = end >= start ? `${start + 1}–${Math.min(end + 1, units.length)}` : "끝 지점 미설정";
+      start = Math.max(start, end + 1);
+      return `<div class="manualChapterRow" data-id="${safeAttr(ch.id)}"><b>${idx + 1}</b><span><strong>${safeHtml(ch.title || getChapterTitleFallback(idx))}</strong><small>${range}${ch.note ? " · 문구 있음" : ""}${ch.imageData ? " · 이미지 있음" : ""}</small></span><button type="button" class="btn subtle" data-chapter-edit="${safeAttr(ch.id)}">편집</button>${plan.chapters.length > 1 ? `<button type="button" class="btn subtle warn" data-chapter-delete="${safeAttr(ch.id)}">삭제</button>` : ""}</div>`;
+    }).join("");
+  }
+  function chapterSearchMatches(){
+    const units = getChapterUnits();
+    const q = String(chapterSearch.keyword || "").trim().toLowerCase();
+    const order = String(chapterSearch.order || "").trim();
+    let matches = units.map((u, idx) => ({...u, index:idx}));
+    if(q) matches = matches.filter(u => String(u.text || "").toLowerCase().includes(q));
+    if(order){
+      const n = Number(order);
+      if(Number.isFinite(n) && n > 0){
+        matches = q ? matches.filter((_u, idx) => idx + 1 === n) : matches.filter(u => u.index + 1 === n);
+      }
+    }
+    return matches;
+  }
+  function renderManualChapterSearchResultsHtml(){
+    const matches = chapterSearchMatches();
+    const total = matches.length;
+    chapterSearch.page = Math.max(0, Math.min(Math.max(0, total - 1), chapterSearch.page || 0));
+    const current = total ? matches[chapterSearch.page] : null;
+    return `<div class="miniToolHead"><div><strong>챕터 끝 지점</strong><span>검색한 문단을 이 챕터의 마지막 문단으로 설정합니다.</span></div><span>${total ? `${chapterSearch.page + 1}/${total}` : "0개"}</span></div>
+      ${current ? `<div class="chapterMatchCard"><div class="dupeSummary withNav"><span><span class="pill">문단 ${current.index + 1}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-manual-chapter-page="prev" ${chapterSearch.page <= 0 ? "disabled" : ""}>‹</button><button type="button" class="navIconBtn" data-manual-chapter-page="next" ${chapterSearch.page >= total - 1 ? "disabled" : ""}>›</button></span></div><div class="previewText fullPreview">${safeHtml(current.text)}</div><div class="chapterInsertRow"><button type="button" class="btn primary" data-chapter-set-end="${current.index}">이 문단을 끝 지점으로 설정</button><button type="button" class="btn subtle" data-chapter-clear-end="1">끝 지점 비우기</button></div></div>` : `<div class="emptyState">검색 결과가 없습니다. 키워드나 번호를 바꿔 보세요.</div>`}`;
+  }
+  function refreshManualChapterSearchResults(){
+    const target = qs("#manualChapterSearchResults");
+    if(target) target.innerHTML = renderManualChapterSearchResultsHtml();
+  }
+  function renderChapterEditPanel(chId){
+    const host = qs("#manualChapterEditHost");
+    if(!host) return;
+    const plan = currentPlan();
+    const ch = plan.chapters.find(c => c.id === chId) || plan.chapters[0];
+    if(!ch){ host.innerHTML = `<div class="emptyState">편집할 챕터가 없습니다.</div>`; return; }
+    chapterSearch.editingId = ch.id;
+    host.innerHTML = `<details class="manualChapterEditor" open><summary>${safeHtml(ch.title || "챕터")} 편집</summary><div class="manualChapterEditorBody">
+      <div class="manualChapterForm">
+        <label class="control wide chapterTitleControl">챕터명 <input type="text" data-chapter-title value="${safeAttr(ch.title || "")}" placeholder="챕터 제목"></label>
+        <label class="control wide">소제목 아래 문구 <textarea data-chapter-note rows="2" placeholder="소제목 아래에 넣을 짧은 문구">${safeHtml(ch.note || "")}</textarea></label>
+        <label class="fileControl chapterImagePick"><span class="fileButtonText">이미지 선택</span><span class="fileNameText">${safeHtml(ch.imageName || "선택 없음")}</span><input type="file" data-chapter-image accept="${IMG_TYPES}"></label>
+        <label class="control">이미지 위치 <select data-chapter-image-pos><option value="aboveTitle" ${ch.imagePos === "aboveTitle" ? "selected" : ""}>소제목 위</option><option value="belowTitle" ${(!ch.imagePos || ch.imagePos === "belowTitle") ? "selected" : ""}>소제목 아래</option><option value="bottom" ${ch.imagePos === "bottom" ? "selected" : ""}>맨 아래</option></select></label>
+        ${ch.imageData ? `<button type="button" class="btn subtle warn" data-chapter-image-clear="1">이미지 제거</button>` : ""}
+      </div>
+      <div class="manualChapterSearch">
+        <div class="miniToolHead"><div><strong>챕터 끝 지점</strong><span>검색한 문단을 이 챕터의 마지막 문단으로 설정합니다.</span></div></div>
+        <div class="optionRow compactControls" id="manualChapterSearchFields"><span class="control">검색 <input type="search" data-chapter-end-keyword value="${safeAttr(chapterSearch.keyword || "")}" placeholder="끝나는 지점 키워드" autocomplete="off" autocapitalize="off" spellcheck="false"></span><span class="control">순서 <input type="number" min="1" data-chapter-end-order value="${safeAttr(chapterSearch.order || "")}" placeholder="번호" inputmode="numeric"></span></div>
+        <div id="manualChapterSearchResults">${renderManualChapterSearchResultsHtml()}</div>
+      </div>
+    </div></details>`;
+  }
+  function renderManualChapterManager(){
+    const toc = qs("#chapterTocInline");
+    const div = qs("#chapterDividerPanel");
+    if(!toc || !div) return;
+    toc.innerHTML = `<div class="manualChapterHead"><strong>현재 챕터</strong><button type="button" class="btn primary" data-chapter-add="1">챕터 추가</button></div><div id="manualChapterRows" class="manualChapterRows"></div>`;
+    div.innerHTML = `<div id="manualChapterEditHost"><div class="emptyState">편집을 누르면 챕터 끝 지점, 문구, 이미지를 설정할 수 있습니다.</div></div>`;
+    renderManualChapterRows();
+  }
+  function installChapterManagerUi(){
+    const details = qsa("#epubBoard details.foldBlock").find(d => (d.querySelector("summary") || {}).textContent && d.querySelector("summary").textContent.includes("챕터와 목차"));
+    if(!details || details.dataset.manualChapterInstalled === "1") return;
+    details.dataset.manualChapterInstalled = "1";
+    const body = qs(".blockBody", details);
+    if(!body) return;
+    body.innerHTML = `<div class="manualChapterIntro">목차처럼 챕터를 관리합니다. 챕터를 추가한 뒤 편집에서 끝나는 지점을 정하세요.</div><div id="chapterTocInline" class="chapterTocInline"></div><div id="chapterDividerPanel" class="chapterDividerPanel"></div>`;
+    renderManualChapterManager();
+  }
+  function findChapterById(id){ return currentPlan().chapters.find(ch => ch.id === id); }
+  function addChapter(){
+    const plan = currentPlan();
+    plan.chapters.push({ id: uid(), title: getChapterTitleFallback(plan.chapters.length), endPara: null, note:"", imageData:"", imageName:"", imageType:"", imagePos:"belowTitle" });
+    saveState();
+    renderManualChapterManager();
+    renderChapterEditPanel(plan.chapters[plan.chapters.length - 1].id);
+    refreshChapterOutputs();
+  }
+  function deleteChapter(id){
+    const plan = currentPlan();
+    if(plan.chapters.length <= 1) return;
+    plan.chapters = plan.chapters.filter(ch => ch.id !== id);
+    saveState();
+    renderManualChapterManager();
+    refreshChapterOutputs();
+  }
+  function refreshChapterOutputs(){
+    renderManualChapterRows();
+    renderManualChapterSeparatorsInEditor();
+    if(typeof updateEpubPreview === "function") updateEpubPreview();
+    if(typeof scheduleAutosave === "function") scheduleAutosave();
+  }
+  function renderManualChapterSeparatorsInEditor(){
+    if(mode() !== "epubedit" || typeof epubEditEditor === "undefined" || !epubEditEditor) return;
+    qsa(".manual-chapter-separator", epubEditEditor).forEach(n => n.remove());
+    const plan = currentPlan();
+    const ends = new Set(plan.chapters.slice(0, -1).map(ch => ch.endPara).filter(v => v !== null && v !== undefined).map(Number));
+    if(!ends.size) return;
+    const nodes = Array.from(epubEditEditor.childNodes).filter(node => !(node.nodeType === Node.ELEMENT_NODE && node.classList && node.classList.contains("manual-chapter-separator")) && ((node.textContent || "").trim() || node.nodeType === Node.ELEMENT_NODE));
+    nodes.forEach((node, idx) => {
+      if(ends.has(idx)){
+        const hr = document.createElement("hr");
+        hr.className = "manual-chapter-separator chapter-editor-separator";
+        hr.setAttribute("contenteditable", "false");
+        hr.setAttribute("data-manual-chapter", "true");
+        node.parentNode && node.parentNode.insertBefore(hr, node.nextSibling);
+      }
+    });
+  }
+  function handleChapterManagerClick(ev){
+    const add = ev.target.closest("[data-chapter-add]");
+    if(add){ addChapter(); return; }
+    const edit = ev.target.closest("[data-chapter-edit]");
+    if(edit){ chapterSearch = { keyword:"", order:"", page:0, editingId:edit.dataset.chapterEdit }; renderChapterEditPanel(edit.dataset.chapterEdit); return; }
+    const del = ev.target.closest("[data-chapter-delete]");
+    if(del){ if(confirm("이 챕터를 삭제하시겠습니까?")) deleteChapter(del.dataset.chapterDelete); return; }
+    const prevNext = ev.target.closest("[data-manual-chapter-page]");
+    if(prevNext){ const max = Math.max(0, chapterSearchMatches().length - 1); chapterSearch.page = prevNext.dataset.manualChapterPage === "next" ? Math.min(max, chapterSearch.page + 1) : Math.max(0, chapterSearch.page - 1); renderChapterEditPanel(chapterSearch.editingId); return; }
+    const setEnd = ev.target.closest("[data-chapter-set-end]");
+    if(setEnd){ const ch = findChapterById(chapterSearch.editingId); if(ch){ ch.endPara = Number(setEnd.dataset.chapterSetEnd); const plan = currentPlan(); const units = getChapterUnits(); ensureTrailingChapter(plan, units); saveState(); renderManualChapterManager(); renderChapterEditPanel(ch.id); refreshChapterOutputs(); toast("챕터 끝 지점을 설정했습니다."); } return; }
+    const clearEnd = ev.target.closest("[data-chapter-clear-end]");
+    if(clearEnd){ const ch = findChapterById(chapterSearch.editingId); if(ch){ ch.endPara = null; saveState(); renderChapterEditPanel(ch.id); refreshChapterOutputs(); } return; }
+    const clearImg = ev.target.closest("[data-chapter-image-clear]");
+    if(clearImg){ const ch = findChapterById(chapterSearch.editingId); if(ch){ ch.imageData=""; ch.imageName=""; ch.imageType=""; saveState(); renderChapterEditPanel(ch.id); refreshChapterOutputs(); } return; }
+  }
+  function handleChapterManagerInput(ev){
+    const ch = findChapterById(chapterSearch.editingId);
+    if(ev.target.matches("[data-chapter-title]") && ch){ ch.title = ev.target.value; saveState(); renderManualChapterRows(); refreshChapterOutputs(); return; }
+    if(ev.target.matches("[data-chapter-note]") && ch){ ch.note = ev.target.value; saveState(); refreshChapterOutputs(); return; }
+    if(ev.target.matches("[data-chapter-image-pos]") && ch){ ch.imagePos = ev.target.value; saveState(); refreshChapterOutputs(); return; }
+    if(ev.target.matches("[data-chapter-end-keyword]")){ chapterSearch.keyword = ev.target.value; chapterSearch.page = 0; refreshManualChapterSearchResults(); saveState(); return; }
+    if(ev.target.matches("[data-chapter-end-order]")){ chapterSearch.order = ev.target.value; chapterSearch.page = 0; refreshManualChapterSearchResults(); saveState(); return; }
+  }
+  function handleChapterImageChange(ev){
+    const input = ev.target.closest("[data-chapter-image]");
+    if(!input) return;
+    const ch = findChapterById(chapterSearch.editingId);
+    const file = input.files && input.files[0];
+    if(!ch || !file) return;
+    if(file.size > 6 * 1024 * 1024){ toast("이미지는 6MB 이하만 권장합니다."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { ch.imageData = String(reader.result || ""); ch.imageName = file.name || "chapter-image"; ch.imageType = file.type || (file.name.toLowerCase().endsWith(".svg") ? "image/svg+xml" : "image/png"); saveState(); renderChapterEditPanel(ch.id); refreshChapterOutputs(); };
+    reader.onerror = () => toast("이미지를 읽지 못했습니다.");
+    reader.readAsDataURL(file);
+  }
+
+  function renderChapterTocClickable(chapters){
+    if(!chapters || !chapters.length) return `<div class="emptyState">챕터가 아직 없습니다. 결과가 생기면 표시됩니다.</div>`;
+    return chapters.map((ch, idx) => {
+      const text = (ch.body ? ch.body : plainFromHtml(ch.bodyHtml || "")).replace(/\s+/g," ").trim();
+      const preview = text.slice(0, 180);
+      return `<details class="chapterPreviewItem"><summary><b>${idx + 1}</b><span><strong>${safeHtml(ch.title)}</strong>${preview ? `<small>${safeHtml(preview)}</small>` : ""}</span><em>${Number(text.length || 0).toLocaleString("ko-KR")}자</em></summary><div class="bookPreview chapterPreviewBody">${fullChapterHtml(ch, false) || `<p class="mutedText">미리보기 없음</p>`}</div></details>`;
+    }).join("");
+  }
+  window.renderChapterTocHtml = renderChapterTocHtml = function(chapters, compact){
+    if(compact){
+      if(!chapters || !chapters.length) return `<div class="emptyState">현재 챕터가 없습니다.</div>`;
+      return `<div class="chapterTocBox"><div class="tocSummary"><strong>현재 목차</strong><span>${chapters.length}개 챕터</span></div>${chapters.map((ch,idx)=>`<div class="chapterTocRow"><b>${idx+1}</b><span><strong>${safeHtml(ch.title)}</strong><small>${safeHtml((ch.body || plainFromHtml(ch.bodyHtml || "")).replace(/\s+/g," ").slice(0,70))}</small></span><em>${Number((ch.body || plainFromHtml(ch.bodyHtml || "")).length).toLocaleString("ko-KR")}자</em></div>`).join("")}</div>`;
+    }
+    return renderChapterTocClickable(chapters);
+  };
   window.updateEpubPreview = updateEpubPreview = function(){
     const chapters = getExportChapters();
-    const cfg = getEpubConfig();
-    if(typeof chapterPreviewEl !== 'undefined' && chapterPreviewEl) chapterPreviewEl.innerHTML = renderChapterTocHtml(chapters, false);
-    if(typeof chapterTocInlineEl !== 'undefined' && chapterTocInlineEl) chapterTocInlineEl.innerHTML = renderChapterTocHtml(chapters, true);
-    if(typeof epubPreviewEl !== 'undefined' && epubPreviewEl){
-      const ch = chapters[0];
-      let body = '';
-      if(ch && ch.bodyHtml && typeof chapterBodyToXhtml === 'function') body = chapterBodyToXhtml(ch);
-      else if(ch && typeof splitTextIntoParagraphs === 'function') body = splitTextIntoParagraphs(ch.body || '').slice(0,12).map(paragraphToXhtml).join('\n');
-      epubPreviewEl.innerHTML = `<div class="previewMeta"><b>${escapeHTML(cfg.title)}</b>${cfg.author ? `<span>${escapeHTML(cfg.author)}</span>` : ''}<span>${chapters.length || 0}개 챕터</span></div><div class="bookPreview">${body || '<p class="mutedText">미리보기 없음</p>'}</div>`;
+    const cfg = (typeof getEpubConfig === "function") ? getEpubConfig() : {title:"정리한 로그", author:""};
+    if(chapterPreviewEl) chapterPreviewEl.innerHTML = renderChapterTocClickable(chapters);
+    // 수동 관리 UI가 설치되어 있으면 위쪽 목차는 관리 UI가 담당합니다. 미설치 상태에서는 간단 목차를 표시합니다.
+    if(chapterTocInlineEl && !qs("#manualChapterRows")) chapterTocInlineEl.innerHTML = renderChapterTocHtml(chapters, true);
+    if(epubPreviewEl){
+      const first = chapters[0];
+      epubPreviewEl.innerHTML = `<div class="previewMeta"><b>${safeHtml(cfg.title || "정리한 로그")}</b>${cfg.author ? `<span>${safeHtml(cfg.author)}</span>` : ""}<span>${chapters.length || 0}개 챕터</span></div><div class="bookPreview">${first ? fullChapterHtml(first, true) : `<p class="mutedText">미리보기 없음</p>`}</div>`;
     }
   };
 
-  // 탭 전환 시 각 탭의 챕터 설정과 marker를 유지합니다.
-  document.querySelectorAll('.tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      const next = tab.dataset.tab || 'classic';
-      if(typeof saveActiveChapterSettings === 'function') saveActiveChapterSettings();
-      setTimeout(() => {
-        if(!chapterSettingStore[next] && typeof captureChapterSettings === 'function') chapterSettingStore[next] = Object.assign({}, captureChapterSettings());
-        if(typeof applyChapterSettingsPack === 'function') applyChapterSettingsPack(chapterSettingStore[next]);
-        if(typeof updateEpubPreview === 'function') updateEpubPreview();
-        updateChapterDividerPanel();
-        syncActiveResultHeight();
-      }, 0);
-    }, true);
-  });
+  window.buildStandaloneHTML = buildStandaloneHTML = function(){
+    const cfg = (typeof getEpubConfig === "function") ? getEpubConfig() : {title:"정리한 로그", language:"ko"};
+    const chapters = getExportChapters();
+    const toc = chapters.map((ch, idx) => `<li><a href="#ch${idx+1}">${safeHtml(ch.title)}</a></li>`).join("\n");
+    const body = chapters.map((ch, idx) => `<section id="ch${idx+1}">${fullChapterHtml(ch, true)}</section>`).join("\n");
+    return `<!doctype html><html lang="${safeAttr(cfg.language || "ko")}"><head><meta charset="utf-8"><title>${safeHtml(cfg.title || "정리한 로그")}</title><style>${typeof getEpubCss === "function" ? getEpubCss() : ""} nav{margin-bottom:2rem;padding:1rem;border:1px solid #ddd;border-radius:12px;} section{max-width:720px;margin:0 auto 3rem;} .chapterNote{color:#6f8b9b;} .chapterImage img{max-width:100%;height:auto;display:block;margin:1em auto;}</style></head><body><nav><strong>목차</strong><ol>${toc}</ol></nav>${body}</body></html>`;
+  };
+  window.chapterBodyToXhtml = chapterBodyToXhtml = function(ch){ return fullChapterHtml(ch, false); };
 
-  // 기존 직접 바인딩이 원본 transform을 가리키는 경우를 보강합니다.
-  ['input','change'].forEach(evName => {
-    document.addEventListener(evName, ev => {
-      const t = ev.target;
-      if(!t) return;
-      if(t.matches && t.matches('#inputTextPreview,#chatPaste,#inputText,.optionRow input,.optionRow select,.control input,.control select')){
-        setTimeout(() => { try{ if(typeof transformText === 'function') transformText(); }catch(e){ console.error(e); } }, 0);
-      }
-    }, true);
-  });
+  const originalDownloadEpub = (typeof downloadEpub === "function") ? downloadEpub : null;
+  window.downloadEpub = downloadEpub = async function(){
+    // 기존 ZIP 생성기를 유지하면서 챕터 HTML만 확실히 수동 챕터 기준으로 들어가게 합니다.
+    if(typeof createZipBlob !== "function" || typeof makeXhtmlDoc !== "function" || typeof getCoverInfo !== "function"){
+      return originalDownloadEpub ? originalDownloadEpub() : undefined;
+    }
+    const cfg = (typeof getEpubConfig === "function") ? getEpubConfig() : {title:"정리한 로그", language:"ko", tags:[]};
+    const chapters = getExportChapters();
+    if(!chapters.length){ toast("EPUB으로 만들 결과가 없습니다."); return; }
+    const cover = await getCoverInfo();
+    const entries = [];
+    entries.push({name:"mimetype", data:"application/epub+zip"});
+    entries.push({name:"META-INF/container.xml", data:`<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`});
+    entries.push({name:"OEBPS/styles.css", data:(typeof getEpubCss === "function" ? getEpubCss() : "") + `.chapterNote{color:#6f8b9b;margin:.3em 0 1em}.chapterImage{text-align:center;margin:1em 0}.chapterImage img{max-width:100%;height:auto}`});
+    const chapterItems = [];
+    chapters.forEach((ch, idx) => {
+      const file = `chapter-${String(idx+1).padStart(3,"0")}.xhtml`;
+      chapterItems.push({id:`ch${idx+1}`, href:file, title:ch.title});
+      entries.push({name:`OEBPS/${file}`, data:makeXhtmlDoc(ch.title, fullChapterHtml(ch, true))});
+    });
+    if(cover){
+      entries.push({name:`OEBPS/${cover.name}`, data:cover.data});
+      entries.push({name:"OEBPS/cover.xhtml", data:makeXhtmlDoc("Cover", `<section class="cover"><img src="${safeAttr(cover.name)}" alt="cover"/></section>`)});
+    }
+    const navItems = chapterItems.map(item => `<li><a href="${safeAttr(item.href)}">${safeHtml(item.title)}</a></li>`).join("");
+    entries.push({name:"OEBPS/nav.xhtml", data:makeXhtmlDoc("목차", `<nav epub:type="toc" id="toc"><h1>목차</h1><ol>${navItems}</ol></nav>`)});
+    const uidValue = (typeof uuidLike === "function") ? uuidLike() : ("id-" + Date.now());
+    const metaTags = [`<dc:identifier id="pub-id">${safeHtml(uidValue)}</dc:identifier>`,`<dc:title>${safeHtml(cfg.title || "정리한 로그")}</dc:title>`, cfg.subtitle ? `<dc:title id="subtitle">${safeHtml(cfg.subtitle)}</dc:title>` : "", cfg.author ? `<dc:creator>${safeHtml(cfg.author)}</dc:creator>` : "", `<dc:language>${safeHtml(cfg.language || "ko")}</dc:language>`, cfg.description ? `<dc:description>${safeHtml(cfg.description)}</dc:description>` : "", ...((cfg.tags||[]).map(tag => `<dc:subject>${safeHtml(tag)}</dc:subject>`)), cfg.series ? `<meta property="belongs-to-collection" id="series">${safeHtml(cfg.series)}</meta>` : "", cfg.volume ? `<meta property="group-position">${safeHtml(cfg.volume)}</meta>` : "", `<meta property="dcterms:modified">${new Date().toISOString().replace(/\.\d{3}Z$/, "Z")}</meta>`, cover ? `<meta name="cover" content="cover-image"/>` : ""].filter(Boolean).join("\n");
+    const manifest = [`<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`, `<item id="css" href="styles.css" media-type="text/css"/>`, cover ? `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>` : "", cover ? `<item id="cover-image" href="${safeAttr(cover.name)}" media-type="${safeAttr(cover.media)}" properties="cover-image"/>` : "", ...chapterItems.map(item => `<item id="${item.id}" href="${safeAttr(item.href)}" media-type="application/xhtml+xml"/>`)].filter(Boolean).join("\n");
+    const spine = [cover ? `<itemref idref="cover" linear="no"/>` : "", ...chapterItems.map(item => `<itemref idref="${item.id}"/>`)].filter(Boolean).join("\n");
+    const opf = `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="pub-id" xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/"><metadata>${metaTags}</metadata><manifest>${manifest}</manifest><spine>${spine}</spine></package>`;
+    entries.push({name:"OEBPS/content.opf", data:opf});
+    const blob = createZipBlob(entries, "application/epub+zip");
+    downloadBlob(blob, (typeof safeDownloadFileName === "function" ? safeDownloadFileName(".epub", cfg.title) : `${cfg.title || "book"}.epub`));
+  };
 
-
-
-  // 파일 input change가 누락되거나 기존 핸들러가 덮여도 각 탭 로더가 반드시 실행되도록 보강합니다.
-  function bindReliableFileLoader(inputId, loaderName, labelId){
-    const el = document.getElementById(inputId);
-    if(!el || el.dataset.reliableLoaderWired === '1') return;
-    el.dataset.reliableLoaderWired = '1';
-    const run = () => {
-      try{
-        const label = labelId ? document.getElementById(labelId) : null;
-        if(label && el.files && el.files[0]) label.textContent = el.files[0].name || '선택됨';
-        const fn = window[loaderName] || (typeof globalThis !== 'undefined' ? globalThis[loaderName] : null);
-        if(typeof fn === 'function') fn();
-      }catch(err){ console.error(loaderName + ' reliable loader failed', err); if(typeof showToast === 'function') showToast('파일을 읽지 못했습니다.'); }
-    };
-    el.addEventListener('change', run, true);
-    el.addEventListener('input', run, true);
+  function installEmojiControl(){
+    if(qs("#removeEmojiParagraphs")) return;
+    const row = qs(".basicOptionsRow") || qs("#optionsBoard .optionRow");
+    if(!row) return;
+    const label = document.createElement("label");
+    label.className = "toggle compactToggle";
+    label.innerHTML = `<input type="checkbox" id="removeEmojiParagraphs">이모지 포함 문단 제거`;
+    row.insertBefore(label, row.querySelector("#protectEnabled") ? row.querySelector("#protectEnabled").closest("label") : null);
+    qs("#removeEmojiParagraphs").addEventListener("change", () => { if(typeof transformText === "function") transformText(); saveState(); });
   }
-  bindReliableFileLoader('classicFileInput','loadClassicFile','classicFileName');
-  bindReliableFileLoader('chatFileInput','loadChatFile','chatFileName');
-  bindReliableFileLoader('epubEditFileInput','loadEpubEditFile','epubEditFileName');
-  bindReliableFileLoader('epubCoverInput','loadCoverFile','epubCoverFileName');
-  bindReliableFileLoader('epubFontInput','loadEpubFontFile','epubFontFileName');
+  const originalStructuralPlan = (typeof createStructuralDeletePlan === "function") ? createStructuralDeletePlan : null;
+  window.createStructuralDeletePlan = createStructuralDeletePlan = function(chunks, dropBlockIds){
+    const plan = originalStructuralPlan ? originalStructuralPlan(chunks, dropBlockIds) : { dropBlockIds: dropBlockIds || new Set(), dropChunkIds: new Set() };
+    const enabled = qs("#removeEmojiParagraphs") && qs("#removeEmojiParagraphs").checked;
+    if(enabled){
+      const tokens = (typeof getProtectTokens === "function") ? getProtectTokens() : [];
+      (chunks || []).forEach(chunk => {
+        if(!chunk || (plan.dropBlockIds && plan.dropBlockIds.has(chunk.blockId))) return;
+        const text = String(chunk.text || "");
+        if(EMOJI_RE.test(text) && !(typeof isProtectedText === "function" && isProtectedText(text, tokens))) plan.dropChunkIds.add(chunk.id);
+      });
+    }
+    return plan;
+  };
 
-  // 초기 화면 동기화
-  setTimeout(() => {
-    try{
-      syncClassicInputPreview();
-      if(typeof transformText === 'function') transformText();
-      if(typeof updateEpubPreview === 'function') updateEpubPreview();
-      updateChapterDividerPanel();
-      syncActiveResultHeight();
-    }catch(err){ console.error('final hardening init failed', err); }
-  }, 0);
+  function applyModeLayout(){
+    const isEdit = mode() === "epubedit";
+    const options = qs("#optionsBoard");
+    const review = qs("#reviewBoard");
+    if(options) options.classList.toggle("hidden", isEdit);
+    if(review) review.classList.toggle("hidden", isEdit);
+    const epubBoard = qs("#epubBoard");
+    if(epubBoard){
+      epubBoard.classList.toggle("epubCollapsed", !isEdit && epubBoardCollapsedForTextTabs);
+      const btn = qs("#epubBoardToggleBtn");
+      if(btn){ btn.textContent = (!isEdit && epubBoardCollapsedForTextTabs) ? "펼치기" : "접기"; btn.classList.toggle("hidden", isEdit); }
+    }
+    qsa(".flowItem").forEach(btn => {
+      const text = btn.textContent || "";
+      if(/정리 옵션|검토 보드/.test(text)) btn.classList.toggle("hidden", isEdit);
+    });
+  }
+  function installEpubBoardCollapse(){
+    const board = qs("#epubBoard");
+    if(!board || qs("#epubBoardToggleBtn")) return;
+    const head = qs(".sectionHead", board);
+    if(!head) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "epubBoardToggleBtn";
+    btn.className = "btn subtle";
+    btn.textContent = "펼치기";
+    btn.addEventListener("click", () => { epubBoardCollapsedForTextTabs = !epubBoardCollapsedForTextTabs; applyModeLayout(); });
+    head.appendChild(btn);
+  }
+  function closeEpubEditToolsOnLoad(){
+    qsa("#epubEditPanel .epubToolStack details.foldBlock").forEach(d => d.removeAttribute("open"));
+  }
+  const originalSyncActiveResultHeight = (typeof syncActiveResultHeight === "function") ? syncActiveResultHeight : null;
+  window.syncActiveResultHeight = syncActiveResultHeight = function(){
+    if(mode() !== "classic" && mode() !== "chat") return;
+    const panel = mode() === "chat" ? qs("#chatPanel") : qs("#classicPanel");
+    if(!panel || panel.classList.contains("hidden")) return;
+    const leftInput = mode() === "chat" ? qs("#chatPaste", panel) : qs("#inputText", panel);
+    const preview = mode() === "chat" ? qs("#chatOutputTextPreview", panel) : qs("#outputTextPreview", panel);
+    if(!leftInput || !preview) return;
+    if(window.matchMedia("(max-width: 860px)").matches){
+      preview.style.height = "420px";
+      preview.style.maxHeight = "420px";
+      preview.style.minHeight = "320px";
+      return;
+    }
+    requestAnimationFrame(() => {
+      const bottom = leftInput.getBoundingClientRect().bottom;
+      const top = preview.getBoundingClientRect().top;
+      const h = Math.max(320, Math.round(bottom - top));
+      preview.style.height = h + "px";
+      preview.style.maxHeight = h + "px";
+      preview.style.minHeight = "0";
+      preview.style.overflow = "auto";
+    });
+  };
+  const originalSetResultOutput = (typeof setResultOutput === "function") ? setResultOutput : null;
+  if(originalSetResultOutput){
+    window.setResultOutput = setResultOutput = function(el, value){ originalSetResultOutput(el, value); setTimeout(syncActiveResultHeight, 0); };
+  }
+
+  function installPatchCss(){
+    if(qs("#rofanFinalPatchCss")) return;
+    const style = document.createElement("style");
+    style.id = "rofanFinalPatchCss";
+    style.textContent = `
+      #epubBoard.epubCollapsed .epubGrid,#epubBoard.epubCollapsed .epubPreviewGrid{display:none!important;}
+      #epubBoardToggleBtn{margin-left:auto;}
+      #optionsBoard.hidden,#reviewBoard.hidden,.flowItem.hidden{display:none!important;}
+      .editorBox.resultBox .richResultBox{height:var(--synced-result-height,520px)!important;min-height:0!important;max-height:var(--synced-result-height,520px)!important;overflow:auto!important;flex:0 0 auto!important;}
+      .manualChapterIntro{padding:10px 12px;border:1px dashed var(--line);border-radius:14px;background:var(--paper2);color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:12px;}
+      .manualChapterHead{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px;}
+      .manualChapterRows{display:grid;gap:8px;}
+      .manualChapterRow{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:14px;background:#fff;padding:9px 10px;}
+      .manualChapterRow b{width:24px;height:24px;border-radius:8px;background:var(--paper2);display:grid;place-items:center;color:var(--sub);font-size:12px;}
+      .manualChapterRow span{min-width:0;display:flex;flex-direction:column;gap:2px;}
+      .manualChapterRow strong{font-weight:760;color:rgba(31,45,54,.76);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+      .manualChapterRow small{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+      .manualChapterEditor{border:1px solid var(--line);border-radius:16px;background:#fff;overflow:hidden;margin-top:12px;}
+      .manualChapterEditor>summary{list-style:none;cursor:pointer;padding:13px 15px;font-weight:760;color:rgba(31,45,54,.76);display:flex;justify-content:space-between;}
+      .manualChapterEditor>summary::-webkit-details-marker{display:none;}
+      .manualChapterEditorBody{border-top:1px solid var(--line2);padding:14px;display:grid;gap:14px;}
+      .manualChapterForm{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+      .manualChapterForm .wide{grid-column:1/-1;}
+      .manualChapterSearch{border:1px solid var(--line2);border-radius:16px;background:var(--paper2);padding:12px;}
+      .chapterPreviewItem{border:1px solid var(--line);border-radius:16px;background:#fff;margin:8px 0;overflow:hidden;}
+      .chapterPreviewItem>summary{list-style:none;display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:9px;align-items:center;cursor:pointer;padding:10px 12px;}
+      .chapterPreviewItem>summary::-webkit-details-marker{display:none;}
+      .chapterPreviewItem>summary b{width:24px;height:24px;border-radius:8px;background:var(--paper2);display:grid;place-items:center;color:var(--sub);font-size:11px;}
+      .chapterPreviewItem>summary span{min-width:0;display:flex;flex-direction:column;gap:2px;}
+      .chapterPreviewItem>summary strong{font-weight:760;color:rgba(31,45,54,.76);}
+      .chapterPreviewItem>summary small{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+      .chapterPreviewItem>summary em{font-style:normal;color:var(--muted);font-size:11px;white-space:nowrap;}
+      .chapterPreviewBody{border-top:1px solid var(--line2);border-radius:0!important;max-height:420px;}
+      .chapterNote{color:var(--muted);font-size:.95em;margin:.2em 0 1em;}
+      .chapterImage{text-align:center;margin:1em 0;}
+      .chapterImage img{max-width:100%;height:auto;border-radius:12px;}
+      .manual-chapter-separator{border:0;border-top:2px dashed var(--line);margin:18px 0;position:relative;}
+      .manual-chapter-separator:after{content:"챕터 구분";display:inline-block;position:relative;top:-13px;background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--muted);font-size:11px;}
+      @media(max-width:860px){.manualChapterForm{grid-template-columns:1fr}.manualChapterRow{grid-template-columns:26px minmax(0,1fr);}.manualChapterRow .btn{font-size:11px;padding:6px 8px;min-height:30px}.chapterPreviewItem>summary{grid-template-columns:26px minmax(0,1fr)}.chapterPreviewItem>summary em{grid-column:2}.editorBox.resultBox .richResultBox{height:420px!important;max-height:420px!important;min-height:320px!important;}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  document.addEventListener("click", ev => {
+    if(ev.target.closest("#chapterTocInline") || ev.target.closest("#chapterDividerPanel")) handleChapterManagerClick(ev);
+  });
+  document.addEventListener("input", ev => {
+    if(ev.target.closest("#chapterTocInline") || ev.target.closest("#chapterDividerPanel")) handleChapterManagerInput(ev);
+  });
+  document.addEventListener("change", ev => {
+    if(ev.target.closest("#chapterTocInline") || ev.target.closest("#chapterDividerPanel")) handleChapterImageChange(ev);
+  });
+  qsa(".tab").forEach(tab => tab.addEventListener("click", () => setTimeout(() => { installChapterManagerUi(); renderManualChapterManager(); applyModeLayout(); renderManualChapterSeparatorsInEditor(); updateEpubPreview(); syncActiveResultHeight(); }, 0)));
+  ["input","change"].forEach(evt => {
+    if(typeof epubEditEditor !== "undefined" && epubEditEditor) epubEditEditor.addEventListener(evt, () => setTimeout(() => { renderManualChapterRows(); renderManualChapterSeparatorsInEditor(); updateEpubPreview(); }, 0));
+  });
+
+  function initFinalPatch(){
+    installPatchCss();
+    installEmojiControl();
+    installEpubBoardCollapse();
+    closeEpubEditToolsOnLoad();
+    installChapterManagerUi();
+    renderManualChapterManager();
+    applyModeLayout();
+    renderManualChapterSeparatorsInEditor();
+    if(typeof transformText === "function") transformText();
+    updateEpubPreview();
+    setTimeout(syncActiveResultHeight, 40);
+  }
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", initFinalPatch);
+  else initFinalPatch();
 })();
 

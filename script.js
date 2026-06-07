@@ -1120,15 +1120,20 @@ function setResultOutputScroll(el, value){
 function syncActiveResultHeight(){
   const panel = activeMode === "chat" ? chatPanel : activeMode === "classic" ? classicPanel : null;
   if(!panel || panel.classList.contains("hidden")) return;
+  if(window.matchMedia && window.matchMedia("(max-width: 860px)").matches) return;
+  const grid = panel.querySelector(".editorGrid");
   const left = panel.querySelector(".editorGrid > .editorBox:not(.resultBox)");
   const resultBox = panel.querySelector(".editorGrid > .editorBox.resultBox");
   const preview = resultBox ? resultBox.querySelector(".richResultBox") : null;
   const label = resultBox ? resultBox.querySelector(".editorLabel") : null;
-  if(!left || !resultBox || !preview) return;
-  const leftHeight = Math.max(360, Math.round(left.getBoundingClientRect().height));
+  if(!grid || !left || !resultBox || !preview) return;
+  const leftRect = left.getBoundingClientRect();
   const labelHeight = label ? Math.ceil(label.getBoundingClientRect().height) : 0;
-  resultBox.style.minHeight = leftHeight + "px";
-  preview.style.height = Math.max(300, leftHeight - labelHeight - 8) + "px";
+  const target = Math.max(320, Math.round(leftRect.height) - labelHeight - 9);
+  resultBox.style.minHeight = Math.round(leftRect.height) + "px";
+  preview.style.setProperty("--synced-result-height", target + "px");
+  preview.style.height = target + "px";
+  preview.style.maxHeight = target + "px";
 }
 function isItalicElement(el){
   if(!el || el.nodeType !== 1) return false;
@@ -3937,6 +3942,16 @@ requestAnimationFrame(syncActiveResultHeight);
       }
     });
   }
+  function ensureTrailingChapter(plan, units){
+    if(!plan || !Array.isArray(plan.chapters) || !units || !units.length) return false;
+    const last = plan.chapters[plan.chapters.length - 1];
+    if(!last) return false;
+    if(last.endPara !== null && last.endPara !== undefined && Number(last.endPara) < units.length - 1){
+      plan.chapters.push({ id: uid(), title: getChapterTitleFallback(plan.chapters.length), endPara: null, note:"", imageData:"", imageName:"", imageType:"", imagePos:"belowTitle" });
+      return true;
+    }
+    return false;
+  }
   function chaptersFromManualPlan(markdownMode){
     const cfg = (typeof getEpubConfig === "function") ? getEpubConfig() : { title:"정리한 로그" };
     const plan = currentPlan();
@@ -3997,6 +4012,7 @@ requestAnimationFrame(syncActiveResultHeight);
     const plan = currentPlan();
     const units = getChapterUnits();
     clampPlanToUnits(plan, units);
+    if(ensureTrailingChapter(plan, units)){ saveState(); }
     let start = 0;
     box.innerHTML = plan.chapters.map((ch, idx) => {
       const end = ch.endPara === null || ch.endPara === undefined ? (idx === plan.chapters.length - 1 ? units.length - 1 : start - 1) : Number(ch.endPara);
@@ -4039,16 +4055,17 @@ requestAnimationFrame(syncActiveResultHeight);
     if(!ch){ host.innerHTML = `<div class="emptyState">편집할 챕터가 없습니다.</div>`; return; }
     chapterSearch.editingId = ch.id;
     host.innerHTML = `<details class="manualChapterEditor" open><summary>${safeHtml(ch.title || "챕터")} 편집</summary><div class="manualChapterEditorBody">
-      <div class="manualChapterSearch">
-        <div class="optionRow compactControls"><span class="control">검색 <input type="search" data-chapter-end-keyword value="${safeAttr(chapterSearch.keyword || "")}" placeholder="끝나는 지점 키워드" autocomplete="off" autocapitalize="off" spellcheck="false"></span><span class="control">순서 <input type="number" min="1" data-chapter-end-order value="${safeAttr(chapterSearch.order || "")}" placeholder="번호" inputmode="numeric"></span></div>
-        <div id="manualChapterSearchResults">${renderManualChapterSearchResultsHtml()}</div>
-      </div>
       <div class="manualChapterForm">
-        <label class="control">챕터명 <input type="text" data-chapter-title value="${safeAttr(ch.title || "")}" placeholder="챕터 제목"></label>
+        <label class="control wide chapterTitleControl">챕터명 <input type="text" data-chapter-title value="${safeAttr(ch.title || "")}" placeholder="챕터 제목"></label>
         <label class="control wide">소제목 아래 문구 <textarea data-chapter-note rows="2" placeholder="소제목 아래에 넣을 짧은 문구">${safeHtml(ch.note || "")}</textarea></label>
         <label class="fileControl chapterImagePick"><span class="fileButtonText">이미지 선택</span><span class="fileNameText">${safeHtml(ch.imageName || "선택 없음")}</span><input type="file" data-chapter-image accept="${IMG_TYPES}"></label>
         <label class="control">이미지 위치 <select data-chapter-image-pos><option value="aboveTitle" ${ch.imagePos === "aboveTitle" ? "selected" : ""}>소제목 위</option><option value="belowTitle" ${(!ch.imagePos || ch.imagePos === "belowTitle") ? "selected" : ""}>소제목 아래</option><option value="bottom" ${ch.imagePos === "bottom" ? "selected" : ""}>맨 아래</option></select></label>
         ${ch.imageData ? `<button type="button" class="btn subtle warn" data-chapter-image-clear="1">이미지 제거</button>` : ""}
+      </div>
+      <div class="manualChapterSearch">
+        <div class="miniToolHead"><div><strong>챕터 끝 지점</strong><span>검색한 문단을 이 챕터의 마지막 문단으로 설정합니다.</span></div></div>
+        <div class="optionRow compactControls" id="manualChapterSearchFields"><span class="control">검색 <input type="search" data-chapter-end-keyword value="${safeAttr(chapterSearch.keyword || "")}" placeholder="끝나는 지점 키워드" autocomplete="off" autocapitalize="off" spellcheck="false"></span><span class="control">순서 <input type="number" min="1" data-chapter-end-order value="${safeAttr(chapterSearch.order || "")}" placeholder="번호" inputmode="numeric"></span></div>
+        <div id="manualChapterSearchResults">${renderManualChapterSearchResultsHtml()}</div>
       </div>
     </div></details>`;
   }
@@ -4119,7 +4136,7 @@ requestAnimationFrame(syncActiveResultHeight);
     const prevNext = ev.target.closest("[data-manual-chapter-page]");
     if(prevNext){ const max = Math.max(0, chapterSearchMatches().length - 1); chapterSearch.page = prevNext.dataset.manualChapterPage === "next" ? Math.min(max, chapterSearch.page + 1) : Math.max(0, chapterSearch.page - 1); renderChapterEditPanel(chapterSearch.editingId); return; }
     const setEnd = ev.target.closest("[data-chapter-set-end]");
-    if(setEnd){ const ch = findChapterById(chapterSearch.editingId); if(ch){ ch.endPara = Number(setEnd.dataset.chapterSetEnd); saveState(); renderChapterEditPanel(ch.id); refreshChapterOutputs(); toast("챕터 끝 지점을 설정했습니다."); } return; }
+    if(setEnd){ const ch = findChapterById(chapterSearch.editingId); if(ch){ ch.endPara = Number(setEnd.dataset.chapterSetEnd); const plan = currentPlan(); const units = getChapterUnits(); ensureTrailingChapter(plan, units); saveState(); renderManualChapterManager(); renderChapterEditPanel(ch.id); refreshChapterOutputs(); toast("챕터 끝 지점을 설정했습니다."); } return; }
     const clearEnd = ev.target.closest("[data-chapter-clear-end]");
     if(clearEnd){ const ch = findChapterById(chapterSearch.editingId); if(ch){ ch.endPara = null; saveState(); renderChapterEditPanel(ch.id); refreshChapterOutputs(); } return; }
     const clearImg = ev.target.closest("[data-chapter-image-clear]");
@@ -4311,9 +4328,11 @@ requestAnimationFrame(syncActiveResultHeight);
     style.id = "rofanFinalPatchCss";
     style.textContent = `
       #epubBoard.epubCollapsed .epubGrid,#epubBoard.epubCollapsed .epubPreviewGrid{display:none!important;}
+      .chapterTitleControl{grid-column:1/-1!important;}
+      .actionDock .downloadNameControl{white-space:nowrap!important;}
       #epubBoardToggleBtn{margin-left:auto;}
       #optionsBoard.hidden,#reviewBoard.hidden,.flowItem.hidden{display:none!important;}
-      .editorBox.resultBox .richResultBox{height:var(--synced-result-height,520px)!important;min-height:0!important;max-height:var(--synced-result-height,520px)!important;flex:0 0 auto!important;}
+      .editorBox.resultBox .richResultBox{height:var(--synced-result-height,520px)!important;min-height:0!important;max-height:var(--synced-result-height,520px)!important;overflow:auto!important;flex:0 0 auto!important;}
       .manualChapterIntro{padding:10px 12px;border:1px dashed var(--line);border-radius:14px;background:var(--paper2);color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:12px;}
       .manualChapterHead{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px;}
       .manualChapterRows{display:grid;gap:8px;}

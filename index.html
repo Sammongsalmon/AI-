@@ -45,7 +45,7 @@ button{border:0;}
   margin:0 auto;
   padding:28px;
   display:grid;
-  grid-template-columns:280px minmax(0,1fr);
+  grid-template-columns:minmax(0,1fr);
   gap:24px;
 }
 .sidebar{
@@ -622,33 +622,32 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
   .rgbField{flex:1 1 48px;min-width:46px;max-width:64px;font-size:9.5px;}
 }
 
+
+
+/* final layout cleanup */
+.chapterTitleControl{grid-column:1/-1!important;}
+.actionDock .downloadNameControl{white-space:nowrap!important;}
+
+aside.sidebar{display:none!important;}
+.appFrame{grid-template-columns:minmax(0,1fr)!important;}
+.statsCard{order:0;}
+.fileExtractFold{padding:0;overflow:hidden;}
+.fileExtractFold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 15px;color:var(--sub);font-size:13px;font-weight:780;}
+.fileExtractFold>summary::-webkit-details-marker{display:none;}
+.fileExtractFold>summary:after{content:"펼치기";font-size:11px;color:var(--muted);font-weight:650;}
+.fileExtractFold[open]>summary:after{content:"접기";}
+.fileExtractBody{border-top:1px solid var(--line2);padding:12px 14px 14px;}
+.downloadNameControl{display:inline-flex!important;flex:0 1 340px!important;max-width:340px!important;white-space:nowrap!important;align-items:center!important;}
+.downloadNameControl input{min-width:0!important;width:220px!important;flex:1 1 auto!important;}
+@media(max-width:860px){.downloadNameControl{flex:1 1 100%!important;max-width:100%!important}.downloadNameControl input{width:100%!important}}
+.editorGrid{align-items:start!important;}
+.editorBox.resultBox{align-self:start!important;min-height:0!important;height:auto!important;}
+.editorBox.resultBox .richResultBox{height:var(--synced-result-height,520px)!important;min-height:0!important;max-height:var(--synced-result-height,520px)!important;overflow:auto!important;}
+
 </style>
 </head>
 <body>
 <div class="appFrame">
-  <aside class="sidebar" aria-label="작업 흐름과 통계">
-    <div class="sideCard">
-      <div class="brandMark"><div class="brandIcon">✦</div><div><div class="brandTitle">로그 다듬기</div><div class="brandSub">로판Ai 백업 · 검토 · EPUB 제작</div></div></div>
-      <div id="workflowHint" class="workflowHint">입력하면 바로 정리됩니다.</div>
-      <div class="flowList">
-        <button type="button" class="flowItem" onclick="document.getElementById('inputOutput').scrollIntoView({behavior:'smooth',block:'start'})"><span class="flowDot"></span>입력과 결과</button>
-        <button type="button" class="flowItem" onclick="document.getElementById('optionsBoard').scrollIntoView({behavior:'smooth',block:'start'})"><span class="flowDot"></span>정리 옵션</button>
-        <button type="button" class="flowItem" onclick="document.getElementById('reviewBoard').scrollIntoView({behavior:'smooth',block:'start'})"><span class="flowDot"></span>검토 보드</button>
-        <button type="button" class="flowItem" onclick="document.getElementById('epubBoard').scrollIntoView({behavior:'smooth',block:'start'})"><span class="flowDot"></span>EPUB 제작</button>
-        <button type="button" class="flowItem" onclick="document.querySelector('.actionDock').scrollIntoView({behavior:'smooth',block:'center'})"><span class="flowDot"></span>내보내기</button>
-      </div>
-    </div>
-    <div class="sideCard">
-      <div class="sectionHead" style="margin-bottom:12px"><div><h2 class="sectionTitle" style="font-size:15px">결과 통계</h2><p class="sectionDesc">현재 결과 기준입니다.</p></div></div>
-      <div id="resultStats" class="statsGrid">
-        <div class="stat"><strong>0</strong><span>글자</span></div>
-        <div class="stat"><strong>0</strong><span>공백 제외</span></div>
-        <div class="stat"><strong>0</strong><span>문단</span></div>
-        <div class="stat"><strong>0</strong><span>지문</span></div>
-      </div>
-    </div>
-  </aside>
-
   <main class="canvas">
     <section class="card hero">
       <div>
@@ -664,6 +663,16 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
       </div>
     </section>
 
+    <section class="card statsCard" id="statsCard">
+      <div class="sectionHead" style="margin-bottom:12px"><div><h2 class="sectionTitle" style="font-size:15px">결과 통계</h2><p class="sectionDesc">현재 결과 기준입니다.</p></div></div>
+      <div id="resultStats" class="statsGrid">
+        <div class="stat"><strong>0</strong><span>글자</span></div>
+        <div class="stat"><strong>0</strong><span>공백 제외</span></div>
+        <div class="stat"><strong>0</strong><span>문단</span></div>
+        <div class="stat"><strong>0</strong><span>지문</span></div>
+      </div>
+    </section>
+
     <section class="card" id="inputOutput">
       <div class="sectionHead">
         <div><h2 class="sectionTitle">입력과 결과</h2><p class="sectionDesc">원본을 넣으면 결과가 바로 표시됩니다.</p></div>
@@ -673,14 +682,18 @@ input[type="file"]::file-selector-button:hover{background:#eff8fc;}
       <div class="panel" id="classicPanel">
         <div class="editorGrid">
           <div class="editorBox"><div class="editorLabel"><span>원본 로그</span><span>*지문* / 대사</span></div>
-            <div class="filePicker"><label class="prettyFile"><span class="fileButtonText">파일에서 발췌</span><span class="fileNameText" id="classicFileName">선택된 파일 없음</span><input type="file" id="classicFileInput" accept=".mht,.mhtml,.html,.htm,.txt,.md,.markdown"></label>
-              <div class="optionRow compactControls" style="margin-top:10px">
-                <span class="control">시작 문장 <input id="excerptStartText" type="text" placeholder="발췌 시작 문장"></span>
-                <span class="control">끝 문장 <input id="excerptEndText" type="text" placeholder="여기까지 발췌"></span>
-                <button type="button" class="btn subtle" onclick="applyClassicExcerpt()">범위 적용</button>
+            <details class="filePicker fileExtractFold">
+              <summary><span>파일에서 발췌</span><span class="fileNameText" id="classicFileName">선택된 파일 없음</span></summary>
+              <div class="fileExtractBody">
+                <label class="prettyFile"><span class="fileButtonText">파일 선택</span><span class="fileNameText">MHT / HTML / TXT / Markdown</span><input type="file" id="classicFileInput" accept=".mht,.mhtml,.html,.htm,.txt,.md,.markdown"></label>
+                <div class="optionRow compactControls" style="margin-top:10px">
+                  <span class="control">시작 문장 <input id="excerptStartText" type="text" placeholder="발췌 시작 문장"></span>
+                  <span class="control">끝 문장 <input id="excerptEndText" type="text" placeholder="여기까지 발췌"></span>
+                  <button type="button" class="btn subtle" onclick="applyClassicExcerpt()">범위 적용</button>
+                </div>
+                <div class="hint">MHT/HTML/TXT/Markdown 파일을 불러온 뒤, 시작/끝 문장으로 필요한 구간만 넣을 수 있습니다.</div>
               </div>
-              <div class="hint">MHT/HTML/TXT/Markdown 파일을 불러온 뒤, 시작/끝 문장으로 필요한 구간만 넣을 수 있습니다.</div>
-            </div><textarea id="inputText" placeholder="여기에 로그를 붙여 넣으세요"></textarea></div>
+            </details><textarea id="inputText" placeholder="여기에 로그를 붙여 넣으세요"></textarea></div>
           <div class="editorBox resultBox"><div class="editorLabel"><span>변환 결과</span><span>복사·다운로드 가능</span></div><textarea id="outputText" class="rawResultStorage" readonly placeholder="변환 결과"></textarea><div id="outputTextPreview" class="richResultBox" role="textbox" aria-readonly="true" aria-label="변환 결과" data-placeholder="변환 결과"></div></div>
         </div>
       </div>
@@ -2006,15 +2019,20 @@ function setResultOutputScroll(el, value){
 function syncActiveResultHeight(){
   const panel = activeMode === "chat" ? chatPanel : activeMode === "classic" ? classicPanel : null;
   if(!panel || panel.classList.contains("hidden")) return;
+  if(window.matchMedia && window.matchMedia("(max-width: 860px)").matches) return;
+  const grid = panel.querySelector(".editorGrid");
   const left = panel.querySelector(".editorGrid > .editorBox:not(.resultBox)");
   const resultBox = panel.querySelector(".editorGrid > .editorBox.resultBox");
   const preview = resultBox ? resultBox.querySelector(".richResultBox") : null;
   const label = resultBox ? resultBox.querySelector(".editorLabel") : null;
-  if(!left || !resultBox || !preview) return;
-  const leftHeight = Math.max(360, Math.round(left.getBoundingClientRect().height));
+  if(!grid || !left || !resultBox || !preview) return;
+  const leftRect = left.getBoundingClientRect();
   const labelHeight = label ? Math.ceil(label.getBoundingClientRect().height) : 0;
-  resultBox.style.minHeight = leftHeight + "px";
-  preview.style.height = Math.max(300, leftHeight - labelHeight - 8) + "px";
+  const target = Math.max(320, Math.round(leftRect.height) - labelHeight - 9);
+  resultBox.style.minHeight = Math.round(leftRect.height) + "px";
+  preview.style.setProperty("--synced-result-height", target + "px");
+  preview.style.height = target + "px";
+  preview.style.maxHeight = target + "px";
 }
 function isItalicElement(el){
   if(!el || el.nodeType !== 1) return false;
@@ -4823,6 +4841,16 @@ requestAnimationFrame(syncActiveResultHeight);
       }
     });
   }
+  function ensureTrailingChapter(plan, units){
+    if(!plan || !Array.isArray(plan.chapters) || !units || !units.length) return false;
+    const last = plan.chapters[plan.chapters.length - 1];
+    if(!last) return false;
+    if(last.endPara !== null && last.endPara !== undefined && Number(last.endPara) < units.length - 1){
+      plan.chapters.push({ id: uid(), title: getChapterTitleFallback(plan.chapters.length), endPara: null, note:"", imageData:"", imageName:"", imageType:"", imagePos:"belowTitle" });
+      return true;
+    }
+    return false;
+  }
   function chaptersFromManualPlan(markdownMode){
     const cfg = (typeof getEpubConfig === "function") ? getEpubConfig() : { title:"정리한 로그" };
     const plan = currentPlan();
@@ -4883,6 +4911,7 @@ requestAnimationFrame(syncActiveResultHeight);
     const plan = currentPlan();
     const units = getChapterUnits();
     clampPlanToUnits(plan, units);
+    if(ensureTrailingChapter(plan, units)){ saveState(); }
     let start = 0;
     box.innerHTML = plan.chapters.map((ch, idx) => {
       const end = ch.endPara === null || ch.endPara === undefined ? (idx === plan.chapters.length - 1 ? units.length - 1 : start - 1) : Number(ch.endPara);
@@ -4925,16 +4954,17 @@ requestAnimationFrame(syncActiveResultHeight);
     if(!ch){ host.innerHTML = `<div class="emptyState">편집할 챕터가 없습니다.</div>`; return; }
     chapterSearch.editingId = ch.id;
     host.innerHTML = `<details class="manualChapterEditor" open><summary>${safeHtml(ch.title || "챕터")} 편집</summary><div class="manualChapterEditorBody">
-      <div class="manualChapterSearch">
-        <div class="optionRow compactControls"><span class="control">검색 <input type="search" data-chapter-end-keyword value="${safeAttr(chapterSearch.keyword || "")}" placeholder="끝나는 지점 키워드" autocomplete="off" autocapitalize="off" spellcheck="false"></span><span class="control">순서 <input type="number" min="1" data-chapter-end-order value="${safeAttr(chapterSearch.order || "")}" placeholder="번호" inputmode="numeric"></span></div>
-        <div id="manualChapterSearchResults">${renderManualChapterSearchResultsHtml()}</div>
-      </div>
       <div class="manualChapterForm">
-        <label class="control">챕터명 <input type="text" data-chapter-title value="${safeAttr(ch.title || "")}" placeholder="챕터 제목"></label>
+        <label class="control wide chapterTitleControl">챕터명 <input type="text" data-chapter-title value="${safeAttr(ch.title || "")}" placeholder="챕터 제목"></label>
         <label class="control wide">소제목 아래 문구 <textarea data-chapter-note rows="2" placeholder="소제목 아래에 넣을 짧은 문구">${safeHtml(ch.note || "")}</textarea></label>
         <label class="fileControl chapterImagePick"><span class="fileButtonText">이미지 선택</span><span class="fileNameText">${safeHtml(ch.imageName || "선택 없음")}</span><input type="file" data-chapter-image accept="${IMG_TYPES}"></label>
         <label class="control">이미지 위치 <select data-chapter-image-pos><option value="aboveTitle" ${ch.imagePos === "aboveTitle" ? "selected" : ""}>소제목 위</option><option value="belowTitle" ${(!ch.imagePos || ch.imagePos === "belowTitle") ? "selected" : ""}>소제목 아래</option><option value="bottom" ${ch.imagePos === "bottom" ? "selected" : ""}>맨 아래</option></select></label>
         ${ch.imageData ? `<button type="button" class="btn subtle warn" data-chapter-image-clear="1">이미지 제거</button>` : ""}
+      </div>
+      <div class="manualChapterSearch">
+        <div class="miniToolHead"><div><strong>챕터 끝 지점</strong><span>검색한 문단을 이 챕터의 마지막 문단으로 설정합니다.</span></div></div>
+        <div class="optionRow compactControls" id="manualChapterSearchFields"><span class="control">검색 <input type="search" data-chapter-end-keyword value="${safeAttr(chapterSearch.keyword || "")}" placeholder="끝나는 지점 키워드" autocomplete="off" autocapitalize="off" spellcheck="false"></span><span class="control">순서 <input type="number" min="1" data-chapter-end-order value="${safeAttr(chapterSearch.order || "")}" placeholder="번호" inputmode="numeric"></span></div>
+        <div id="manualChapterSearchResults">${renderManualChapterSearchResultsHtml()}</div>
       </div>
     </div></details>`;
   }
@@ -5005,7 +5035,7 @@ requestAnimationFrame(syncActiveResultHeight);
     const prevNext = ev.target.closest("[data-manual-chapter-page]");
     if(prevNext){ const max = Math.max(0, chapterSearchMatches().length - 1); chapterSearch.page = prevNext.dataset.manualChapterPage === "next" ? Math.min(max, chapterSearch.page + 1) : Math.max(0, chapterSearch.page - 1); renderChapterEditPanel(chapterSearch.editingId); return; }
     const setEnd = ev.target.closest("[data-chapter-set-end]");
-    if(setEnd){ const ch = findChapterById(chapterSearch.editingId); if(ch){ ch.endPara = Number(setEnd.dataset.chapterSetEnd); saveState(); renderChapterEditPanel(ch.id); refreshChapterOutputs(); toast("챕터 끝 지점을 설정했습니다."); } return; }
+    if(setEnd){ const ch = findChapterById(chapterSearch.editingId); if(ch){ ch.endPara = Number(setEnd.dataset.chapterSetEnd); const plan = currentPlan(); const units = getChapterUnits(); ensureTrailingChapter(plan, units); saveState(); renderManualChapterManager(); renderChapterEditPanel(ch.id); refreshChapterOutputs(); toast("챕터 끝 지점을 설정했습니다."); } return; }
     const clearEnd = ev.target.closest("[data-chapter-clear-end]");
     if(clearEnd){ const ch = findChapterById(chapterSearch.editingId); if(ch){ ch.endPara = null; saveState(); renderChapterEditPanel(ch.id); refreshChapterOutputs(); } return; }
     const clearImg = ev.target.closest("[data-chapter-image-clear]");
@@ -5199,7 +5229,7 @@ requestAnimationFrame(syncActiveResultHeight);
       #epubBoard.epubCollapsed .epubGrid,#epubBoard.epubCollapsed .epubPreviewGrid{display:none!important;}
       #epubBoardToggleBtn{margin-left:auto;}
       #optionsBoard.hidden,#reviewBoard.hidden,.flowItem.hidden{display:none!important;}
-      .editorBox.resultBox .richResultBox{height:var(--synced-result-height,520px)!important;min-height:0!important;max-height:var(--synced-result-height,520px)!important;flex:0 0 auto!important;}
+      .editorBox.resultBox .richResultBox{height:var(--synced-result-height,520px)!important;min-height:0!important;max-height:var(--synced-result-height,520px)!important;overflow:auto!important;flex:0 0 auto!important;}
       .manualChapterIntro{padding:10px 12px;border:1px dashed var(--line);border-radius:14px;background:var(--paper2);color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:12px;}
       .manualChapterHead{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px;}
       .manualChapterRows{display:grid;gap:8px;}
