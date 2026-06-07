@@ -34,7 +34,6 @@ const epubCoverFileNameEl = document.getElementById("epubCoverFileName");
 const removeDetailsEl = document.getElementById("removeDetails");
 const removeEmptyLinesEl = document.getElementById("removeEmptyLines");
 const removeCellEmptyLinesEl = document.getElementById("removeCellEmptyLines");
-const removeEmojiSentencesEl = document.getElementById("removeEmojiSentences");
 const removeHTMLEl = document.getElementById("removeHTML");
 const removeDecorEl = document.getElementById("removeDecor");
 const protectEnabledEl = document.getElementById("protectEnabled");
@@ -44,6 +43,7 @@ const indentOutputEl = document.getElementById("indentOutput");
 const deleteContainsEnabledEl = document.getElementById("deleteContainsEnabled");
 const deleteContainsTokenEl = document.getElementById("deleteContainsToken");
 const deleteContainsModeEl = document.getElementById("deleteContainsMode");
+const middleRangePanelEl = document.getElementById("middleRangePanel");
 const removeTablesEl = document.getElementById("removeTables");
 const labelSpeakersEl = document.getElementById("labelSpeakers");
 const userNameEl = document.getElementById("userName");
@@ -112,6 +112,7 @@ let duplicateOrderQuery = "";
 let oocGroupPage = 0;
 let oocFilterText = "";
 let oocOrderQuery = "";
+let middleRangeRules = [];
 let cachedChatFileName = "";
 let cachedCoverAsset = null;
 let isRestoringWork = false;
@@ -255,7 +256,6 @@ chatPaste.addEventListener("paste", handleRichPaste);
   removeDetailsEl,
   removeEmptyLinesEl,
   removeCellEmptyLinesEl,
-  removeEmojiSentencesEl,
   removeHTMLEl,
   removeDecorEl,
   protectEnabledEl,
@@ -274,6 +274,11 @@ chatPaste.addEventListener("paste", handleRichPaste);
 
 protectTokenEl.addEventListener("input", transformText);
 deleteContainsTokenEl.addEventListener("input", transformText);
+if(middleRangePanelEl){
+  middleRangePanelEl.addEventListener("input", handleMiddleRangeInput);
+  middleRangePanelEl.addEventListener("change", handleMiddleRangeInput);
+  middleRangePanelEl.addEventListener("click", handleMiddleRangeClick);
+}
 userNameEl.addEventListener("input", transformText);
 characterNameEl.addEventListener("input", transformText);
 speakerMarkerCustomEl.addEventListener("input", transformText);
@@ -401,6 +406,7 @@ function collectWorkValues(){
     oocGroupPage,
     oocFilterText,
     oocOrderQuery,
+    middleRangeRules,
     chapterKeywordQuery,
     chapterOrderQuery,
     chapterMatchPage,
@@ -510,6 +516,8 @@ async function restoreSavedWork(){
       oocGroupPage = state.oocGroupPage || 0;
       oocFilterText = state.oocFilterText || "";
       oocOrderQuery = state.oocOrderQuery || "";
+      middleRangeRules = sanitizeMiddleRangeRules(state.middleRangeRules || []);
+      renderMiddleRangePanel();
       chapterKeywordQuery = state.chapterKeywordQuery || "";
       chapterOrderQuery = state.chapterOrderQuery || "";
       chapterMatchPage = state.chapterMatchPage || 0;
@@ -633,6 +641,172 @@ function shouldDeleteByContains(t, tokens){
     return lowerText.includes(token.toLowerCase());
   });
 }
+
+function createMiddleRangeRule(data){
+  const source = data || {};
+  return {
+    id: source.id || ("range-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8)),
+    start: String(source.start || ""),
+    end: String(source.end || ""),
+    action: source.action === "keep" ? "keep" : "delete",
+    unit: source.unit === "sentence" ? "sentence" : "paragraph"
+  };
+}
+function sanitizeMiddleRangeRules(rules){
+  if(!Array.isArray(rules)) return [];
+  return rules.map(createMiddleRangeRule).filter(Boolean);
+}
+function ensureMiddleRangeRows(){
+  if(!Array.isArray(middleRangeRules)) middleRangeRules = [];
+  if(!middleRangeRules.length) middleRangeRules = [createMiddleRangeRule()];
+}
+function renderMiddleRangePanel(){
+  if(!middleRangePanelEl) return;
+  ensureMiddleRangeRows();
+  middleRangePanelEl.innerHTML = middleRangeRules.map((rule, idx) => `
+    <div class="middleRangeItem" data-middle-range-id="${escapeAttr(rule.id)}">
+      <div class="middleRangeHead">
+        <strong>범위 ${idx + 1}</strong>
+        <span class="control compactControl">처리 <select data-middle-range-field="action"><option value="delete" ${rule.action !== "keep" ? "selected" : ""}>삭제</option><option value="keep" ${rule.action === "keep" ? "selected" : ""}>남김</option></select></span>
+        <span class="control compactControl">삭제 단위 <select data-middle-range-field="unit"><option value="paragraph" ${rule.unit !== "sentence" ? "selected" : ""}>키워드 포함 문단부터</option><option value="sentence" ${rule.unit === "sentence" ? "selected" : ""}>키워드 포함 문장부터</option></select></span>
+        <button type="button" class="btn subtle warn" data-middle-range-remove="${escapeAttr(rule.id)}">범위 삭제</button>
+      </div>
+      <div class="middleRangeGrid">
+        <label class="control wide">시작 문장<textarea data-middle-range-field="start" placeholder="삭제 범위가 시작되는 문장 전체를 붙여넣기">${escapeHTML(rule.start)}</textarea></label>
+        <label class="control wide">끝 문장<textarea data-middle-range-field="end" placeholder="삭제 범위가 끝나는 문장 전체를 붙여넣기">${escapeHTML(rule.end)}</textarea></label>
+      </div>
+    </div>`).join("");
+}
+function addMiddleRangeRule(){
+  ensureMiddleRangeRows();
+  middleRangeRules.push(createMiddleRangeRule());
+  renderMiddleRangePanel();
+  scheduleAutosave();
+}
+function findMiddleRangeRule(id){
+  return (middleRangeRules || []).find(rule => rule.id === id);
+}
+function handleMiddleRangeInput(e){
+  const field = e.target && e.target.dataset ? e.target.dataset.middleRangeField : "";
+  if(!field) return;
+  const wrap = e.target.closest("[data-middle-range-id]");
+  if(!wrap) return;
+  const rule = findMiddleRangeRule(wrap.dataset.middleRangeId);
+  if(!rule) return;
+  rule[field] = e.target.value || "";
+  transformText();
+  scheduleAutosave();
+}
+function handleMiddleRangeClick(e){
+  const btn = e.target.closest("[data-middle-range-remove]");
+  if(!btn) return;
+  const id = btn.dataset.middleRangeRemove;
+  middleRangeRules = (middleRangeRules || []).filter(rule => rule.id !== id);
+  renderMiddleRangePanel();
+  transformText();
+  scheduleAutosave();
+}
+function normalizeRangeNeedle(text){
+  return String(text || "").replace(/\r/g, "").replace(/\s+/g, " ").trim();
+}
+function getActiveMiddleRangeRules(){
+  return (middleRangeRules || [])
+    .filter(rule => rule && rule.action !== "keep")
+    .map(rule => ({
+      start:String(rule.start || "").trim(),
+      end:String(rule.end || "").trim(),
+      unit: rule.unit === "sentence" ? "sentence" : "paragraph"
+    }))
+    .filter(rule => rule.start && rule.end);
+}
+function findRangeNeedleInChunks(chunks, needle, startIndex, startPos){
+  const rawNeedle = String(needle || "").trim();
+  const normalizedNeedle = normalizeRangeNeedle(rawNeedle);
+  if(!rawNeedle || !normalizedNeedle) return null;
+  for(let i = Math.max(0, startIndex || 0); i < chunks.length; i++){
+    const text = String((chunks[i] && chunks[i].text) || "");
+    const from = i === startIndex ? Math.max(0, startPos || 0) : 0;
+    const exact = text.indexOf(rawNeedle, from);
+    if(exact >= 0) return {index:i, pos:exact, len:rawNeedle.length, whole:false};
+    const normalizedText = normalizeRangeNeedle(text);
+    if(normalizedText && normalizedText.includes(normalizedNeedle)){
+      return {index:i, pos:0, len:text.length, whole:true};
+    }
+  }
+  return null;
+}
+function getSentenceBoundsForRange(text, pos, len){
+  const s = String(text || "");
+  const safePos = Math.max(0, Math.min(s.length, Number(pos) || 0));
+  const safeEnd = Math.max(safePos, Math.min(s.length, safePos + (Number(len) || 0)));
+  const sentenceEndChars = new Set([".", "?", "!", "。", "？", "！", "…", "\n"]);
+  const closingChars = new Set(['"', "'", "”", "’", "」", "』", "〉", ")", "]", "}"]);
+  let start = safePos;
+  while(start > 0){
+    const prev = s[start - 1];
+    if(sentenceEndChars.has(prev)) break;
+    start--;
+  }
+  while(start < s.length && /\s/.test(s[start])) start++;
+  let end = safeEnd;
+  while(end < s.length){
+    const ch = s[end];
+    end++;
+    if(sentenceEndChars.has(ch)) break;
+  }
+  while(end < s.length && closingChars.has(s[end])) end++;
+  while(end < s.length && s[end] === " ") end++;
+  return {start, end};
+}
+function deleteTextRangeInChunkText(text, start, end){
+  const s = String(text || "");
+  const from = Math.max(0, Math.min(s.length, start));
+  const to = Math.max(from, Math.min(s.length, end));
+  return (s.slice(0, from) + s.slice(to)).replace(/\n{3,}/g, "\n\n").trim();
+}
+function applyMiddleRangeDeletesToChunks(chunks){
+  const rules = getActiveMiddleRangeRules();
+  if(!rules.length || !Array.isArray(chunks) || !chunks.length) return chunks;
+  let working = chunks.map(chunk => Object.assign({}, chunk));
+  rules.forEach(rule => {
+    const startInfo = findRangeNeedleInChunks(working, rule.start, 0, 0);
+    if(!startInfo) return;
+    const endInfo = findRangeNeedleInChunks(working, rule.end, startInfo.index, 0);
+    if(!endInfo || endInfo.index < startInfo.index) return;
+
+    if(rule.unit === "sentence"){
+      if(startInfo.whole || endInfo.whole){
+        // 공백 정규화로만 찾힌 경우 정확한 문장 위치를 알 수 없으므로 안전하게 문단 단위로 처리합니다.
+        for(let i = startInfo.index; i <= endInfo.index; i++){
+          if(working[i]) working[i].text = "";
+        }
+      }else if(startInfo.index === endInfo.index){
+        const text = String((working[startInfo.index] && working[startInfo.index].text) || "");
+        const startBounds = getSentenceBoundsForRange(text, startInfo.pos, startInfo.len);
+        const endBounds = getSentenceBoundsForRange(text, endInfo.pos, endInfo.len);
+        working[startInfo.index].text = deleteTextRangeInChunkText(text, startBounds.start, endBounds.end);
+      }else{
+        const startText = String((working[startInfo.index] && working[startInfo.index].text) || "");
+        const endText = String((working[endInfo.index] && working[endInfo.index].text) || "");
+        const startBounds = getSentenceBoundsForRange(startText, startInfo.pos, startInfo.len);
+        const endBounds = getSentenceBoundsForRange(endText, endInfo.pos, endInfo.len);
+        if(working[startInfo.index]) working[startInfo.index].text = deleteTextRangeInChunkText(startText, startBounds.start, startText.length);
+        for(let i = startInfo.index + 1; i < endInfo.index; i++){
+          if(working[i]) working[i].text = "";
+        }
+        if(working[endInfo.index]) working[endInfo.index].text = deleteTextRangeInChunkText(endText, 0, endBounds.end);
+      }
+    }else{
+      // 문단 기준: 시작/끝 키워드가 들어간 문단 전체와 그 사이 문단을 삭제합니다.
+      for(let i = startInfo.index; i <= endInfo.index; i++){
+        if(working[i]) working[i].text = "";
+      }
+    }
+    working = working.filter(chunk => String((chunk && chunk.text) || "").trim());
+  });
+  return working;
+}
+
 function resetReviewDecisions(){
   duplicateDecisions = {};
   containsDecisions = {};
@@ -2212,37 +2386,6 @@ function indentRenderedText(text){
   return String(text || "").split("\n").map(line => line.trim() ? "　" + line : line).join("\n");
 }
 
-
-function hasEmojiText(text){
-  const value = String(text || "");
-  try{
-    if(/[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(value)) return true;
-  }catch(_err){}
-  return /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}]/u.test(value);
-}
-function splitSentencesKeepingBreaks(line){
-  const text = String(line || "");
-  if(!text) return [""];
-  const parts = text.match(/[^.!?。！？…]+[.!?。！？…]+[”’"')\]\}]*|[^.!?。！？…]+/g);
-  return parts && parts.length ? parts : [text];
-}
-function removeEmojiSentencesFromText(text){
-  return String(text || "")
-    .split(/(\n+)/)
-    .map(part => {
-      if(/^\n+$/.test(part)) return part;
-      return splitSentencesKeepingBreaks(part).filter(sentence => !hasEmojiText(sentence)).join("").trim();
-    })
-    .join("")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-function shouldRemoveEmojiSentences(){
-  const el = document.getElementById("removeEmojiSentences");
-  return !!(el && el.checked);
-}
-
 // ------------------ 출력 공통 렌더러 ------------------
 function renderChunks(chunks, options){
   options = makeDeleteOptions(options);
@@ -2279,11 +2422,6 @@ function renderChunks(chunks, options){
     t = t.replace(/__(.*?)__/g,"$1");
 
     const protectedHere = isProtectedText(t, tokens);
-
-    if(shouldRemoveEmojiSentences() && !protectedHere){
-      t = removeEmojiSentencesFromText(t);
-      if(!t) return "";
-    }
 
     if(removeDetailsEl.checked && fromDetails && !protectedHere) return "";
     if(options.removeTables && !protectedHere && (fromTable || isRemovableBlockText(t))) return "";
@@ -2376,13 +2514,14 @@ function transformText(){
     const oocDropBlockIds = getDroppedBlockIdsFromOocDecisions(oocItems);
     const oocStripMap = getOocStripMap(oocItems);
     const dropBlockIds = mergeSets(duplicateDropBlockIds, oocDropBlockIds);
-    const structuralPlan = createStructuralDeletePlan(parsed.chunks, dropBlockIds);
+    const rangeAdjustedChunks = applyMiddleRangeDeletesToChunks(parsed.chunks);
+    const structuralPlan = createStructuralDeletePlan(rangeAdjustedChunks, dropBlockIds);
 
     const deleteTokens = getDeleteContainsTokens();
-    const containsItems = buildContainsReviewItems(parsed.chunks, dropBlockIds, deleteTokens, structuralPlan.dropChunkIds);
+    const containsItems = buildContainsReviewItems(rangeAdjustedChunks, dropBlockIds, deleteTokens, structuralPlan.dropChunkIds);
     updateContainsReviewPanel(containsItems);
 
-    const renderedPack = renderChunks(parsed.chunks, {
+    const renderedPack = renderChunks(rangeAdjustedChunks, {
       removeTables: removeTablesEl.checked,
       deleteTokens,
       deleteContainsMode: deleteContainsModeEl.value,
@@ -2396,7 +2535,7 @@ function transformText(){
     const rendered = renderedPack.text;
     lastStructuredItems = renderedPack.items || [];
     setResultOutput(chatOutput, rendered);
-    afterTransform(parsed.chunks, parsed.blocks, rendered);
+    afterTransform(rangeAdjustedChunks, parsed.blocks, rendered);
     return;
   }
 
@@ -2424,16 +2563,17 @@ function transformText(){
   }
 
   const chunks = (classicActiveChunks && classicActiveChunks.length) ? cloneChunks(classicActiveChunks) : (structuredChunks || parseChunks(text));
+  const rangeAdjustedChunks = applyMiddleRangeDeletesToChunks(chunks);
   const deleteTokens = getDeleteContainsTokens();
   currentDuplicateGroups = [];
   duplicateReviewPanel.classList.add("hidden");
   duplicateReviewPanel.innerHTML = "";
   if(oocReviewPanel){ oocReviewPanel.classList.add("hidden"); oocReviewPanel.innerHTML = ""; }
   const emptyDrop = new Set();
-  const structuralPlan = createStructuralDeletePlan(chunks, emptyDrop);
-  const containsItems = buildContainsReviewItems(chunks, emptyDrop, deleteTokens, structuralPlan.dropChunkIds);
+  const structuralPlan = createStructuralDeletePlan(rangeAdjustedChunks, emptyDrop);
+  const containsItems = buildContainsReviewItems(rangeAdjustedChunks, emptyDrop, deleteTokens, structuralPlan.dropChunkIds);
   updateContainsReviewPanel(containsItems);
-  const renderedPack = renderChunks(chunks, {
+  const renderedPack = renderChunks(rangeAdjustedChunks, {
     removeTables: removeTablesEl.checked,
     deleteTokens,
     deleteContainsMode: deleteContainsModeEl.value,
@@ -2446,7 +2586,7 @@ function transformText(){
   const rendered = renderedPack.text;
   lastStructuredItems = renderedPack.items || [];
   setResultOutput(output, rendered);
-  afterTransform(chunks, [], rendered);
+  afterTransform(rangeAdjustedChunks, [], rendered);
 }
 
 // ------------------ UI ------------------
@@ -2519,6 +2659,8 @@ function clearAll(){
   oocGroupPage = 0;
   oocFilterText = "";
   oocOrderQuery = "";
+  middleRangeRules = [];
+  renderMiddleRangePanel();
   chapterKeywordQuery = "";
   chapterOrderQuery = "";
   chapterMatchPage = 0;
@@ -3315,13 +3457,14 @@ function createZipBlob(entries, type){
   return new Blob(chunks, {type:type || "application/zip"});
 }
 function collectPresetValues(){
-  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeEmojiSentences","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerUserColor","speakerCharacterColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode","epubEditTextColor","epubQuoteColor","epubEditTextColorR","epubEditTextColorG","epubEditTextColorB","epubQuoteColorR","epubQuoteColorG","epubQuoteColorB"];
+  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerUserColor","speakerCharacterColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode","epubEditTextColor","epubQuoteColor","epubEditTextColorR","epubEditTextColorG","epubEditTextColorB","epubQuoteColorR","epubQuoteColorG","epubQuoteColorB"];
   const data = {};
   ids.forEach(id => {
     const el = document.getElementById(id);
     if(!el) return;
     data[id] = el.type === "checkbox" ? el.checked : el.value;
   });
+  data.middleRangeRules = sanitizeMiddleRangeRules(middleRangeRules);
   return data;
 }
 function refreshColorWidgets(){
@@ -3337,6 +3480,10 @@ function applyPresetValues(data){
     if(el.type === "checkbox") el.checked = !!value;
     else el.value = value;
   });
+  if(data && Array.isArray(data.middleRangeRules)){
+    middleRangeRules = sanitizeMiddleRangeRules(data.middleRangeRules);
+    renderMiddleRangePanel();
+  }
   refreshColorWidgets();
 }
 function saveCurrentPreset(){
@@ -3370,6 +3517,7 @@ function updateFileNameLabel(inputEl, labelEl, emptyText){
 }
 
 
+renderMiddleRangePanel();
 wireAutosave();
 
 
@@ -3884,3 +4032,91 @@ refreshColorWidgets();
 syncResultPreview(output);
 syncResultPreview(chatOutput);
 requestAnimationFrame(syncActiveResultHeight);
+
+/* height hardening patch: keep result panes aligned with input panes */
+(function(){
+  function qs(sel, root){ return (root || document).querySelector(sel); }
+  function mode(){ return (typeof activeMode === 'string' && activeMode) || 'classic'; }
+  function activePanel(){
+    if(mode() === 'chat') return typeof chatPanel !== 'undefined' ? chatPanel : qs('#chatPanel');
+    if(mode() === 'classic') return typeof classicPanel !== 'undefined' ? classicPanel : qs('#classicPanel');
+    return null;
+  }
+  function leftInputForPanel(panel){
+    if(!panel) return null;
+    if(mode() === 'chat') return qs('#chatPaste', panel) || qs('.pastebox', panel);
+    return qs('#inputTextPreview', panel) || qs('#inputText', panel) || qs('textarea', panel);
+  }
+  function previewForPanel(panel){
+    if(!panel) return null;
+    return mode() === 'chat' ? qs('#chatOutputTextPreview', panel) : qs('#outputTextPreview', panel);
+  }
+  window.syncActiveResultHeight = syncActiveResultHeight = function(){
+    const panel = activePanel();
+    if(!panel || panel.classList.contains('hidden')) return;
+    const leftInput = leftInputForPanel(panel);
+    const preview = previewForPanel(panel);
+    const resultBox = preview && preview.closest('.resultBox');
+    const label = resultBox && qs('.editorLabel', resultBox);
+    if(!leftInput || !preview || !resultBox) return;
+
+    if(window.matchMedia && window.matchMedia('(max-width: 860px)').matches){
+      resultBox.style.setProperty('height', 'auto', 'important');
+      resultBox.style.setProperty('min-height', '0', 'important');
+      preview.style.setProperty('--synced-result-height', '420px');
+      preview.style.setProperty('height', '420px', 'important');
+      preview.style.setProperty('max-height', '420px', 'important');
+      preview.style.setProperty('min-height', '320px', 'important');
+      preview.style.setProperty('overflow', 'auto', 'important');
+      return;
+    }
+
+    const leftRect = leftInput.getBoundingClientRect();
+    const boxRect = resultBox.getBoundingClientRect();
+    const labelHeight = label ? Math.ceil(label.getBoundingClientRect().height) : 0;
+    let totalHeight = Math.round(leftRect.bottom - boxRect.top);
+    if(!Number.isFinite(totalHeight) || totalHeight < 360){
+      const fallback = panel.querySelector('.editorGrid > .editorBox:not(.resultBox)');
+      totalHeight = fallback ? Math.round(fallback.getBoundingClientRect().height) : 520;
+    }
+    totalHeight = Math.max(360, Math.min(totalHeight, 980));
+    const previewHeight = Math.max(300, totalHeight - labelHeight - 9);
+
+    resultBox.style.setProperty('align-self', 'start', 'important');
+    resultBox.style.setProperty('height', totalHeight + 'px', 'important');
+    resultBox.style.setProperty('min-height', '0', 'important');
+    resultBox.style.setProperty('overflow', 'visible', 'important');
+    preview.style.setProperty('--synced-result-height', previewHeight + 'px');
+    preview.style.setProperty('height', previewHeight + 'px', 'important');
+    preview.style.setProperty('max-height', previewHeight + 'px', 'important');
+    preview.style.setProperty('min-height', '0', 'important');
+    preview.style.setProperty('overflow', 'auto', 'important');
+    preview.style.setProperty('flex', '0 0 auto', 'important');
+  };
+
+  const oldSetResultOutput = typeof setResultOutput === 'function' ? setResultOutput : null;
+  if(oldSetResultOutput && !oldSetResultOutput.__heightHardened){
+    const wrapped = function(el, value){
+      oldSetResultOutput(el, value);
+      requestAnimationFrame(() => syncActiveResultHeight());
+      setTimeout(syncActiveResultHeight, 60);
+    };
+    wrapped.__heightHardened = true;
+    window.setResultOutput = setResultOutput = wrapped;
+  }
+
+  function installHeightObservers(){
+    const targets = ['#inputText', '#inputTextPreview', '#chatPaste', '#outputTextPreview', '#chatOutputTextPreview']
+      .map(sel => qs(sel)).filter(Boolean);
+    if('ResizeObserver' in window){
+      const ro = new ResizeObserver(() => requestAnimationFrame(syncActiveResultHeight));
+      targets.forEach(el => { try{ ro.observe(el); }catch(_){} });
+    }
+    ['load','resize','orientationchange'].forEach(ev => window.addEventListener(ev, () => setTimeout(syncActiveResultHeight, 80), {passive:true}));
+    document.addEventListener('input', () => setTimeout(syncActiveResultHeight, 30), true);
+    document.addEventListener('click', () => setTimeout(syncActiveResultHeight, 30), true);
+    setInterval(() => { if(mode() === 'classic' || mode() === 'chat') syncActiveResultHeight(); }, 900);
+  }
+  installHeightObservers();
+  requestAnimationFrame(syncActiveResultHeight);
+})();
