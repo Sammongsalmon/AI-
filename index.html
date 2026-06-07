@@ -5381,7 +5381,6 @@ requestAnimationFrame(syncActiveResultHeight);
   else initFinalPatch();
 })();
 
-
 /* --- 2026-06-07 stable chapter split + epub-edit layout patch --- */
 (function(){
   function qs(sel, root=document){ return root.querySelector(sel); }
@@ -5749,6 +5748,7 @@ requestAnimationFrame(syncActiveResultHeight);
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootFinalFix); else bootFinalFix();
 })();
 
+
 /* --- 2026-06-07 chapter edit persistence and preview fix --- */
 (function(){
   const KEY = 'rofan-manual-chapters-v2';
@@ -6075,7 +6075,6 @@ requestAnimationFrame(syncActiveResultHeight);
   window.addEventListener('beforeunload', () => { const got = getPlan(); savePlan(got.plan); });
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();
-
 
 /* --- 2026-06-07 chapter boundary isolation final patch --- */
 (function(){
@@ -6435,6 +6434,532 @@ requestAnimationFrame(syncActiveResultHeight);
   qsa('.tab').forEach(tab => tab.addEventListener('click', () => setTimeout(boot, 60)));
   window.addEventListener('beforeunload', () => savePlan(plan()));
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+
+/* --- 2026-06-07 deployment cleanup: manual chapter separators and export safety --- */
+(function(){
+  const PLAN_KEY = 'rofan-manual-chapters-v2';
+  const OPEN_KEY = 'rofan-chapter-preview-open-v1';
+  const SEP_NODE_SELECTOR = 'hr, .manual-chapter-separator, .chapter-editor-separator, [data-manual-chapter], [data-chapter-separator]';
+  let reconcilingEditor = false;
+  let repairTimer = null;
+
+  function qs(sel, root=document){ return root.querySelector(sel); }
+  function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+  function mode(){ return (typeof activeMode === 'string' && activeMode) ? activeMode : 'classic'; }
+  function esc(v){
+    if(typeof escapeHTML === 'function') return escapeHTML(v || '');
+    return String(v || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+  function attr(v){
+    if(typeof escapeAttr === 'function') return escapeAttr(v || '');
+    return esc(v || '').replace(/`/g, '&#096;');
+  }
+  function stripHtml(v){
+    if(typeof stripHTMLTags === 'function') return stripHTMLTags(v || '');
+    const d = document.createElement('div');
+    d.innerHTML = String(v || '');
+    return d.textContent || d.innerText || '';
+  }
+  function htmlToText(v){
+    if(typeof blockHtmlToText === 'function') return blockHtmlToText(v || '');
+    return stripHtml(v || '');
+  }
+  function isSeparatorText(v){
+    const plain = stripHtml(v || '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/챕터\s*구분선?|chapter\s*separator/ig, '')
+      .replace(/\s+/g, '')
+      .trim();
+    if(!plain) return false;
+    if(plain === '⟦ROFAN_CHAPTER_BREAK⟧') return true;
+    return /^[\-—―─━_]{3,}$/.test(plain);
+  }
+  function isSeparatorNode(node){
+    if(!node) return false;
+    if(node.nodeType === Node.ELEMENT_NODE){
+      const el = node;
+      if(el.matches && el.matches(SEP_NODE_SELECTOR)) return true;
+      const role = (el.getAttribute && (el.getAttribute('aria-label') || el.dataset.chapterSeparator || el.dataset.manualChapter || '')) || '';
+      if(/챕터\s*구분|chapter\s*separator/i.test(role)) return true;
+    }
+    return isSeparatorText(node.textContent || '');
+  }
+  function removeSeparatorNodes(root){
+    if(!root) return false;
+    let changed = false;
+    qsa(SEP_NODE_SELECTOR, root).forEach(node => { node.remove(); changed = true; });
+    Array.from(root.childNodes || []).forEach(node => {
+      if(isSeparatorNode(node)){ node.remove(); changed = true; }
+    });
+    return changed;
+  }
+  function cleanHtml(html){
+    const raw = String(html || '');
+    if(!raw) return '';
+    const d = document.createElement('div');
+    d.innerHTML = raw
+      .replace(/<!--\s*rofan:[\s\S]*?-->/gi, '')
+      .replace(/<hr[^>]*(?:data-manual-chapter|data-chapter-separator|class=["'][^"']*(?:manual-chapter-separator|chapter-editor-separator)[^"']*)[^>]*>/gi, '');
+    removeSeparatorNodes(d);
+    return d.innerHTML;
+  }
+  function cleanText(text){
+    return String(text || '')
+      .replace(/\r/g, '')
+      .replace(/<!--\s*rofan:[\s\S]*?-->/gi, '')
+      .replace(/<hr[^>]*(?:data-manual-chapter|data-chapter-separator|class=["'][^"']*(?:manual-chapter-separator|chapter-editor-separator)[^"']*)[^>]*>/gi, '\n\n')
+      .split(/\n+/)
+      .filter(line => !isSeparatorText(line))
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+  function sourceText(){
+    if(mode() === 'epubedit') return (typeof epubEditEditor !== 'undefined' && epubEditEditor) ? (epubEditEditor.innerText || epubEditEditor.textContent || '') : '';
+    if(mode() === 'chat' && typeof chatOutput !== 'undefined' && chatOutput && chatOutput.value) return chatOutput.value;
+    if(mode() === 'classic' && typeof output !== 'undefined' && output && output.value) return output.value;
+    if(typeof getPreparedOutputForExport === 'function') return getPreparedOutputForExport() || '';
+    return '';
+  }
+  function splitLong(piece){
+    const text = String(piece || '').trim();
+    if(!text) return [];
+    const plain = stripHtml(text).replace(/\s+/g, ' ').trim();
+    if(plain.length <= 700) return [text];
+    const out = [];
+    let rest = text;
+    while(stripHtml(rest).replace(/\s+/g, ' ').trim().length > 700){
+      let cut = Math.max(
+        rest.lastIndexOf('。', 680), rest.lastIndexOf('.', 680), rest.lastIndexOf('?', 680), rest.lastIndexOf('!', 680), rest.lastIndexOf('…', 680),
+        rest.lastIndexOf('다 ', 680), rest.lastIndexOf('요 ', 680), rest.lastIndexOf('죠 ', 680), rest.lastIndexOf('네 ', 680), rest.lastIndexOf('까 ', 680)
+      );
+      if(cut < 220) cut = rest.lastIndexOf(' ', 680);
+      if(cut < 220) cut = 680;
+      const head = rest.slice(0, cut + 1).trim();
+      if(head && !isSeparatorText(head)) out.push(head);
+      rest = rest.slice(cut + 1).trim();
+      if(!rest) break;
+    }
+    if(rest && !isSeparatorText(rest)) out.push(rest);
+    return out.filter(Boolean);
+  }
+  function splitUnitsFromText(txt){
+    const raw = cleanText(txt);
+    if(!raw) return [];
+    const units = [];
+    const addPiece = p => {
+      if(isSeparatorText(p)) return;
+      splitLong(p).forEach(x => {
+        const body = cleanText(x);
+        const text = stripHtml(body).replace(/\s+/g, ' ').trim();
+        if(text && !isSeparatorText(text)) units.push({text, body});
+      });
+    };
+    raw.split(/\n\s*\n+/).map(v => v.trim()).filter(Boolean).forEach(block => {
+      if(isSeparatorText(block)) return;
+      const lines = block.split(/\n+/).map(v => v.trim()).filter(Boolean).filter(v => !isSeparatorText(v));
+      if(lines.length > 1){ lines.forEach(addPiece); return; }
+      const marked = block
+        .replace(/([.!?。！？…]+[”"'’]?)(\s+)/g, '$1\n')
+        .replace(/((?:습니다|습니까|입니다|입니까|했다|한다|된다|였다|었다|이다|다|요|죠|네|까|오|음|임|함|됨)[”"'’]?)(\s+)/g, '$1\n')
+        .replace(/([”"])(\s+)(?=[가-힣A-Za-z0-9“"])/g, '$1\n');
+      const parts = marked.split(/\n+/).map(v => v.trim()).filter(Boolean).filter(v => !isSeparatorText(v));
+      if(parts.length > 1){ parts.forEach(addPiece); return; }
+      addPiece(block);
+    });
+    return units;
+  }
+  function editorContentNodes(){
+    const editor = (typeof epubEditEditor !== 'undefined') ? epubEditEditor : null;
+    if(!editor) return [];
+    return Array.from(editor.childNodes).filter(n => !isSeparatorNode(n) && (((n.textContent || '').trim()) || n.nodeType === Node.ELEMENT_NODE));
+  }
+  function editorUnits(){
+    const editor = (typeof epubEditEditor !== 'undefined') ? epubEditEditor : null;
+    if(!editor) return [];
+    const nodes = editorContentNodes();
+    if(!nodes.length) return splitUnitsFromText(editor.innerText || editor.textContent || '');
+    const out = [];
+    nodes.forEach(node => {
+      const html = cleanHtml(node.outerHTML || esc(node.textContent || ''));
+      const text = htmlToText(html).replace(/\s+/g, ' ').trim();
+      if(!text || isSeparatorText(text)) return;
+      if(text.length > 900) splitUnitsFromText(text).forEach(u => out.push(u));
+      else out.push({text, body:text, html});
+    });
+    return out;
+  }
+  function units(){ return mode() === 'epubedit' ? editorUnits() : splitUnitsFromText(sourceText()); }
+
+  function state(){ try{ return JSON.parse(localStorage.getItem(PLAN_KEY) || '{}') || {}; }catch(_){ return {}; } }
+  function saveState(st){ try{ localStorage.setItem(PLAN_KEY, JSON.stringify(st || {})); }catch(_){} if(typeof scheduleAutosave === 'function') scheduleAutosave(); }
+  function uid(){ return 'ch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7); }
+  function titleFor(idx){ return idx === 0 ? 'Prologue' : 'Chapter ' + (idx + 1); }
+  function defaultChapter(idx){ return {id:uid(), title:titleFor(idx), endPara:null, note:'', imageData:'', imageName:'', imageType:'', imagePos:'belowTitle'}; }
+  function getPlan(){
+    const st = state();
+    const m = mode();
+    if(!st[m]) st[m] = {chapters:[]};
+    if(!Array.isArray(st[m].chapters)) st[m].chapters = [];
+    if(!st[m].chapters.length) st[m].chapters.push(defaultChapter(0));
+    st[m].chapters.forEach((ch, idx) => { if(!ch.id) ch.id = uid(); if(!ch.title) ch.title = titleFor(idx); });
+    saveState(st);
+    return st[m];
+  }
+  function savePlan(pl){ const st = state(); st[mode()] = pl; saveState(st); }
+  function sanitizePlan(pl, unitList){
+    if(!pl || !Array.isArray(pl.chapters)) pl = {chapters:[]};
+    if(!pl.chapters.length) pl.chapters.push(defaultChapter(0));
+    const max = Math.max(0, unitList.length - 1);
+    pl.chapters.forEach((ch, idx) => {
+      if(!ch.id) ch.id = uid();
+      if(!ch.title) ch.title = titleFor(idx);
+      if(ch.endPara === '' || ch.endPara === undefined || ch.endPara === null){ ch.endPara = null; return; }
+      ch.endPara = Math.max(0, Math.min(max, Number(ch.endPara) || 0));
+    });
+    const last = pl.chapters[pl.chapters.length - 1];
+    if(unitList.length && last && last.endPara !== null && last.endPara !== undefined && Number(last.endPara) < max){
+      const alreadyTail = pl.chapters.some((ch, idx) => idx > pl.chapters.indexOf(last) && (ch.endPara === null || ch.endPara === undefined || ch.endPara === ''));
+      if(!alreadyTail) pl.chapters.push(defaultChapter(pl.chapters.length));
+    }
+    return pl;
+  }
+  function chapterRanges(pl, unitList){
+    const ranges = [];
+    let start = 0;
+    sanitizePlan(pl, unitList).chapters.forEach((ch, idx) => {
+      let end = ch.endPara;
+      if(end === null || end === undefined || end === '') end = (idx === pl.chapters.length - 1) ? unitList.length - 1 : start - 1;
+      end = Math.max(start - 1, Math.min(unitList.length - 1, Number(end)));
+      ranges.push({start, end});
+      start = end + 1;
+    });
+    return ranges;
+  }
+  function paraHtml(unit){
+    if(unit && unit.html) return cleanHtml(unit.html);
+    const body = cleanText((unit && (unit.body || unit.text)) || '');
+    if(!body || isSeparatorText(body)) return '';
+    if(typeof paragraphToXhtml === 'function') return cleanHtml(paragraphToXhtml(body));
+    return '<p>' + esc(body).replace(/\n/g, '<br>') + '</p>';
+  }
+  function imageHtml(ch){ return ch && ch.imageData ? `<figure class="chapterImage"><img src="${attr(ch.imageData)}" alt="${attr(ch.imageName || ch.title || 'chapter image')}"></figure>` : ''; }
+  function fullHtml(ch, includeTitle){
+    const note = ch.note ? `<p class="chapterNote">${esc(ch.note).replace(/\n/g,'<br>')}</p>` : '';
+    const img = imageHtml(ch);
+    const body = cleanHtml(ch.bodyHtml || '');
+    return `${ch.imagePos === 'aboveTitle' ? img : ''}${includeTitle ? `<h1>${esc(ch.title || '')}</h1>` : ''}${note}${(!ch.imagePos || ch.imagePos === 'belowTitle') ? img : ''}${body}${ch.imagePos === 'bottom' ? img : ''}`;
+  }
+  function getChapters(){
+    const unitList = units();
+    const pl = sanitizePlan(getPlan(), unitList);
+    savePlan(pl);
+    const ranges = chapterRanges(pl, unitList);
+    const chapters = pl.chapters.map((ch, idx) => {
+      const r = ranges[idx] || {start:0, end:-1};
+      const slice = r.end >= r.start ? unitList.slice(r.start, r.end + 1) : [];
+      return Object.assign({}, ch, {
+        title: ch.title || titleFor(idx),
+        body: slice.map(u => cleanText(u.body || u.text || '')).filter(Boolean).join('\n\n').trim(),
+        bodyHtml: slice.map(paraHtml).filter(Boolean).join('\n'),
+        startIndex: r.start,
+        endIndex: r.end
+      });
+    });
+    return chapters.filter((ch, idx) => ch.body || ch.bodyHtml || ch.note || ch.imageData || idx === 0);
+  }
+  function renderToc(chapters, compact){
+    if(!chapters || !chapters.length) return '<div class="emptyState">챕터가 아직 없습니다.</div>';
+    if(compact){
+      return `<div class="chapterTocBox"><div class="tocSummary"><strong>현재 목차</strong><span>${chapters.length}개 챕터</span></div>${chapters.map((ch, idx) => { const text = String(ch.body || htmlToText(ch.bodyHtml || '')).replace(/\s+/g,' ').trim(); return `<div class="chapterTocRow"><b>${idx+1}</b><span><strong>${esc(ch.title)}</strong><small>${esc(text.slice(0,70))}</small></span><em>${Number(text.length).toLocaleString('ko-KR')}자</em></div>`; }).join('')}</div>`;
+    }
+    let open = new Set();
+    try{ open = new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '[]')); }catch(_){ }
+    return `<div class="chapterPreviewList">${chapters.map((ch, idx) => { const text = String(ch.body || htmlToText(ch.bodyHtml || '')).replace(/\s+/g,' ').trim(); return `<details class="chapterPreviewItem" data-preview-idx="${idx}" ${open.has(idx) ? 'open' : ''}><summary><b>${idx+1}</b><span><strong>${esc(ch.title)}</strong>${text ? `<small>${esc(text.slice(0,120))}</small>` : ''}</span><em>${Number(text.length).toLocaleString('ko-KR')}자</em></summary><div class="bookPreview chapterPreviewBody">${fullHtml(ch,false) || '<p class="mutedText">미리보기 없음</p>'}</div></details>`; }).join('')}</div>`;
+  }
+  function refreshChapterViews(){
+    const chapters = getChapters();
+    if(typeof chapterPreviewEl !== 'undefined' && chapterPreviewEl) chapterPreviewEl.innerHTML = renderToc(chapters, false);
+    const inline = document.getElementById('chapterTocInline');
+    if(inline && !document.getElementById('manualChapterRows')) inline.innerHTML = renderToc(chapters, true);
+    if(typeof epubPreviewEl !== 'undefined' && epubPreviewEl){
+      const first = chapters[0];
+      epubPreviewEl.innerHTML = `<div class="previewMeta"><b>미리보기</b><span>${chapters.length}개 챕터</span></div><div class="bookPreview">${first ? fullHtml(first, true) : '<p class="mutedText">미리보기 없음</p>'}</div>`;
+    }
+  }
+  function boundaryNodeForEnd(contentNodes, endIndex){
+    let seen = -1;
+    for(const node of contentNodes){
+      const nodeUnits = splitUnitsFromText(node.innerText || node.textContent || '').length || 1;
+      seen += nodeUnits;
+      if(endIndex <= seen) return node;
+    }
+    return contentNodes[contentNodes.length - 1] || null;
+  }
+  function reconcileEditorSeparators(){
+    const editor = (typeof epubEditEditor !== 'undefined') ? epubEditEditor : null;
+    if(!editor || mode() !== 'epubedit' || reconcilingEditor) return;
+    reconcilingEditor = true;
+    try{
+      removeSeparatorNodes(editor);
+      const contentNodes = editorContentNodes();
+      const unitList = editorUnits();
+      const pl = sanitizePlan(getPlan(), unitList);
+      const ranges = chapterRanges(pl, unitList);
+      ranges.slice(0, -1).forEach(r => {
+        if(r.end < r.start || r.end >= unitList.length - 1) return;
+        const target = boundaryNodeForEnd(contentNodes, r.end);
+        if(!target || !target.parentNode) return;
+        const hr = document.createElement('hr');
+        hr.className = 'manual-chapter-separator chapter-editor-separator';
+        hr.setAttribute('data-manual-chapter', 'true');
+        hr.setAttribute('aria-label', '챕터 구분');
+        target.parentNode.insertBefore(hr, target.nextSibling);
+      });
+    }finally{
+      reconcilingEditor = false;
+    }
+  }
+  function scheduleRepair(){
+    clearTimeout(repairTimer);
+    repairTimer = setTimeout(() => {
+      refreshChapterViews();
+      reconcileEditorSeparators();
+      if(typeof syncActiveResultHeight === 'function') try{ syncActiveResultHeight(); }catch(_){ }
+    }, 40);
+  }
+
+  window.__rofanCleanChapterUnits = units;
+  window.__rofanCleanChapters = getChapters;
+  window.getExportChapters = function(){ return getChapters(); };
+  try{ if(typeof getExportChapters !== 'undefined') getExportChapters = window.getExportChapters; }catch(_){ }
+  window.chapterBodyToXhtml = function(ch){ return fullHtml(ch, false); };
+  try{ if(typeof chapterBodyToXhtml !== 'undefined') chapterBodyToXhtml = window.chapterBodyToXhtml; }catch(_){ }
+  window.renderChapterTocHtml = function(chapters, compact){ return renderToc(chapters || getChapters(), !!compact); };
+  try{ if(typeof renderChapterTocHtml !== 'undefined') renderChapterTocHtml = window.renderChapterTocHtml; }catch(_){ }
+  const previousUpdateEpubPreview = window.updateEpubPreview;
+  window.updateEpubPreview = function(){
+    try{ if(typeof previousUpdateEpubPreview === 'function') previousUpdateEpubPreview(); }catch(_){ }
+    refreshChapterViews();
+    reconcileEditorSeparators();
+  };
+  try{ if(typeof updateEpubPreview !== 'undefined') updateEpubPreview = window.updateEpubPreview; }catch(_){ }
+
+  document.addEventListener('click', ev => {
+    const summary = ev.target.closest && ev.target.closest('#chapterPreview .chapterPreviewItem > summary');
+    if(summary){
+      setTimeout(() => {
+        const item = summary.parentElement;
+        if(!item) return;
+        let open = new Set();
+        try{ open = new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '[]')); }catch(_){ }
+        const idx = Number(item.dataset.previewIdx);
+        if(item.open) open.add(idx); else open.delete(idx);
+        try{ localStorage.setItem(OPEN_KEY, JSON.stringify(Array.from(open))); }catch(_){ }
+      }, 0);
+    }
+    scheduleRepair();
+  }, true);
+  document.addEventListener('input', scheduleRepair, true);
+  document.addEventListener('change', scheduleRepair, true);
+  window.addEventListener('resize', scheduleRepair, {passive:true});
+  if(typeof MutationObserver !== 'undefined' && typeof epubEditEditor !== 'undefined' && epubEditEditor){
+    const mo = new MutationObserver(() => { if(!reconcilingEditor) scheduleRepair(); });
+    mo.observe(epubEditEditor, {childList:true, subtree:false});
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scheduleRepair); else scheduleRepair();
+})();
+
+/* --- 2026-06-07 pre-deploy chapter cleanup patch --- */
+(function(){
+  const STATE_KEY = 'rofan-manual-chapters-v2';
+  const SEP_ELEMENT_SELECTOR = '.manual-chapter-separator,.chapter-editor-separator,[data-manual-chapter],[data-chapter-separator]';
+  const LEGACY_TOKEN_RE = /⟦ROFAN_CHAPTER_BREAK⟧/g;
+  const PURE_SEPARATOR_RE = /^[\s\u00a0]*(?:[-—―─━_]{3,}|챕터\s*구분(?:선)?)[\s\u00a0]*$/;
+  const LEADING_SEPARATOR_RE = /^[\s\u00a0]*(?:[-—―─━_]\s*){3,}[\s\u00a0]*/;
+
+  function qs(sel, root=document){ return root.querySelector(sel); }
+  function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+  function mode(){ return (typeof activeMode === 'string' && activeMode) ? activeMode : 'classic'; }
+  function esc(v){
+    if(typeof escapeHTML === 'function') return escapeHTML(v || '');
+    return String(v || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+  function textFromHtml(html){
+    if(typeof blockHtmlToText === 'function') return blockHtmlToText(html || '');
+    const d = document.createElement('div');
+    d.innerHTML = html || '';
+    return (d.innerText || d.textContent || '').trim();
+  }
+  function normalizeSeparatorText(text){
+    return String(text || '')
+      .replace(LEGACY_TOKEN_RE, '')
+      .split(/\n/)
+      .map(line => {
+        const original = line;
+        const compact = original.replace(/\u00a0/g, ' ').trim();
+        if(PURE_SEPARATOR_RE.test(compact)) return '';
+        return original.replace(LEADING_SEPARATOR_RE, '');
+      })
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+  function sanitizeChapterHtml(html){
+    const wrap = document.createElement('div');
+    wrap.innerHTML = String(html || '').replace(LEGACY_TOKEN_RE, '');
+    qsa(SEP_ELEMENT_SELECTOR, wrap).forEach(n => n.remove());
+    qsa('hr', wrap).forEach(hr => {
+      const text = (hr.textContent || '').trim();
+      if(hr.matches && (hr.matches(SEP_ELEMENT_SELECTOR) || PURE_SEPARATOR_RE.test(text))) hr.remove();
+    });
+    const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT);
+    const textNodes = [];
+    while(walker.nextNode()) textNodes.push(walker.currentNode);
+    textNodes.forEach(node => {
+      const cleaned = normalizeSeparatorText(node.nodeValue || '');
+      node.nodeValue = cleaned;
+    });
+    qsa('p,div,section', wrap).forEach(el => {
+      if(el.matches(SEP_ELEMENT_SELECTOR)) { el.remove(); return; }
+      const text = (el.textContent || '').replace(/\u00a0/g, ' ').trim();
+      if(PURE_SEPARATOR_RE.test(text)) el.remove();
+    });
+    return wrap.innerHTML.replace(/(?:<p>\s*<\/p>|<div>\s*<\/div>)/gi, '').trim();
+  }
+  function sanitizeChapterObject(ch){
+    if(!ch) return ch;
+    const out = Object.assign({}, ch);
+    out.body = normalizeSeparatorText(out.body || '');
+    out.bodyHtml = sanitizeChapterHtml(out.bodyHtml || '');
+    if(!out.body && out.bodyHtml) out.body = normalizeSeparatorText(textFromHtml(out.bodyHtml));
+    return out;
+  }
+  function cleanLegacySeparatorsInEditor(){
+    if(mode() !== 'epubedit') return;
+    const editor = (typeof epubEditEditor !== 'undefined') ? epubEditEditor : null;
+    if(!editor || editor.dataset.cleaningSeparators === '1') return;
+    editor.dataset.cleaningSeparators = '1';
+    try{
+      qsa(SEP_ELEMENT_SELECTOR, editor).forEach(n => n.remove());
+      qsa('hr', editor).forEach(hr => {
+        if(hr.matches && (hr.matches(SEP_ELEMENT_SELECTOR) || PURE_SEPARATOR_RE.test((hr.textContent || '').trim()))) hr.remove();
+      });
+      const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      while(walker.nextNode()) nodes.push(walker.currentNode);
+      nodes.forEach(node => {
+        const before = node.nodeValue || '';
+        const after = normalizeSeparatorText(before);
+        if(before !== after) node.nodeValue = after;
+      });
+      qsa('p,div,section', editor).forEach(el => {
+        const text = (el.textContent || '').replace(/\u00a0/g, ' ').trim();
+        if(!el.querySelector('img,video,svg,table') && PURE_SEPARATOR_RE.test(text)) el.remove();
+      });
+    }finally{
+      delete editor.dataset.cleaningSeparators;
+    }
+  }
+  function readPlan(){
+    try{
+      const all = JSON.parse(localStorage.getItem(STATE_KEY) || '{}') || {};
+      const pl = all[mode()] || all.epubedit || all.chat || all.classic || {chapters:[]};
+      return Array.isArray(pl.chapters) ? pl.chapters : [];
+    }catch(_){ return []; }
+  }
+  function editorContentNodes(){
+    const editor = (typeof epubEditEditor !== 'undefined') ? epubEditEditor : null;
+    if(!editor) return [];
+    return Array.from(editor.childNodes).filter(node => {
+      if(node.nodeType === Node.ELEMENT_NODE && node.matches && node.matches(SEP_ELEMENT_SELECTOR)) return false;
+      if(node.nodeType === Node.TEXT_NODE) return !!String(node.nodeValue || '').trim();
+      return !!((node.textContent || '').trim() || node.nodeType === Node.ELEMENT_NODE);
+    });
+  }
+  function drawCurrentEditorSeparators(){
+    if(mode() !== 'epubedit') return;
+    const editor = (typeof epubEditEditor !== 'undefined') ? epubEditEditor : null;
+    if(!editor || editor.dataset.drawingChapterSeparators === '1') return;
+    editor.dataset.drawingChapterSeparators = '1';
+    try{
+      cleanLegacySeparatorsInEditor();
+      const nodes = editorContentNodes();
+      if(!nodes.length) return;
+      const ends = Array.from(new Set(readPlan().slice(0, -1)
+        .map(ch => ch && ch.endPara)
+        .filter(v => v !== null && v !== undefined && v !== '')
+        .map(v => Math.max(0, Math.min(nodes.length - 1, Number(v) || 0)))
+      )).sort((a,b)=>a-b);
+      ends.forEach(endIdx => {
+        const anchor = nodes[endIdx];
+        if(!anchor || !anchor.parentNode) return;
+        const next = anchor.nextSibling;
+        if(next && next.nodeType === Node.ELEMENT_NODE && next.matches && next.matches(SEP_ELEMENT_SELECTOR)) return;
+        const hr = document.createElement('hr');
+        hr.className = 'manual-chapter-separator chapter-editor-separator';
+        hr.setAttribute('contenteditable', 'false');
+        hr.setAttribute('data-manual-chapter', 'true');
+        anchor.parentNode.insertBefore(hr, anchor.nextSibling);
+      });
+    }finally{
+      delete editor.dataset.drawingChapterSeparators;
+    }
+  }
+  function cleanPreviewDom(){
+    qsa('#chapterPreview .chapterPreviewBody, #epubPreview .bookPreview').forEach(el => {
+      const cleaned = sanitizeChapterHtml(el.innerHTML || '');
+      if(cleaned !== el.innerHTML) el.innerHTML = cleaned || `<p class="mutedText">미리보기 없음</p>`;
+    });
+    qsa('#chapterPreview summary small, #epubPreview .previewMeta small, #chapterTocInline small').forEach(el => {
+      const cleaned = normalizeSeparatorText(el.textContent || '');
+      if(cleaned !== el.textContent) el.textContent = cleaned;
+    });
+  }
+
+  const previousGetExportChapters = window.getExportChapters;
+  if(typeof previousGetExportChapters === 'function'){
+    window.getExportChapters = function(){
+      const chapters = previousGetExportChapters.apply(this, arguments) || [];
+      return chapters.map(sanitizeChapterObject).filter((ch, idx, arr) => ch && (ch.body || ch.bodyHtml || ch.note || ch.imageData || arr.length === 1 || idx === 0));
+    };
+    try{ if(typeof getExportChapters !== 'undefined') getExportChapters = window.getExportChapters; }catch(_){ }
+  }
+  const previousChapterBodyToXhtml = window.chapterBodyToXhtml;
+  if(typeof previousChapterBodyToXhtml === 'function'){
+    window.chapterBodyToXhtml = function(ch){ return sanitizeChapterHtml(previousChapterBodyToXhtml.call(this, sanitizeChapterObject(ch)) || ''); };
+    try{ if(typeof chapterBodyToXhtml !== 'undefined') chapterBodyToXhtml = window.chapterBodyToXhtml; }catch(_){ }
+  }
+  const previousUpdateEpubPreview = window.updateEpubPreview;
+  if(typeof previousUpdateEpubPreview === 'function'){
+    window.updateEpubPreview = function(){
+      cleanLegacySeparatorsInEditor();
+      const ret = previousUpdateEpubPreview.apply(this, arguments);
+      cleanPreviewDom();
+      requestAnimationFrame(() => { drawCurrentEditorSeparators(); cleanPreviewDom(); });
+      return ret;
+    };
+    try{ if(typeof updateEpubPreview !== 'undefined') updateEpubPreview = window.updateEpubPreview; }catch(_){ }
+  }
+  let pending = 0;
+  function scheduleClean(){
+    clearTimeout(pending);
+    pending = setTimeout(() => {
+      cleanLegacySeparatorsInEditor();
+      drawCurrentEditorSeparators();
+      cleanPreviewDom();
+    }, 80);
+  }
+  document.addEventListener('click', ev => {
+    if(ev.target && ev.target.closest && (ev.target.closest('#chapterTocInline') || ev.target.closest('#chapterDividerPanel') || ev.target.closest('#chapterPreview'))) scheduleClean();
+  }, true);
+  document.addEventListener('input', ev => {
+    if(ev.target && ev.target.closest && (ev.target.closest('#chapterTocInline') || ev.target.closest('#chapterDividerPanel'))) scheduleClean();
+  }, true);
+  qsa('.tab').forEach(tab => tab.addEventListener('click', scheduleClean));
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scheduleClean);
+  else scheduleClean();
 })();
 
 </script>
