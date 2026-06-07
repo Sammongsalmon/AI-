@@ -6584,6 +6584,62 @@ requestAnimationFrame(syncActiveResultHeight);
       return { text, body:(el.innerText || el.textContent || '').trim(), bodyHtml:html, html, blockId: el.getAttribute('data-block-id') || ('editor-block-' + idx) };
     }).filter(Boolean);
   }
+  const EPUB_BLOCK_TAGS = new Set(['p','div','section','article','blockquote','li','pre','h1','h2','h3','h4','h5','h6']);
+  const EPUB_CONTAINER_TAGS = new Set(['div','section','article','main','body','html']);
+  function hasDirectBlockChild(el){
+    return Array.from(el.children || []).some(child => EPUB_BLOCK_TAGS.has(String(child.tagName || '').toLowerCase()));
+  }
+  function blockUnitFromElement(el){
+    if(!el) return null;
+    const html = el.outerHTML || htmlParagraphsFromText(el.textContent || '');
+    const rawText = (el.innerText || el.textContent || '').trim();
+    const plain = plainFromHtml(html).replace(/\s+/g, ' ').trim();
+    if(!plain) return null;
+    return { text:plain, body:rawText, bodyHtml:html, html };
+  }
+  function extractEpubBlockUnits(node, depth=0){
+    if(!node) return [];
+    if(node.nodeType === Node.TEXT_NODE){
+      return lineUnitsFromText(node.textContent || '');
+    }
+    if(node.nodeType !== Node.ELEMENT_NODE) return [];
+    const el = node;
+    if(el.classList && el.classList.contains('manual-chapter-separator')) return [];
+    const tag = String(el.tagName || '').toLowerCase();
+    if(['script','style','meta','link','nav'].includes(tag)) return [];
+    if(el.matches && el.matches('.rofan-block,[data-owner][data-kind]')){
+      const u = blockUnitFromElement(el);
+      return u ? [u] : [];
+    }
+    if(tag === 'br' || tag === 'hr') return [];
+    // EPUB 파일은 한 챕터가 section/div 하나로 감싸져 있는 경우가 많습니다.
+    // 그런 컨테이너는 그대로 한 단위로 보지 않고 내부의 p/div/li/blockquote 등을 다시 걷어 셀 단위로 나눕니다.
+    if(EPUB_CONTAINER_TAGS.has(tag) && hasDirectBlockChild(el)){
+      const nested = [];
+      Array.from(el.childNodes).forEach(child => nested.push(...extractEpubBlockUnits(child, depth + 1)));
+      if(nested.length) return nested;
+    }
+    // p 안에 br이 여러 개 들어온 TXT형 EPUB은 줄 단위로 나눕니다.
+    if(tag === 'p' && /<br\s*\/?\s*>/i.test(el.innerHTML || '')){
+      const lines = lineUnitsFromText(el.innerText || el.textContent || '');
+      if(lines.length > 1) return lines;
+    }
+    if(EPUB_BLOCK_TAGS.has(tag)){
+      const u = blockUnitFromElement(el);
+      if(!u) return [];
+      // 리더/변환기가 본문 전체를 하나의 p/div로 만든 EPUB은 검색·챕터 기준을 위해 다시 줄/문장 단위로 보정합니다.
+      if(u.text.length > 1200 && !hasDirectBlockChild(el)){
+        const split = topParagraphUnits(el.innerText || el.textContent || '');
+        if(split.length > 1) return split;
+      }
+      return [u];
+    }
+    const nested = [];
+    Array.from(el.childNodes || []).forEach(child => nested.push(...extractEpubBlockUnits(child, depth + 1)));
+    if(nested.length) return nested;
+    const u = blockUnitFromElement(el);
+    return u ? [u] : [];
+  }
   function editorUnits(){
     if(typeof epubEditEditor === 'undefined' || !epubEditEditor) return [];
     if(isTxtSource()) return lineUnitsFromText(epubEditEditor.innerText || epubEditEditor.textContent || '');
@@ -6592,22 +6648,7 @@ requestAnimationFrame(syncActiveResultHeight);
     const nodes = cleanEditorNodeList();
     if(!nodes.length) return topParagraphUnits(epubEditEditor.innerText || epubEditEditor.textContent || '');
     const units = [];
-    nodes.forEach((node, idx) => {
-      const html = node.outerHTML || '';
-      const text = (node.innerText || node.textContent || '').trim();
-      if(!text && !html) return;
-      if(node.nodeType === Node.ELEMENT_NODE){
-        const tag = node.tagName ? node.tagName.toLowerCase() : '';
-        if(tag === 'p' && /<br\s*\/?\s*>/i.test(html) && /\.txt$/i.test(fileNameForMode())){
-          lineUnitsFromText(text).forEach(u => units.push(u));
-        }else{
-          const plain = plainFromHtml(html).replace(/\s+/g, ' ').trim();
-          if(plain) units.push({ text:plain, body:text, bodyHtml:html, html });
-        }
-      }else{
-        lineUnitsFromText(text).forEach(u => units.push(u));
-      }
-    });
+    nodes.forEach(node => { extractEpubBlockUnits(node).forEach(u => units.push(u)); });
     return units.length ? units : topParagraphUnits(epubEditEditor.innerText || epubEditEditor.textContent || '');
   }
   function chapterUnits(){
@@ -6849,6 +6890,144 @@ requestAnimationFrame(syncActiveResultHeight);
   qsa('.tab').forEach(tab => tab.addEventListener('click', () => setTimeout(boot, 80)));
   if(typeof epubEditEditor !== 'undefined' && epubEditEditor){ epubEditEditor.addEventListener('input', () => setTimeout(boot, 80)); }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+
+/* --- 2026-06-07 EPUB import paragraph normalizer --- */
+(function(){
+  const oldExtract = (typeof extractHtmlFromEpubFile === 'function') ? extractHtmlFromEpubFile : null;
+  const BLOCK_TAGS = new Set(['p','div','section','article','blockquote','li','pre','h1','h2','h3','h4','h5','h6']);
+  const CONTAINER_TAGS = new Set(['body','html','main','div','section','article']);
+  function esc(v){
+    if(typeof escapeHTML === 'function') return escapeHTML(v || '');
+    return String(v || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+  function stripTextFromHtml(html){
+    const d = document.createElement('div');
+    d.innerHTML = html || '';
+    return (d.innerText || d.textContent || '').replace(/\s+/g,' ').trim();
+  }
+  function sanitizeBlock(html){
+    if(typeof sanitizeEditorHTML === 'function') return sanitizeEditorHTML(html || '');
+    return html || '';
+  }
+  function hasBlockChild(el){
+    return Array.from(el.children || []).some(ch => BLOCK_TAGS.has(String(ch.tagName || '').toLowerCase()));
+  }
+  function textLinesToParagraphs(text){
+    return String(text || '').replace(/\r/g,'').split(/\n+/).map(v => v.trim()).filter(Boolean).map(v => `<p>${esc(v)}</p>`);
+  }
+  function splitVeryLongPlainText(text){
+    const raw = String(text || '').replace(/\r/g,'').trim();
+    if(!raw) return [];
+    const byBlank = raw.split(/\n\s*\n+/).map(v => v.trim()).filter(Boolean);
+    if(byBlank.length > 1) return byBlank.map(v => `<p>${esc(v).replace(/\n/g,'<br>')}</p>`);
+    const marked = raw
+      .replace(/([.!?。！？…]+[”"'’]?)(\s+)/g, '$1\n')
+      .replace(/((?:습니다|습니까|입니다|입니까|했다|한다|된다|였다|었다|이다|다|요|죠|네|까)[”"'’]?)(\s+)/g, '$1\n');
+    const parts = marked.split(/\n+/).map(v => v.trim()).filter(Boolean);
+    return (parts.length > 1 ? parts : [raw]).map(v => `<p>${esc(v)}</p>`);
+  }
+  function collectBlocks(node, out){
+    if(!node) return;
+    if(node.nodeType === Node.TEXT_NODE){
+      textLinesToParagraphs(node.textContent || '').forEach(v => out.push(v));
+      return;
+    }
+    if(node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node;
+    const tag = String(el.tagName || '').toLowerCase();
+    if(['script','style','meta','link','iframe','object','embed','nav'].includes(tag)) return;
+    if(el.classList && el.classList.contains('manual-chapter-separator')) return;
+    if(tag === 'br' || tag === 'hr') return;
+    if(el.matches && el.matches('.rofan-block,[data-owner][data-kind]')){
+      const html = sanitizeBlock(el.outerHTML || '');
+      if(stripTextFromHtml(html)) out.push(html);
+      return;
+    }
+    if(CONTAINER_TAGS.has(tag) && hasBlockChild(el)){
+      Array.from(el.childNodes || []).forEach(ch => collectBlocks(ch, out));
+      return;
+    }
+    if(BLOCK_TAGS.has(tag)){
+      if(tag === 'p' && /<br\s*\/?\s*>/i.test(el.innerHTML || '')){
+        const lines = textLinesToParagraphs(el.innerText || el.textContent || '');
+        if(lines.length > 1){ lines.forEach(v => out.push(v)); return; }
+      }
+      const html = sanitizeBlock(el.outerHTML || `<p>${esc(el.textContent || '')}</p>`);
+      const plain = stripTextFromHtml(html);
+      if(!plain) return;
+      if(plain.length > 1800 && !hasBlockChild(el)) splitVeryLongPlainText(el.innerText || el.textContent || '').forEach(v => out.push(v));
+      else out.push(html);
+      return;
+    }
+    const before = out.length;
+    Array.from(el.childNodes || []).forEach(ch => collectBlocks(ch, out));
+    if(out.length === before){
+      const plain = (el.innerText || el.textContent || '').trim();
+      if(plain) out.push(`<p>${esc(plain)}</p>`);
+    }
+  }
+  function normalizeImportedEpubHtml(raw){
+    const doc = new DOMParser().parseFromString(String(raw || ''), 'text/html');
+    const root = doc.body || doc.documentElement;
+    const blocks = [];
+    Array.from(root.childNodes || []).forEach(node => collectBlocks(node, blocks));
+    if(!blocks.length){
+      const plain = (root.innerText || root.textContent || '').trim();
+      splitVeryLongPlainText(plain).forEach(v => blocks.push(v));
+    }
+    return blocks.join('\n');
+  }
+  function pathDir(path){ const p = String(path || ''); const i = p.lastIndexOf('/'); return i >= 0 ? p.slice(0, i + 1) : ''; }
+  function joinPath(base, href){
+    const stack = String(base || '').split('/').filter(Boolean);
+    String(href || '').split('/').forEach(part => {
+      if(!part || part === '.') return;
+      if(part === '..') stack.pop();
+      else stack.push(part);
+    });
+    return stack.join('/');
+  }
+  function orderedBodyEntries(entries){
+    const htmlEntries = (entries || []).filter(e => /\.(xhtml|html|htm)$/i.test(e.name) && !/(^|\/)(nav|toc|cover)[^\/]*\.(xhtml|html|htm)$/i.test(e.name));
+    const opf = (entries || []).find(e => /\.opf$/i.test(e.name));
+    if(!opf) return htmlEntries.sort((a,b)=>a.name.localeCompare(b.name));
+    try{
+      const xml = new DOMParser().parseFromString(opf.text, 'application/xml');
+      const base = pathDir(opf.name);
+      const manifest = new Map();
+      Array.from(xml.querySelectorAll('manifest item')).forEach(item => {
+        const id = item.getAttribute('id');
+        const href = item.getAttribute('href');
+        const media = item.getAttribute('media-type') || '';
+        if(id && href && (/xhtml|html/i.test(media) || /\.(xhtml|html|htm)$/i.test(href))) manifest.set(id, joinPath(base, href));
+      });
+      const byName = new Map(htmlEntries.map(e => [e.name.replace(/^\.\//,''), e]));
+      const ordered = [];
+      Array.from(xml.querySelectorAll('spine itemref')).forEach(ref => {
+        const href = manifest.get(ref.getAttribute('idref'));
+        if(!href) return;
+        const exact = byName.get(href.replace(/^\.\//,''));
+        if(exact && !ordered.includes(exact)) ordered.push(exact);
+        else {
+          const loose = htmlEntries.find(e => e.name.endsWith('/' + href.split('/').pop()) || e.name.endsWith(href));
+          if(loose && !ordered.includes(loose)) ordered.push(loose);
+        }
+      });
+      htmlEntries.forEach(e => { if(!ordered.includes(e)) ordered.push(e); });
+      return ordered;
+    }catch(_){ return htmlEntries.sort((a,b)=>a.name.localeCompare(b.name)); }
+  }
+  window.extractHtmlFromEpubFile = extractHtmlFromEpubFile = async function(file){
+    try{
+      if(typeof readZipTextEntries !== 'function') throw new Error('zip reader missing');
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const entries = await readZipTextEntries(bytes);
+      const html = orderedBodyEntries(entries).map(e => normalizeImportedEpubHtml(e.text)).filter(Boolean).join('\n');
+      if(html) return html;
+    }catch(err){ console.warn('normalized EPUB import failed', err); }
+    return oldExtract ? oldExtract(file) : '';
+  };
 })();
 
 </script>
