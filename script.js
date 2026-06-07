@@ -648,8 +648,7 @@ function createMiddleRangeRule(data){
     id: source.id || ("range-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8)),
     start: String(source.start || ""),
     end: String(source.end || ""),
-    action: source.action === "keep" ? "keep" : "delete",
-    unit: source.unit === "sentence" ? "sentence" : "paragraph"
+    action: source.action === "keep" ? "keep" : "delete"
   };
 }
 function sanitizeMiddleRangeRules(rules){
@@ -668,7 +667,6 @@ function renderMiddleRangePanel(){
       <div class="middleRangeHead">
         <strong>범위 ${idx + 1}</strong>
         <span class="control compactControl">처리 <select data-middle-range-field="action"><option value="delete" ${rule.action !== "keep" ? "selected" : ""}>삭제</option><option value="keep" ${rule.action === "keep" ? "selected" : ""}>남김</option></select></span>
-        <span class="control compactControl">삭제 단위 <select data-middle-range-field="unit"><option value="paragraph" ${rule.unit !== "sentence" ? "selected" : ""}>키워드 포함 문단부터</option><option value="sentence" ${rule.unit === "sentence" ? "selected" : ""}>키워드 포함 문장부터</option></select></span>
         <button type="button" class="btn subtle warn" data-middle-range-remove="${escapeAttr(rule.id)}">범위 삭제</button>
       </div>
       <div class="middleRangeGrid">
@@ -712,11 +710,7 @@ function normalizeRangeNeedle(text){
 function getActiveMiddleRangeRules(){
   return (middleRangeRules || [])
     .filter(rule => rule && rule.action !== "keep")
-    .map(rule => ({
-      start:String(rule.start || "").trim(),
-      end:String(rule.end || "").trim(),
-      unit: rule.unit === "sentence" ? "sentence" : "paragraph"
-    }))
+    .map(rule => ({start:String(rule.start || "").trim(), end:String(rule.end || "").trim()}))
     .filter(rule => rule.start && rule.end);
 }
 function findRangeNeedleInChunks(chunks, needle, startIndex, startPos){
@@ -735,35 +729,6 @@ function findRangeNeedleInChunks(chunks, needle, startIndex, startPos){
   }
   return null;
 }
-function getSentenceBoundsForRange(text, pos, len){
-  const s = String(text || "");
-  const safePos = Math.max(0, Math.min(s.length, Number(pos) || 0));
-  const safeEnd = Math.max(safePos, Math.min(s.length, safePos + (Number(len) || 0)));
-  const sentenceEndChars = new Set([".", "?", "!", "。", "？", "！", "…", "\n"]);
-  const closingChars = new Set(['"', "'", "”", "’", "」", "』", "〉", ")", "]", "}"]);
-  let start = safePos;
-  while(start > 0){
-    const prev = s[start - 1];
-    if(sentenceEndChars.has(prev)) break;
-    start--;
-  }
-  while(start < s.length && /\s/.test(s[start])) start++;
-  let end = safeEnd;
-  while(end < s.length){
-    const ch = s[end];
-    end++;
-    if(sentenceEndChars.has(ch)) break;
-  }
-  while(end < s.length && closingChars.has(s[end])) end++;
-  while(end < s.length && s[end] === " ") end++;
-  return {start, end};
-}
-function deleteTextRangeInChunkText(text, start, end){
-  const s = String(text || "");
-  const from = Math.max(0, Math.min(s.length, start));
-  const to = Math.max(from, Math.min(s.length, end));
-  return (s.slice(0, from) + s.slice(to)).replace(/\n{3,}/g, "\n\n").trim();
-}
 function applyMiddleRangeDeletesToChunks(chunks){
   const rules = getActiveMiddleRangeRules();
   if(!rules.length || !Array.isArray(chunks) || !chunks.length) return chunks;
@@ -771,35 +736,22 @@ function applyMiddleRangeDeletesToChunks(chunks){
   rules.forEach(rule => {
     const startInfo = findRangeNeedleInChunks(working, rule.start, 0, 0);
     if(!startInfo) return;
-    const endInfo = findRangeNeedleInChunks(working, rule.end, startInfo.index, 0);
+    const endInfo = findRangeNeedleInChunks(working, rule.end, startInfo.index, startInfo.whole ? 0 : startInfo.pos);
     if(!endInfo || endInfo.index < startInfo.index) return;
-
-    if(rule.unit === "sentence"){
-      if(startInfo.whole || endInfo.whole){
-        // 공백 정규화로만 찾힌 경우 정확한 문장 위치를 알 수 없으므로 안전하게 문단 단위로 처리합니다.
-        for(let i = startInfo.index; i <= endInfo.index; i++){
-          if(working[i]) working[i].text = "";
-        }
-      }else if(startInfo.index === endInfo.index){
-        const text = String((working[startInfo.index] && working[startInfo.index].text) || "");
-        const startBounds = getSentenceBoundsForRange(text, startInfo.pos, startInfo.len);
-        const endBounds = getSentenceBoundsForRange(text, endInfo.pos, endInfo.len);
-        working[startInfo.index].text = deleteTextRangeInChunkText(text, startBounds.start, endBounds.end);
+    for(let i = startInfo.index; i <= endInfo.index; i++){
+      const chunk = working[i];
+      if(!chunk) continue;
+      const text = String(chunk.text || "");
+      if(startInfo.index === endInfo.index){
+        const from = startInfo.whole ? 0 : startInfo.pos;
+        const to = endInfo.whole ? text.length : Math.max(from, endInfo.pos + endInfo.len);
+        chunk.text = (text.slice(0, from) + text.slice(to)).trim();
+      }else if(i === startInfo.index){
+        chunk.text = startInfo.whole ? "" : text.slice(0, startInfo.pos).trim();
+      }else if(i === endInfo.index){
+        chunk.text = endInfo.whole ? "" : text.slice(endInfo.pos + endInfo.len).trim();
       }else{
-        const startText = String((working[startInfo.index] && working[startInfo.index].text) || "");
-        const endText = String((working[endInfo.index] && working[endInfo.index].text) || "");
-        const startBounds = getSentenceBoundsForRange(startText, startInfo.pos, startInfo.len);
-        const endBounds = getSentenceBoundsForRange(endText, endInfo.pos, endInfo.len);
-        if(working[startInfo.index]) working[startInfo.index].text = deleteTextRangeInChunkText(startText, startBounds.start, startText.length);
-        for(let i = startInfo.index + 1; i < endInfo.index; i++){
-          if(working[i]) working[i].text = "";
-        }
-        if(working[endInfo.index]) working[endInfo.index].text = deleteTextRangeInChunkText(endText, 0, endBounds.end);
-      }
-    }else{
-      // 문단 기준: 시작/끝 키워드가 들어간 문단 전체와 그 사이 문단을 삭제합니다.
-      for(let i = startInfo.index; i <= endInfo.index; i++){
-        if(working[i]) working[i].text = "";
+        chunk.text = "";
       }
     }
     working = working.filter(chunk => String((chunk && chunk.text) || "").trim());
