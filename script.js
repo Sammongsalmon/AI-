@@ -3928,33 +3928,78 @@ requestAnimationFrame(syncActiveResultHeight);
   }
   function splitTextUnits(text){
     const raw = String(text || "").replace(/\r/g, "");
-    const first = raw.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
     const pieces = [];
-    first.forEach(part => {
-      const plain = stripTagsLocal(part).replace(/\s+/g, " ").trim();
+    const pushPiece = (body) => {
+      const original = String(body || "").trim();
+      const plain = stripTagsLocal(original).replace(/\s+/g, " ").trim();
       if(!plain) return;
-      // 파일/백업 결과가 한 덩어리로 붙어 들어온 경우 검색 카드에 전문이 뜨지 않도록
-      // 줄 단위 → 문장 단위 순서로 안전하게 잘라 챕터 끝 지점 후보를 만듭니다.
-      const lines = part.split(/\n+/).map(v => v.trim()).filter(Boolean);
+      pieces.push({ text: plain, body: original });
+    };
+    const looksLikeSentenceEnd = (str) => {
+      const t = String(str || "").replace(/[\s\u00a0]+$/g, "");
+      if(/[.!?。！？…][”"'’)]*$/.test(t)) return true;
+      return /(습니다|습니까|입니다|입니까|였습니다|이었다|었다|였다|했다|한다|된다|됐다|합니다|됩니다|니다|다|요|죠|까|네|오|음|임|함|됨)[”"'’)]*$/.test(t);
+    };
+    const splitSentences = (part) => {
+      const compact = String(part || "").replace(/\s+/g, " ").trim();
+      if(!compact) return [];
+      const out = [];
+      let start = 0;
+      let i = 0;
+      while(i < compact.length){
+        const ch = compact[i];
+        const next = compact[i + 1] || "";
+        const tail = compact.slice(start, i + 1);
+        let shouldCut = false;
+        if(/[.!?。！？…]/.test(ch)){
+          shouldCut = true;
+          while(/[”"'’)\]]/.test(compact[i + 1] || "")) i++;
+        }else if(/[\s]/.test(next) || !next){
+          shouldCut = looksLikeSentenceEnd(tail);
+        }
+        if(shouldCut){
+          let end = i + 1;
+          while(/[\s]/.test(compact[end] || "")) end++;
+          const seg = compact.slice(start, i + 1).trim();
+          if(seg) out.push(seg);
+          start = end;
+          i = end;
+          continue;
+        }
+        i++;
+      }
+      const rest = compact.slice(start).trim();
+      if(rest) out.push(rest);
+      if(out.length <= 1) return [compact];
+      const merged = [];
+      out.forEach(seg => {
+        if(merged.length && seg.length < 18){
+          merged[merged.length - 1] = (merged[merged.length - 1] + " " + seg).trim();
+        }else{
+          merged.push(seg);
+        }
+      });
+      return merged;
+    };
+    const splitPart = (part) => {
+      const textPart = String(part || "").trim();
+      if(!textPart) return;
+      const plain = stripTagsLocal(textPart).replace(/\s+/g, " ").trim();
+      if(!plain) return;
+      const lines = textPart.split(/\n+/).map(v => v.trim()).filter(Boolean);
       if(lines.length > 1){
         lines.forEach(line => {
-          const t = stripTagsLocal(line).replace(/\s+/g, " ").trim();
-          if(t) pieces.push({ text:t, body:line });
+          const linePlain = stripTagsLocal(line).replace(/\s+/g, " ").trim();
+          if(!linePlain) return;
+          const segs = linePlain.length > 220 ? splitSentences(line) : [line];
+          segs.forEach(pushPiece);
         });
         return;
       }
-      if(plain.length > 900){
-        const sentences = part.split(/(?<=[.!?。！？…]|[다요죠네까오음임함됨니다였다었다한다된다했다]|[”"])\s+/).map(v => v.trim()).filter(Boolean);
-        if(sentences.length > 1){
-          sentences.forEach(seg => {
-            const t = stripTagsLocal(seg).replace(/\s+/g, " ").trim();
-            if(t) pieces.push({ text:t, body:seg });
-          });
-          return;
-        }
-      }
-      pieces.push({ text:plain, body:part });
-    });
+      const segs = plain.length > 220 ? splitSentences(textPart) : [textPart];
+      segs.forEach(pushPiece);
+    };
+    raw.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean).forEach(splitPart);
     return pieces;
   }
   function getChapterUnits(){
@@ -4058,7 +4103,8 @@ requestAnimationFrame(syncActiveResultHeight);
     if(order){
       const n = Number(order);
       if(Number.isFinite(n) && n > 0){
-        matches = q ? matches.filter((_u, idx) => idx + 1 === n) : matches.filter(u => u.index + 1 === n);
+        // 순서 번호는 검색 결과 안의 순번이 아니라 전체 글 기준 문단 번호입니다.
+        matches = matches.filter(u => u.index + 1 === n);
       }
     }
     return matches;
@@ -4181,7 +4227,26 @@ requestAnimationFrame(syncActiveResultHeight);
     const prevNext = ev.target.closest("[data-manual-chapter-page]");
     if(prevNext){ const max = Math.max(0, chapterSearchMatches().length - 1); chapterSearch.page = prevNext.dataset.manualChapterPage === "next" ? Math.min(max, chapterSearch.page + 1) : Math.max(0, chapterSearch.page - 1); renderChapterEditPanel(chapterSearch.editingId); return; }
     const setEnd = ev.target.closest("[data-chapter-set-end]");
-    if(setEnd){ const ch = findChapterById(chapterSearch.editingId); if(ch){ ch.endPara = Number(setEnd.dataset.chapterSetEnd); const plan = currentPlan(); const units = getChapterUnits(); ensureTrailingChapter(plan, units); saveState(); renderManualChapterManager(); renderChapterEditPanel(ch.id); refreshChapterOutputs(); toast("챕터 끝 지점을 설정했습니다."); } return; }
+    if(setEnd){
+      const ch = findChapterById(chapterSearch.editingId);
+      if(ch){
+        const plan = currentPlan();
+        const units = getChapterUnits();
+        const idx = plan.chapters.findIndex(c => c.id === ch.id);
+        ch.endPara = Number(setEnd.dataset.chapterSetEnd);
+        // 후속 챕터 끝 지점이 현재 챕터 끝보다 앞서 있으면 비워서 빈/역전 구간을 막습니다.
+        plan.chapters.forEach((c, i) => {
+          if(i > idx && c.endPara !== null && c.endPara !== undefined && Number(c.endPara) <= Number(ch.endPara)) c.endPara = null;
+        });
+        ensureTrailingChapter(plan, units);
+        saveState();
+        renderManualChapterManager();
+        renderChapterEditPanel(ch.id);
+        refreshChapterOutputs();
+        toast("챕터 끝 지점을 설정했습니다.");
+      }
+      return;
+    }
     const clearEnd = ev.target.closest("[data-chapter-clear-end]");
     if(clearEnd){ const ch = findChapterById(chapterSearch.editingId); if(ch){ ch.endPara = null; saveState(); renderChapterEditPanel(ch.id); refreshChapterOutputs(); } return; }
     const clearImg = ev.target.closest("[data-chapter-image-clear]");
@@ -4349,36 +4414,37 @@ requestAnimationFrame(syncActiveResultHeight);
     if(mode() !== "classic" && mode() !== "chat") return;
     const panel = mode() === "chat" ? qs("#chatPanel") : qs("#classicPanel");
     if(!panel || panel.classList.contains("hidden")) return;
-    const leftInput = mode() === "chat" ? qs("#chatPaste", panel) : qs("#inputText", panel);
+    const leftInput = mode() === "chat" ? qs("#chatPaste", panel) : (qs("#inputTextPreview", panel) || qs("#inputText", panel));
     const preview = mode() === "chat" ? qs("#chatOutputTextPreview", panel) : qs("#outputTextPreview", panel);
     const resultBox = preview ? preview.closest(".resultBox") : null;
-    if(!leftInput || !preview) return;
+    const label = resultBox ? resultBox.querySelector(".editorLabel") : null;
+    if(!leftInput || !preview || !resultBox) return;
     const apply = () => {
       preview.style.overflow = "auto";
       preview.style.boxSizing = "border-box";
       preview.style.flex = "0 0 auto";
+      resultBox.style.alignSelf = "start";
+      resultBox.style.minHeight = "0";
+      resultBox.style.overflow = "visible";
       if(window.matchMedia("(max-width: 860px)").matches){
         preview.style.height = "420px";
         preview.style.maxHeight = "420px";
         preview.style.minHeight = "320px";
-        if(resultBox) resultBox.style.height = "auto";
+        resultBox.style.height = "auto";
         return;
       }
-      // 왼쪽 입력창의 실제 밑변을 기준으로 오른쪽 결과창 밑변을 고정합니다.
-      // 결과 내용이 길어져도 카드 자체가 늘어나지 않고 내부 스크롤만 생기게 합니다.
-      const bottom = leftInput.getBoundingClientRect().bottom;
-      const top = preview.getBoundingClientRect().top;
-      const h = Math.max(320, Math.round(bottom - top));
+      // 결과창 밑변을 왼쪽 입력/원본 표시창 밑변에 고정합니다.
+      // 내용이 길어도 preview 내부 스크롤만 생기고 resultBox 자체가 늘어나지 않습니다.
+      const leftBottom = Math.round(leftInput.getBoundingClientRect().bottom);
+      const previewTop = Math.round(preview.getBoundingClientRect().top);
+      const h = Math.max(320, leftBottom - previewTop);
       preview.style.setProperty("--synced-result-height", h + "px");
       preview.style.height = h + "px";
       preview.style.maxHeight = h + "px";
       preview.style.minHeight = "0";
-      if(resultBox){
-        resultBox.style.height = Math.round(leftInput.getBoundingClientRect().bottom - resultBox.getBoundingClientRect().top) + "px";
-        resultBox.style.minHeight = "0";
-        resultBox.style.alignSelf = "start";
-        resultBox.style.overflow = "visible";
-      }
+      const resultTop = Math.round(resultBox.getBoundingClientRect().top);
+      resultBox.style.height = Math.max(320, leftBottom - resultTop) + "px";
+      if(label) label.style.flex = "0 0 auto";
     };
     requestAnimationFrame(apply);
     setTimeout(apply, 80);
