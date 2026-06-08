@@ -1947,23 +1947,106 @@ function readFileAsArrayBuffer(file){
 function isZipBytes(bytes){
   return bytes && bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
 }
-function decodeBytesSmart(bytes){
-  if(bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe){
-    return new TextDecoder("utf-16le").decode(bytes);
+
+function bytesToBinaryString(bytes){
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  let out = "";
+  const step = 0x8000;
+  for(let i = 0; i < arr.length; i += step){
+    out += String.fromCharCode.apply(null, arr.subarray(i, i + step));
   }
-  if(bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff){
-    return new TextDecoder("utf-16be").decode(bytes);
-  }
-  let text = new TextDecoder("utf-8").decode(bytes);
-  const replacementCount = (text.match(/�/g) || []).length;
-  if(replacementCount > Math.max(20, text.length * 0.01)){
-    try{
-      const alt = new TextDecoder("windows-949").decode(bytes);
-      if((alt.match(/�/g) || []).length < replacementCount) text = alt;
-    }catch(_err){}
-  }
-  return text.replace(/^\uFEFF/, "");
+  return out;
 }
+function binaryStringToBytes(str){
+  const s = String(str || "");
+  const bytes = new Uint8Array(s.length);
+  for(let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i) & 0xff;
+  return bytes;
+}
+function mimeAsciiHead(bytes){
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  return bytesToBinaryString(arr.subarray(0, Math.min(arr.length, 65536)));
+}
+function normalizeCharsetLabel(label){
+  const raw = String(label || "").trim().replace(/^['\"]|['\"]$/g, "").toLowerCase();
+  if(!raw) return "";
+  const aliases = {
+    "utf8":"utf-8",
+    "utf_8":"utf-8",
+    "unicode":"utf-16le",
+    "utf16":"utf-16le",
+    "utf-16":"utf-16le",
+    "utf16le":"utf-16le",
+    "utf16be":"utf-16be",
+    "cp949":"windows-949",
+    "x-windows-949":"windows-949",
+    "ks_c_5601-1987":"euc-kr",
+    "ks_c_5601-1989":"euc-kr",
+    "ksc5601":"euc-kr",
+    "ksc_5601":"euc-kr",
+    "gb2312":"gb18030",
+    "gbk":"gb18030",
+    "x-gbk":"gb18030",
+    "sjis":"shift_jis",
+    "shift-jis":"shift_jis",
+    "x-sjis":"shift_jis",
+    "ms932":"shift_jis"
+  };
+  return aliases[raw] || raw;
+}
+function uniqueList(list){
+  const seen = new Set();
+  return (list || []).filter(v => {
+    const key = normalizeCharsetLabel(v);
+    if(!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map(normalizeCharsetLabel);
+}
+function decodedTextScore(text){
+  const s = String(text || "");
+  let score = 0;
+  score += (s.match(/\uFFFD/g) || []).length * 100000;
+  score += (s.match(/\u0000/g) || []).length * 10000;
+  score += (s.match(/[\u0001-\u0008\u000B\u000C\u000E-\u001F]/g) || []).length * 2000;
+  score += (s.match(/[ÃÂìëíê]/g) || []).length * 25;
+  score -= (s.match(/<html\b|<body\b|<div\b|<p\b/gi) || []).length * 100;
+  score -= Math.min((s.match(/[\uAC00-\uD7A3]/g) || []).length, 2000);
+  return score;
+}
+function decodeBytesWithCharset(bytes, charsetHint){
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  const bom = arr.length >= 2 && arr[0] === 0xff && arr[1] === 0xfe ? "utf-16le" :
+    arr.length >= 2 && arr[0] === 0xfe && arr[1] === 0xff ? "utf-16be" :
+    arr.length >= 3 && arr[0] === 0xef && arr[1] === 0xbb && arr[2] === 0xbf ? "utf-8" : "";
+  const candidates = uniqueList([bom, charsetHint, "utf-8", "utf-16le", "utf-16be", "windows-949", "euc-kr", "gb18030", "big5", "shift_jis", "windows-1252"]);
+  let best = "";
+  let bestScore = Infinity;
+  candidates.forEach(label => {
+    try{
+      const decoded = new TextDecoder(label).decode(arr).replace(/^\uFEFF/, "");
+      const score = decodedTextScore(decoded);
+      if(score < bestScore){ best = decoded; bestScore = score; }
+    }catch(_err){}
+  });
+  return best || new TextDecoder("utf-8").decode(arr).replace(/^\uFEFF/, "");
+}
+function extractCharsetFromHeaders(headers){
+  const h = String(headers || "").replace(/\r?\n[ \t]+/g, " ");
+  const m = h.match(/charset\s*=\s*(?:"([^"]+)"|'([^']+)'|([^;\s]+))/i);
+  return normalizeCharsetLabel((m && (m[1] || m[2] || m[3])) || "");
+}
+function extractCharsetFromHtml(text){
+  const s = String(text || "");
+  const direct = s.match(/<meta\s+[^>]*charset\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s"'>;]+))/i);
+  if(direct) return normalizeCharsetLabel(direct[1] || direct[2] || direct[3] || "");
+  const httpEquiv = s.match(/<meta\s+[^>]*http-equiv\s*=\s*(?:"content-type"|'content-type'|content-type)[^>]*content\s*=\s*(?:"([^"]+)"|'([^']+)'|([^>\s]+))/i);
+  return httpEquiv ? extractCharsetFromHeaders("Content-Type: " + (httpEquiv[1] || httpEquiv[2] || httpEquiv[3] || "")) : "";
+}
+function decodeBytesSmart(bytes){
+  return decodeBytesWithCharset(bytes, "");
+}
+
 async function loadChatFile(){
   const file = chatFileInput.files && chatFileInput.files[0];
   if(!file) return;
@@ -1972,6 +2055,8 @@ async function loadChatFile(){
     const buffer = await readFileAsArrayBuffer(file);
     const bytes = new Uint8Array(buffer);
     const lowerName = (file.name || "").toLowerCase();
+    const mimeHead = mimeAsciiHead(bytes);
+    const looksMHT = /\.(mht|mhtml)$/i.test(lowerName) || /MIME-Version:\s*1\.0/i.test(mimeHead) || /Content-Type:\s*multipart\/related/i.test(mimeHead);
 
     if(isZipBytes(bytes) || /\.zip$/i.test(lowerName)){
       chatFileInput.value = "";
@@ -1979,10 +2064,9 @@ async function loadChatFile(){
       return;
     }
 
-    const raw = decodeBytesSmart(bytes);
-    const looksMHT = /\.(mht|mhtml)$/i.test(lowerName) || /MIME-Version:\s*1\.0/i.test(raw) || /Content-Type:\s*multipart\/related/i.test(raw);
-    const looksHTML = /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span)\b/i.test(raw);
-    const looksStructuredMarkdown = /<!--\s*rofan:/i.test(raw) || /\.(md|markdown)$/i.test(lowerName);
+    const raw = looksMHT ? "" : decodeBytesSmart(bytes);
+    const looksHTML = !looksMHT && /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span)\b/i.test(raw);
+    const looksStructuredMarkdown = !looksMHT && (/<!--\s*rofan:/i.test(raw) || /\.(md|markdown)$/i.test(lowerName));
     const allowedExt = /\.(mht|mhtml|html|htm|md|markdown|txt)$/i.test(lowerName);
 
     if(!allowedExt && !looksMHT && !looksHTML && !looksStructuredMarkdown){
@@ -1992,15 +2076,17 @@ async function loadChatFile(){
     }
 
     let sanitized = "";
-    if(looksStructuredMarkdown){
-      sanitized = structuredMarkdownToHtml(raw) || plainTextToHtml(raw);
-    }else if(looksMHT || looksHTML){
-      const html = looksMHT ? extractHTMLFromMHT(raw) : raw;
+    if(looksMHT){
+      const html = extractHTMLFromMHTBytes(bytes) || extractHTMLFromMHT(decodeBytesSmart(bytes));
       if(!html || !looksLikeHTML(html)){
         showToast("파일 안에서 HTML 채팅 내용을 찾지 못했습니다.");
         return;
       }
       sanitized = sanitizePastedHTML(extractLikelyChatHTML(html));
+    }else if(looksStructuredMarkdown){
+      sanitized = structuredMarkdownToHtml(raw) || plainTextToHtml(raw);
+    }else if(looksHTML){
+      sanitized = sanitizePastedHTML(extractLikelyChatHTML(raw));
     }else{
       sanitized = plainTextToHtml(raw);
     }
@@ -2022,8 +2108,77 @@ async function loadChatFile(){
     showToast("파일을 읽지 못했습니다.");
   }
 }
+
 function looksLikeHTML(text){
   return /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span|br|i|em|details|table)\b/i.test(String(text || ""));
+}
+function decodeBase64Bytes(str){
+  const cleaned = String(str || "").replace(/[^A-Za-z0-9+/=]/g, "");
+  if(!cleaned) return new Uint8Array();
+  const binary = atob(cleaned);
+  const bytes = new Uint8Array(binary.length);
+  for(let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i) & 0xff;
+  return bytes;
+}
+function decodeQuotedPrintableBytes(str){
+  const qp = String(str || "").replace(/=\r?\n/g, "");
+  const bytes = [];
+  for(let i = 0; i < qp.length; i++){
+    if(qp[i] === "=" && /^[0-9a-fA-F]{2}$/.test(qp.slice(i + 1, i + 3))){
+      bytes.push(parseInt(qp.slice(i + 1, i + 3), 16));
+      i += 2;
+    }else{
+      bytes.push(qp.charCodeAt(i) & 0xff);
+    }
+  }
+  return Uint8Array.from(bytes);
+}
+function decodeMimeBody(headers, bodyBinary){
+  const unfolded = String(headers || "").replace(/\r?\n[ \t]+/g, " ");
+  const encMatch = unfolded.match(/Content-Transfer-Encoding:\s*([^\r\n;]+)/i);
+  const enc = encMatch ? encMatch[1].trim().toLowerCase() : "";
+  const headerCharset = extractCharsetFromHeaders(unfolded);
+  let bodyBytes;
+  if(enc.includes("base64")) bodyBytes = decodeBase64Bytes(bodyBinary);
+  else if(enc.includes("quoted-printable")) bodyBytes = decodeQuotedPrintableBytes(bodyBinary);
+  else bodyBytes = binaryStringToBytes(bodyBinary);
+
+  let decoded = decodeBytesWithCharset(bodyBytes, headerCharset);
+  if(!headerCharset){
+    const metaCharset = extractCharsetFromHtml(decoded);
+    if(metaCharset) decoded = decodeBytesWithCharset(bodyBytes, metaCharset);
+  }
+  return decoded.replace(/^\uFEFF/, "");
+}
+function extractHTMLFromMHTBytes(bytes){
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  if(!arr.length) return "";
+  const binary = bytesToBinaryString(arr);
+  const head = binary.slice(0, Math.min(binary.length, 131072)).replace(/\r?\n[ \t]+/g, " ");
+  const boundaryMatch = head.match(/boundary=(?:"([^"]+)"|([^;\r\n]+))/i);
+  if(!boundaryMatch) return "";
+  const boundary = (boundaryMatch[1] || boundaryMatch[2] || "").trim();
+  if(!boundary) return "";
+  const parts = binary.split("--" + boundary);
+  const htmlParts = [];
+  for(const part of parts){
+    const sepMatch = part.match(/\r?\n\r?\n/);
+    if(!sepMatch) continue;
+    const sepIndex = sepMatch.index;
+    const sepLength = sepMatch[0].length;
+    const headers = part.slice(0, sepIndex).replace(/^\r?\n/, "");
+    const unfolded = headers.replace(/\r?\n[ \t]+/g, " ");
+    if(!/Content-Type:\s*text\/html\b/i.test(unfolded)) continue;
+    let bodyBinary = part.slice(sepIndex + sepLength);
+    bodyBinary = bodyBinary.replace(/\r?\n--\s*$/g, "");
+    const body = decodeMimeBody(headers, bodyBinary);
+    if(body) htmlParts.push(body);
+  }
+  if(htmlParts.length){
+    htmlParts.sort((a,b) => scoreHTMLPart(b) - scoreHTMLPart(a));
+    return htmlParts[0];
+  }
+  return "";
 }
 function extractHTMLFromMHT(raw){
   const text = String(raw || "");
@@ -2038,13 +2193,14 @@ function extractHTMLFromMHT(raw){
       const sepIndex = sepMatch.index;
       const sepLength = sepMatch[0].length;
       const headers = part.slice(0, sepIndex);
-      if(!/Content-Type:\s*text\/html\b/i.test(headers)) continue;
-      let body = part.slice(sepIndex + sepLength);
-      body = body.replace(/\r?\n--\s*$/g, "");
-      const encMatch = headers.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i);
+      const unfolded = headers.replace(/\r?\n[ \t]+/g, " ");
+      if(!/Content-Type:\s*text\/html\b/i.test(unfolded)) continue;
+      let body = part.slice(sepIndex + sepLength).replace(/\r?\n--\s*$/g, "");
+      const encMatch = unfolded.match(/Content-Transfer-Encoding:\s*([^\r\n;]+)/i);
       const enc = encMatch ? encMatch[1].trim().toLowerCase() : "";
-      if(enc.includes("base64")) body = decodeBase64UTF8(body);
-      else if(enc.includes("quoted-printable")) body = decodeQuotedPrintableUTF8(body);
+      const charset = extractCharsetFromHeaders(unfolded);
+      if(enc.includes("base64")) body = decodeBytesWithCharset(decodeBase64Bytes(body), charset);
+      else if(enc.includes("quoted-printable")) body = decodeBytesWithCharset(decodeQuotedPrintableBytes(body), charset);
       htmlParts.push(body);
     }
     if(htmlParts.length){
@@ -2062,31 +2218,14 @@ function scoreHTMLPart(part){
   if(/<!doctype\s+html|<html\b/i.test(s)) score += 500000;
   score += (s.match(/data-narration/gi) || []).length * 1000;
   score += (s.match(/class=["'][^"']*mt-1/gi) || []).length * 1000;
+  score -= decodedTextScore(s);
   return score;
 }
 function decodeBase64UTF8(str){
-  const cleaned = String(str || "").replace(/\s+/g, "");
-  const binary = atob(cleaned);
-  const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
-  return new TextDecoder("utf-8").decode(bytes);
+  return decodeBytesWithCharset(decodeBase64Bytes(str), "utf-8");
 }
 function decodeQuotedPrintableUTF8(str){
-  const qp = String(str || "").replace(/=\r?\n/g, "");
-  const bytes = [];
-  for(let i=0; i<qp.length; i++){
-    if(qp[i] === "=" && /^[0-9a-fA-F]{2}$/.test(qp.slice(i+1, i+3))){
-      bytes.push(parseInt(qp.slice(i+1, i+3), 16));
-      i += 2;
-    }else{
-      const code = qp.charCodeAt(i);
-      if(code <= 0xff) bytes.push(code);
-      else{
-        const encoded = new TextEncoder().encode(qp[i]);
-        encoded.forEach(b => bytes.push(b));
-      }
-    }
-  }
-  return new TextDecoder("utf-8").decode(Uint8Array.from(bytes));
+  return decodeBytesWithCharset(decodeQuotedPrintableBytes(str), "utf-8");
 }
 function extractLikelyChatHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
@@ -4198,7 +4337,8 @@ function parseHtmlToRofanChunks(html){
   holder.innerHTML = sanitizePastedHTML(extractLikelyChatHTML(String(html || '')));
   return parseRofanChatChunks(holder).chunks || [];
 }
-function fileContentToChunks(raw, fileName){
+
+function fileContentToChunks(raw, fileName, bytes){
   const lower = String(fileName || '').toLowerCase();
   const text = String(raw || '');
   if(/\.(md|markdown)$/i.test(lower) || /<!--\s*rofan:/i.test(text)){
@@ -4206,7 +4346,7 @@ function fileContentToChunks(raw, fileName){
     if(chunks && chunks.length) return chunks;
   }
   if(/\.(mht|mhtml)$/i.test(lower) || /MIME-Version:\s*1\.0/i.test(text) || /Content-Type:\s*multipart\/related/i.test(text)){
-    const html = extractHTMLFromMHT(text);
+    const html = bytes ? (extractHTMLFromMHTBytes(bytes) || extractHTMLFromMHT(text)) : extractHTMLFromMHT(text);
     const chunks = parseHtmlToRofanChunks(html);
     if(chunks && chunks.length) return chunks;
   }
@@ -4489,17 +4629,24 @@ function editorPlainText(el){
   if(!el) return "";
   return (el.innerText || el.textContent || "").replace(/\u00a0/g," ").trim();
 }
+
 async function readFileAsTextSmart(file){
   const buffer = await readFileAsArrayBuffer(file);
   const bytes = new Uint8Array(buffer);
   return decodeBytesSmart(bytes);
 }
+async function readFileAsBytesAndText(file){
+  const buffer = await readFileAsArrayBuffer(file);
+  const bytes = new Uint8Array(buffer);
+  return {bytes, text:decodeBytesSmart(bytes)};
+}
 async function loadClassicFile(){
   const file = classicFileInput && classicFileInput.files && classicFileInput.files[0];
   if(!file) return;
   try{
-    const raw = await readFileAsTextSmart(file);
-    const chunks = fileContentToChunks(raw, file.name || "");
+    const fileData = await readFileAsBytesAndText(file);
+    const raw = fileData.text;
+    const chunks = fileContentToChunks(raw, file.name || "", fileData.bytes);
     if(chunks && chunks.length){
       classicLoadedChunks = chunks;
       classicLoadedFileText = chunksDisplayText(chunks);
