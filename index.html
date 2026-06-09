@@ -1591,81 +1591,46 @@ function isTableLikeText(t){
   return false;
 }
 
-// ------------------ details 제거 ------------------
-// 접힘 영역은 입력 원본에서는 지우지 않고, 변환/렌더링 단계에서만 숨깁니다.
-// 보호어가 있으면 접힘 전체가 아니라 보호어가 포함된 줄만 남깁니다.
-function decodeHTMLText(value){
-  const temp = document.createElement("textarea");
-  temp.innerHTML = String(value == null ? "" : value);
-  return temp.value;
+// ------------------ details 제거 (기존 로그용, 보호 키워드 예외) ------------------
+function decodeEscapedDetailsTags(text){
+  return String(text || "")
+    .replace(/&lt;([\/]?details\b[\s\S]*?)&gt;/gi, "<$1>")
+    .replace(/&lt;([\/]?summary\b[\s\S]*?)&gt;/gi, "<$1>")
+    .replace(/&lt;(br\s*\/?)&gt;/gi, "<$1>")
+    .replace(/&lt;([\/]?p\b[\s\S]*?)&gt;/gi, "<$1>")
+    .replace(/&lt;([\/]?div\b[\s\S]*?)&gt;/gi, "<$1>");
 }
-function normalizeDetailsLineForMatch(line){
-  return decodeHTMLText(String(line || ""))
-    .replace(/<br\s*\/?\s*>/gi, "\n")
-    .replace(/<\/\s*(p|div|li|section|article|td)\s*>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\u00a0/g, " ")
-    .replace(/[ \t]+/g, " ")
-    .trim();
-}
-function keepProtectedDetailsLines(content, tokens){
-  const body = String(content || "")
-    .replace(/<summary\b[^>]*>[\s\S]*?<\/summary\s*>/gi, "\n")
-    .replace(/&lt;summary\b[\s\S]*?&gt;[\s\S]*?&lt;\/summary\s*&gt;/gi, "\n")
-    .replace(/<br\s*\/?\s*>/gi, "\n")
-    .replace(/<\/\s*(p|div|li|section|article|td)\s*>/gi, "\n")
-    .replace(/&lt;br\s*\/?\s*&gt;/gi, "\n")
-    .replace(/&lt;\/\s*(p|div|li|section|article|td)\s*&gt;/gi, "\n");
-  return body.split(/\n+/)
-    .map(line => normalizeDetailsLineForMatch(line))
-    .filter(line => line && isProtectedText(line, tokens || []))
-    .join("\n");
-}
-function stripDetailsRawHTML(html, tokens){
-  let s = String(html || "");
-  if(!s) return s;
-  const protectTokens = tokens || getProtectTokens();
-  const replaceWithProtected = (_match, body) => {
-    const kept = keepProtectedDetailsLines(body, protectTokens);
-    return kept ? "\n" + kept + "\n" : "";
-  };
-
-  // 1. 정상적으로 닫힌 raw/escaped <details>...</details> 블록 삭제.
-  let prev = null;
-  while(prev !== s){
-    prev = s;
-    s = s.replace(/<details\b[^>]*>([\s\S]*?)<\/details\s*>/gi, replaceWithProtected);
-    s = s.replace(/&lt;details\b[\s\S]*?&gt;([\s\S]*?)&lt;\/details\s*&gt;/gi, replaceWithProtected);
-  }
-
-  // 2. 한 응답 셀/문단 안에서 닫히지 않은 details는 details 지점부터 셀 끝까지 삭제.
-  //    렌더링 단계의 chunk는 이미 응답 셀 단위라 $가 셀 끝입니다.
-  //    일반 텍스트에서는 빈 줄을 셀 경계로 봅니다.
-  s = s.replace(/<details\b[^>]*>([\s\S]*?)(?=\n\s*\n|$)/gi, replaceWithProtected);
-  s = s.replace(/&lt;details\b[\s\S]*?&gt;([\s\S]*?)(?=\n\s*\n|$)/gi, replaceWithProtected);
-
-  // 남은 details/summary 태그 조각은 텍스트만 남기지 않고 제거합니다.
-  s = s.replace(/<summary\b[^>]*>[\s\S]*?<\/summary\s*>/gi, "");
-  s = s.replace(/&lt;summary\b[\s\S]*?&gt;[\s\S]*?&lt;\/summary\s*&gt;/gi, "");
-  s = s.replace(/<\/?(?:details|summary)\b[^>]*>/gi, "");
-  s = s.replace(/&lt;\/?(?:details|summary)\b[\s\S]*?&gt;/gi, "");
-  return s.trim();
-}
-function shouldStripDetailsNow(){
-  return !!(removeDetailsEl && removeDetailsEl.checked);
-}
-function stripDetailsForCurrentOption(html){
-  // 입력창 원본 보존을 위해 파일/붙여넣기 단계에서는 사용하지 않습니다.
-  return shouldStripDetailsNow() ? stripDetailsRawHTML(html, getProtectTokens()) : String(html || "");
+function detailsBlockToProtectedLines(block, tokens){
+  if(!tokens || !tokens.length) return "";
+  let inner = String(block || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p\s*>/gi, "\n")
+    .replace(/<\/div\s*>/gi, "\n")
+    .replace(/<\/?(?:details|summary)\b[^>]*>/gi, "")
+    .replace(/<[^>]+>/g, "");
+  const lines = inner.split(/\n+/).map(line => line.trim()).filter(Boolean);
+  const kept = lines.filter(line => isProtectedText(line, tokens));
+  return kept.length ? "\n" + kept.join("\n") + "\n" : "";
 }
 function filterDetailsByProtection(text, tokens){
-  return stripDetailsRawHTML(text || "", tokens || getProtectTokens());
+  let s = decodeEscapedDetailsTags(text || "");
+  s = s.replace(/<details\b[^>]*>[\s\S]*?<\/details\s*>/gi, block => detailsBlockToProtectedLines(block, tokens));
+  // 닫히지 않은 details는 현재 문단/셀 끝으로 보이는 빈 줄 전까지만 접힘 영역으로 처리합니다.
+  s = s.replace(/<details\b[^>]*>[\s\S]*?(?=\n\s*\n|$)/gi, block => detailsBlockToProtectedLines(block, tokens));
+  s = s.replace(/^\s*<\/?details\b[^>]*>\s*$/gim, "");
+  s = s.replace(/^\s*<summary\b[^>]*>[\s\S]*?<\/summary\s*>\s*$/gim, "");
+  return s;
 }
-function isFromDetailsElement(el){
+function filterDetailsChunkText(text, tokens){
+  const filtered = filterDetailsByProtection(text, tokens);
+  return String(filtered || "").trim();
+}
+function isInsideDetailsElement(el){
   if(!el || el.nodeType !== 1) return false;
-  return el.tagName === "DETAILS" ||
-    el.getAttribute("data-rofan-from-details") === "1" ||
-    !!(el.closest && (el.closest("details") || el.closest('[data-rofan-from-details="1"]')));
+  if(el.tagName === "DETAILS") return true;
+  if(el.getAttribute && el.getAttribute("data-rofan-from-details") === "1") return true;
+  if(el.closest && (el.closest("details") || el.closest('[data-rofan-from-details="1"]'))) return true;
+  return false;
 }
 
 // ------------------ 별표 지문 파서(기존 로그용) ------------------
@@ -1816,7 +1781,7 @@ async function loadChatFile(){
 
     const raw = decodeBytesSmart(bytes);
     const looksMHT = /\.(mht|mhtml)$/i.test(lowerName) || /MIME-Version:\s*1\.0/i.test(raw) || /Content-Type:\s*multipart\/related/i.test(raw);
-    const looksHTML = /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span|details)\b/i.test(raw);
+    const looksHTML = /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span)\b/i.test(raw);
     const looksStructuredMarkdown = /<!--\s*rofan:/i.test(raw) || /\.(md|markdown)$/i.test(lowerName);
     const allowedExt = /\.(mht|mhtml|html|htm|md|markdown|txt)$/i.test(lowerName);
 
@@ -1925,7 +1890,10 @@ function decodeQuotedPrintableUTF8(str){
 }
 function extractLikelyChatHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
-  doc.querySelectorAll("details, details *").forEach(el => el.setAttribute("data-rofan-from-details", "1"));
+  doc.querySelectorAll("details").forEach(detail => {
+    detail.setAttribute("data-rofan-from-details", "1");
+    detail.querySelectorAll("*").forEach(child => child.setAttribute("data-rofan-from-details", "1"));
+  });
   const scoreContainer = (el) => {
     if(!el) return 0;
     const textLen = (el.innerText || el.textContent || "").length;
@@ -2294,7 +2262,7 @@ function collectRofanContentBlocks(root){
         blocks.splice(i, 1);
       }
     }
-    blocks.push({el, owner, index});
+    blocks.push({el, owner, index, fromDetails: isInsideDetailsElement(el)});
   });
   return blocks;
 }
@@ -2304,7 +2272,7 @@ function parseRofanChatChunks(root){
   let chunkSeq = 0;
   let blockSeq = 0;
 
-  const pushChunksFromElement = (el, baseOwner) => {
+  const pushChunksFromElement = (el, baseOwner, baseFromDetails) => {
     const blockId = getElementBlockId(el) || ("b" + (blockSeq++));
     const baseKind = getElementKindHint(el);
     const start = chunks.length;
@@ -2380,7 +2348,7 @@ function parseRofanChatChunks(root){
         italic: ctx.italic || isItalicElement(childEl),
         kind: getElementKindHint(childEl) || ctx.kind || "",
         fromTable: ctx.fromTable || isRemovableBlockElement(childEl),
-        fromDetails: ctx.fromDetails || isFromDetailsElement(childEl),
+        fromDetails: ctx.fromDetails || isInsideDetailsElement(childEl),
         owner: ownerHint || ctx.owner || "",
         color
       };
@@ -2395,7 +2363,7 @@ function parseRofanChatChunks(root){
       italic: isItalicElement(el),
       kind: baseKind || "",
       fromTable: isRemovableBlockElement(el),
-      fromDetails: isFromDetailsElement(el),
+      fromDetails: !!baseFromDetails || isInsideDetailsElement(el),
       owner: baseOwner || getElementOwnerHint(el, getInlineColor(el)) || "",
       color: getInlineColor(el) || ""
     }));
@@ -2411,9 +2379,9 @@ function parseRofanChatChunks(root){
 
   const semanticBlocks = collectRofanContentBlocks(root);
   if(semanticBlocks.length){
-    semanticBlocks.forEach(block => pushChunksFromElement(block.el, block.owner));
+    semanticBlocks.forEach(block => pushChunksFromElement(block.el, block.owner, block.fromDetails));
   }else{
-    pushChunksFromElement(root, "");
+    pushChunksFromElement(root, "", isInsideDetailsElement(root));
   }
 
   const mergedBlocks = mergeRofanBlocksById(blocks, chunks);
@@ -3197,6 +3165,15 @@ function renderChunks(chunks, options){
     }
     if(!t) return "";
 
+    if(removeDetailsEl.checked){
+      if(fromDetails){
+        t = detailsBlockToProtectedLines(t, tokens).trim();
+      }else if(/<details\b|&lt;details\b/i.test(t)){
+        t = filterDetailsChunkText(t, tokens);
+      }
+      if(!t) return "";
+    }
+
     if(removeHTMLEl.checked){
       t = t.replace(/<script[\s\S]*?<\/script>/gi,"");
       t = t.replace(/<style[\s\S]*?<\/style>/gi,"");
@@ -3213,15 +3190,7 @@ function renderChunks(chunks, options){
 
     const protectedHere = isProtectedText(t, tokens);
 
-    if(removeDetailsEl.checked){
-      if(fromDetails){
-        t = keepProtectedDetailsLines(t, tokens);
-        if(!t) return "";
-      }else{
-        t = stripDetailsRawHTML(t, tokens);
-        if(!t) return "";
-      }
-    }
+    if(removeDetailsEl.checked && fromDetails && !protectedHere) return "";
     if(options.removeTables && !protectedHere && (fromTable || isRemovableBlockText(t))) return "";
 
     if(shouldDeleteByContains(t, deleteTokens) && !protectedHere){
@@ -7377,6 +7346,5 @@ requestAnimationFrame(syncActiveResultHeight);
 })();
 
 </script>
-<script src="rofan-mobile-export.js"></script>
 </body>
 </html>
