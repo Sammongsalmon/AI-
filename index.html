@@ -2209,6 +2209,11 @@ function hasSkippableAncestor(el, root){
   }
   return false;
 }
+function isInsideDetailsElement(el){
+  if(!el || el.nodeType !== 1) return false;
+  if(el.tagName === "DETAILS") return true;
+  return !!(el.closest && el.closest("details"));
+}
 function collectRofanContentBlocks(root){
   const blocks = [];
   // 기본 대화는 p / div.mt-1로 잡히지만, MHT 저장본의 첫 캐릭터 메시지는
@@ -2232,7 +2237,7 @@ function collectRofanContentBlocks(root){
         blocks.splice(i, 1);
       }
     }
-    blocks.push({el, owner, index});
+    blocks.push({el, owner, index, fromDetails: isInsideDetailsElement(el)});
   });
   return blocks;
 }
@@ -2242,9 +2247,10 @@ function parseRofanChatChunks(root){
   let chunkSeq = 0;
   let blockSeq = 0;
 
-  const pushChunksFromElement = (el, baseOwner) => {
+  const pushChunksFromElement = (el, baseOwner, inheritedFromDetails) => {
     const blockId = getElementBlockId(el) || ("b" + (blockSeq++));
     const baseKind = getElementKindHint(el);
+    const elementFromDetails = !!(inheritedFromDetails || isInsideDetailsElement(el));
     const start = chunks.length;
     let buffer = "";
     let bufferKind = null;
@@ -2263,7 +2269,7 @@ function parseRofanChatChunks(root){
           owner: bufferOwner || "",
           color: bufferColor || "",
           fromTable: bufferFromTable,
-          fromDetails: bufferFromDetails,
+          fromDetails: bufferFromDetails || elementFromDetails,
           blockId
         });
       }
@@ -2333,7 +2339,7 @@ function parseRofanChatChunks(root){
       italic: isItalicElement(el),
       kind: baseKind || "",
       fromTable: isRemovableBlockElement(el),
-      fromDetails: el.tagName === "DETAILS",
+      fromDetails: elementFromDetails,
       owner: baseOwner || getElementOwnerHint(el, getInlineColor(el)) || "",
       color: getInlineColor(el) || ""
     }));
@@ -2341,7 +2347,7 @@ function parseRofanChatChunks(root){
 
     const blockText = chunks.slice(start).map(c => c.text).join("\n\n").trim();
     if(blockText){
-      blocks.push({id:blockId, owner:baseOwner || "", text:blockText, startChunk:start, endChunk:chunks.length});
+      blocks.push({id:blockId, owner:baseOwner || "", text:blockText, startChunk:start, endChunk:chunks.length, fromDetails: elementFromDetails});
     }else{
       chunks.splice(start);
     }
@@ -2349,9 +2355,9 @@ function parseRofanChatChunks(root){
 
   const semanticBlocks = collectRofanContentBlocks(root);
   if(semanticBlocks.length){
-    semanticBlocks.forEach(block => pushChunksFromElement(block.el, block.owner));
+    semanticBlocks.forEach(block => pushChunksFromElement(block.el, block.owner, block.fromDetails));
   }else{
-    pushChunksFromElement(root, "");
+    pushChunksFromElement(root, "", isInsideDetailsElement(root));
   }
 
   const mergedBlocks = mergeRofanBlocksById(blocks, chunks);
