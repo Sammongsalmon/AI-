@@ -1864,6 +1864,12 @@ function decodeQuotedPrintableUTF8(str){
 }
 function extractLikelyChatHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
+  // details 자체를 잘라낸 뒤 내부 HTML만 쓰는 경우에도 접힘 영역 표시가 남도록
+  // details와 모든 하위 요소에 보존용 마커를 먼저 심어 둡니다.
+  doc.querySelectorAll("details").forEach(detailsEl => {
+    detailsEl.setAttribute("data-rofan-from-details", "1");
+    detailsEl.querySelectorAll("*").forEach(child => child.setAttribute("data-rofan-from-details", "1"));
+  });
   const scoreContainer = (el) => {
     if(!el) return 0;
     const textLen = (el.innerText || el.textContent || "").length;
@@ -2212,7 +2218,8 @@ function hasSkippableAncestor(el, root){
 function isInsideDetailsElement(el){
   if(!el || el.nodeType !== 1) return false;
   if(el.tagName === "DETAILS") return true;
-  return !!(el.closest && el.closest("details"));
+  if(el.getAttribute && el.getAttribute("data-rofan-from-details") === "1") return true;
+  return !!(el.closest && (el.closest("details") || el.closest('[data-rofan-from-details="1"]')));
 }
 function collectRofanContentBlocks(root){
   const blocks = [];
