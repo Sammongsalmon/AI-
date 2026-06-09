@@ -84,10 +84,6 @@
     intro.textContent = options.intro;
     body.appendChild(intro);
 
-    var important = document.createElement("div");
-    important.className = "hint rofanMobileExportImportant";
-    important.textContent = "이번 코드는 외부 스크립트를 불러오지 않는 직접 실행 방식입니다. Chrome에서 아무 반응이 없던 경우와 삼성 브라우저의 공백 문제를 피하도록 공백 없는 코드로 만들었습니다.";
-    body.appendChild(important);
 
     var actions = document.createElement("div");
     actions.className = "optionRow compactControls rofanMobileExportActions";
@@ -152,10 +148,6 @@
     codeBox.textContent = directBookmarklet;
     body.appendChild(codeBox);
 
-    var note = document.createElement("div");
-    note.className = "hint rofanMobileExportNote";
-    note.textContent = "예전에 복사한 북마클릿은 외부 스크립트 로더 방식이라 사이트 보안 설정에 막힐 수 있습니다. 새 코드로 다시 등록해 주세요.";
-    body.appendChild(note);
 
     wrap.appendChild(body);
     return wrap;
@@ -170,13 +162,11 @@
       ".rofanMobileExportHelper summary{padding:13px 16px}",
       ".rofanMobileExportHelper .fileExtractBody{padding:0 16px 14px}",
       ".rofanMobileExportIntro{margin-top:10px}",
-      ".rofanMobileExportImportant{margin-top:8px;color:var(--sub)}",
       ".rofanMobileExportHelper .rofanMobileExportActions{margin-top:10px;gap:7px}",
       ".rofanMobileExportHelper .rofanMobileExportActions .btn{min-height:34px;padding:7px 11px;border-radius:11px;font-size:12px}",
       ".rofanMobileExportHelper .rofanMobileExportSteps{margin:10px 0 0;padding-left:18px;color:var(--sub);font-size:12px;line-height:1.62}",
       ".rofanMobileExportHelper .rofanMobileExportSteps li{margin:2px 0}",
       ".rofanMobileExportHelper .rofanMobileExportCode{margin:10px 0 0;padding:10px;border:1px solid var(--line2);border-radius:12px;background:#fff;color:var(--ink);font-size:11px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;max-height:150px;overflow:auto}",
-      ".rofanMobileExportNote{margin-top:8px}",
       "@media(max-width:640px){.rofanMobileExportHelper{margin-top:6px;margin-bottom:8px}.rofanMobileExportHelper summary{padding:12px 14px}.rofanMobileExportHelper .fileExtractBody{padding:0 14px 12px}.rofanMobileExportHelper .rofanMobileExportActions .btn{width:100%}}"
     ].join("");
     document.head.appendChild(style);
