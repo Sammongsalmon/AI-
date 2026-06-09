@@ -6,7 +6,6 @@
 (function(){
   "use strict";
 
-  var SCRIPT_FILE_NAME = "rofan-mobile-export.js";
   var ROFAN_HOST_RE = /(^|\.)rofan\.ai$/i;
 
   if (ROFAN_HOST_RE.test(location.hostname)) {
@@ -68,7 +67,6 @@
 
     var directBookmarklet = buildDirectBookmarklet(false);
     var encodedBookmarklet = buildDirectBookmarklet(true);
-    var loaderBookmarklet = buildLoaderBookmarklet(getCurrentScriptUrl());
 
     var wrap = document.createElement("details");
     wrap.className = "filePicker fileExtractFold rofanMobileExportHelper";
@@ -115,24 +113,15 @@
       toggleCodeBtn.textContent = codeBox.hidden ? "코드 보기" : "코드 숨기기";
     });
 
-    var copyLoaderBtn = document.createElement("button");
-    copyLoaderBtn.type = "button";
-    copyLoaderBtn.className = "btn subtle rofanMobileExportAdvanced";
-    copyLoaderBtn.textContent = "짧은 로더 복사";
-    copyLoaderBtn.addEventListener("click", function(){
-      copyText(loaderBookmarklet, "짧은 로더 코드를 복사했습니다. 직접 코드가 너무 길 때만 써 보세요.");
-    });
-
     actions.appendChild(copyDirectBtn);
     actions.appendChild(copyEncodedBtn);
     actions.appendChild(toggleCodeBtn);
-    actions.appendChild(copyLoaderBtn);
     body.appendChild(actions);
 
     var steps = document.createElement("ol");
     steps.className = "rofanMobileExportSteps";
     [
-      "북마클릿 코드 복사 버튼을 누릅니다. 주소칸에 끝까지 안 붙으면 인코딩 코드 복사나 짧은 로더 복사를 사용합니다.",
+      "북마클릿 코드 복사 버튼을 누릅니다. 등록이 막히거나 주소칸에 끝까지 안 붙으면 인코딩 코드 복사를 사용합니다.",
       "모바일 브라우저에서 즐겨찾기 하나를 만든 뒤, 주소를 복사한 코드로 바꿉니다. 제목은 로판백업처럼 짧게 저장하면 편합니다.",
       "모바일에서는 RofanAi 채팅방을 열어 둔 상태로 주소창/검색창에 즐겨찾기 이름을 검색하고, 검색 결과에 뜬 즐겨찾기를 선택해 실행합니다.",
       "실행되면 화면 아래에 Rofan_export_start 또는 loading_offset 문구가 떠야 합니다.",
@@ -181,34 +170,6 @@
     return "javascript:" + (encoded ? encodeURIComponent(code) : code);
   }
 
-  function getCurrentScriptUrl(){
-    var current = document.currentScript && document.currentScript.src;
-    if (current) return stripHash(current);
-
-    var scripts = Array.prototype.slice.call(document.scripts || []);
-    for (var i = scripts.length - 1; i >= 0; i--) {
-      var src = scripts[i].src || "";
-      if (new RegExp(SCRIPT_FILE_NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?:[?#].*)?$").test(src)) {
-        return stripHash(src);
-      }
-    }
-
-    try {
-      return new URL(SCRIPT_FILE_NAME, location.href).href;
-    } catch (_err) {
-      return SCRIPT_FILE_NAME;
-    }
-  }
-
-  function stripHash(url){
-    return String(url || "").replace(/#.*$/, "");
-  }
-
-  function buildLoaderBookmarklet(scriptUrl){
-    var src = String(scriptUrl || SCRIPT_FILE_NAME);
-    var code = "(u=>{u+=(u.includes('?')?'&':'?')+'v='+Date.now();s=document.createElement('script');s.src=u;s.dataset.rofanMobileExporter='1';(document.head||document.documentElement).appendChild(s)})(" + JSON.stringify(src) + ")";
-    return "javascript:" + code.replace(/\s+/g, "");
-  }
 
   function copyText(text, okMessage){
     if (navigator.clipboard && navigator.clipboard.writeText) {

@@ -4020,8 +4020,7 @@ function buildStandaloneHTML(){
   const body = (activeMode !== "epubedit" && lastStructuredItems && lastStructuredItems.length)
     ? `<section id="ch1"><h1>${escapeXML(cfg.title)}</h1>${structuredItemsToHtml(lastStructuredItems)}</section>`
     : chapters.map((ch, idx) => `<section id="ch${idx+1}"><h1>${escapeXML(ch.title)}</h1>${chapterBodyToXhtml(ch)}</section>`).join("\n");
-  return `<!doctype html><html lang="${escapeXML(cfg.language)}"><head><meta charset="utf-8"><title>${escapeXML(cfg.title)}</title><style>${getEpubCss()} nav{margin-bottom:2rem;padding:1rem;border:1px solid #ddd;border-radius:12px;} section{max-width:720px;margin:0 auto 3rem;}</style></head><body><nav><strong>목차</strong><ol>${toc}</ol></nav>${body}<script src="rofan-mobile-export.js"></script>
-</body></html>`;
+  return `<!doctype html><html lang="${escapeXML(cfg.language)}"><head><meta charset="utf-8"><title>${escapeXML(cfg.title)}</title><style>${getEpubCss()} nav{margin-bottom:2rem;padding:1rem;border:1px solid #ddd;border-radius:12px;} section{max-width:720px;margin:0 auto 3rem;}</style></head><body><nav><strong>목차</strong><ol>${toc}</ol></nav>${body}</body></html>`;
 }
 function downloadHtml(){
   const cfg = getEpubConfig();
@@ -4051,8 +4050,7 @@ function downloadDoc(){
   downloadBlob(new Blob([html], {type:"application/msword;charset=utf-8"}), safeDownloadFileName(".doc", cfg.title));
 }
 function makeXhtmlDoc(title, body){
-  return `<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="${escapeXML(getEpubConfig().language)}" xml:lang="${escapeXML(getEpubConfig().language)}"><head><meta charset="utf-8"/><title>${escapeXML(title)}</title><link rel="stylesheet" type="text/css" href="styles.css"/></head><body>${body}<script src="rofan-mobile-export.js"></script>
-</body></html>`;
+  return `<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="${escapeXML(getEpubConfig().language)}" xml:lang="${escapeXML(getEpubConfig().language)}"><head><meta charset="utf-8"/><title>${escapeXML(title)}</title><link rel="stylesheet" type="text/css" href="styles.css"/></head><body>${body}</body></html>`;
 }
 async function getCoverInfo(){
   const file = epubCoverInputEl && epubCoverInputEl.files && epubCoverInputEl.files[0];
@@ -5141,8 +5139,7 @@ requestAnimationFrame(syncActiveResultHeight);
     const chapters = getExportChapters();
     const toc = chapters.map((ch, idx) => `<li><a href="#ch${idx+1}">${safeHtml(ch.title)}</a></li>`).join("\n");
     const body = chapters.map((ch, idx) => `<section id="ch${idx+1}">${fullChapterHtml(ch, true)}</section>`).join("\n");
-    return `<!doctype html><html lang="${safeAttr(cfg.language || "ko")}"><head><meta charset="utf-8"><title>${safeHtml(cfg.title || "정리한 로그")}</title><style>${typeof getEpubCss === "function" ? getEpubCss() : ""} nav{margin-bottom:2rem;padding:1rem;border:1px solid #ddd;border-radius:12px;} section{max-width:720px;margin:0 auto 3rem;} .chapterNote{color:#6f8b9b;} .chapterImage img{max-width:100%;height:auto;display:block;margin:1em auto;}</style></head><body><nav><strong>목차</strong><ol>${toc}</ol></nav>${body}<script src="rofan-mobile-export.js"></script>
-</body></html>`;
+    return `<!doctype html><html lang="${safeAttr(cfg.language || "ko")}"><head><meta charset="utf-8"><title>${safeHtml(cfg.title || "정리한 로그")}</title><style>${typeof getEpubCss === "function" ? getEpubCss() : ""} nav{margin-bottom:2rem;padding:1rem;border:1px solid #ddd;border-radius:12px;} section{max-width:720px;margin:0 auto 3rem;} .chapterNote{color:#6f8b9b;} .chapterImage img{max-width:100%;height:auto;display:block;margin:1em auto;}</style></head><body><nav><strong>목차</strong><ol>${toc}</ol></nav>${body}</body></html>`;
   };
   window.chapterBodyToXhtml = chapterBodyToXhtml = function(ch){ return fullChapterHtml(ch, false); };
 
