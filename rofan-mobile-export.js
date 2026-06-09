@@ -1,12 +1,11 @@
 /* RofanAi mobile bookmarklet helper
  * Add this file next to index.html, then load it from index.html.
- * It only adds helper UI to this app. The copied bookmarklet runs directly on rofan.ai
- * and saves one structured .rofan.html file.
+ * The copied bookmarklet runs directly on rofan.ai and saves one structured .rofan.html file.
  */
 (function(){
   "use strict";
 
-  var DIRECT_BOOKMARKLET_SOURCE = String.raw`(async(A,S,N,P,I,L,O,E,V,Q,C,Z,M,F,W,Y,G,H,T,R,J,x,k,p,m,b,u,a,D)=>{if(!/(^|\.)rofan\.ai$/i.test(location.hostname))return alert("RofanAi_chat_page");if(window.__RME)return alert("already_running");window.__RME=1;A=document.createElement("div");A.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;padding:12px;border-radius:14px;background:white;color:black;font-size:14px;font-family:sans-serif;line-height:1.5;box-shadow:0 8px 32px #0004";document.body.appendChild(A);S=x=>A.textContent="RofanAi:"+x;try{if(!/\/chat\/[^/?#]+/i.test(location.pathname))throw Error("not_chat_page");N=window.__NEXT_DATA__||{};P=N.props&&N.props.pageProps||N.props&&N.props.initialProps&&N.props.initialProps.pageProps||N.pageProps||{};I=P.chatId||P.oriChatData&&P.oriChatData.chat_id||P.chatData&&P.chatData.chat_id||(location.pathname.match(/\/chat\/([^/?#]+)/i)||[])[1];if(!I)throw Error("no_chatId");G=[];V={};Q=x=>{k=String(x&&(x.log_id||x.pk)||"");if(k&&!V[k]){V[k]=1;G.push(x)}};L=20;O=0;E=0;for(;;){S("loading:"+O+"/"+G.length);R=await fetch("/api/chat/GetChatLogs",{method:"POST",credentials:"include",headers:{Accept:"application/json","Content-Type":"application/json"},body:JSON.stringify({chatId:I,offset:O,limit:L})});if(!R.ok)throw Error("HTTP_"+R.status);J=await R.json();if(!Array.isArray(J))throw Error("bad_response");J.length?E=0:E++;J.forEach(Q);if(J.length<L||E>1)break;O+=L;if(O>5e5)throw Error("too_many_logs");await new Promise(r=>setTimeout(r,120))}if(!G.length&&Array.isArray(P.initialChatLogs))P.initialChatLogs.forEach(Q);if(!G.length)throw Error("no_logs");G.sort((a,b)=>Number(a&&a.pk||0)-Number(b&&b.pk||0));C=x=>String(x==null?"":x).replace(/\r/g,"").replace(/\u00a0/g," ").replace(/\u200b/g,"").trim();Z=x=>C(x).replace(/[&<>"']/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[s]));M=x=>Z(C(x).replace(/-->/g,"--＞").replace(/[;\n\r]/g,"_"));F=x=>(C(x).replace(/[\\/:*?"<>|]+/g,"_").replace(/\s+/g,"_").slice(0,80)||"rofan-chat");W=p=>{p=C(p);m=p.match(/^(\*{1,3}|_{1,3})([\s\S]*?)\1$/);if(m&&C(m[2]))return[{k:"scene",t:C(m[2])}];J=[];R=/(\*{1,3}|_{1,3})([\s\S]+?)\1/g;O=0;while(m=R.exec(p)){b=C(p.slice(O,m.index));if(b)J.push({k:"normal",t:b});b=C(m[2]);if(b)J.push({k:"scene",t:b});O=R.lastIndex}b=C(p.slice(O));if(b)J.push({k:"normal",t:b});return J.length?J:[{k:"normal",t:p}]};H=[];Y=(id,o,t,split)=>{t=C(t);if(!t)return;t.split(/\n\s*\n+/).map(C).filter(Boolean).forEach((p,i)=>{(split?W(p):[{k:"normal",t:p}]).forEach((z,j)=>{if(z&&z.t)H.push('<div class="rofan-block" data-block-id="'+M(id+"-"+i+"-"+j)+'" data-owner="'+o+'" data-kind="'+z.k+'"><p>'+Z(z.t).replace(/\n+/g,"</p><p>")+'</p></div>')})})};G.forEach((x,i)=>{k=M(x.log_id||x.pk||("log"+i));Y(k+"-user","user",x.user_chat,0);Y(k+"-bot","character",x.bot_chat,1)});T=C(P.oriChatData&&P.oriChatData.chat_title||P.chatData&&P.chatData.chat_title||P.botDetail&&(P.botDetail.name||P.botDetail.bot_name||P.botDetail.title)||P.oriBotDetail&&(P.oriBotDetail.name||P.oriBotDetail.bot_name||P.oriBotDetail.title)||document.title||"rofan-chat").replace(/\s*\|\s*로판\s*AI\s*$/i,"")||"rofan-chat";D='<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>'+Z(T)+'</title><style>body{font-family:sans-serif;line-height:1.8;word-break:keep-all;overflow-wrap:break-word}.rofan-export{max-width:860px;margin:24px auto;padding:0 16px}.rofan-block{margin:0 0 1em}.rofan-block[data-owner="user"]{color:#4f8aa4}.rofan-block[data-owner="character"]{color:#1f2d36}.rofan-block[data-kind="scene"]{font-style:italic;color:#496574}.rofan-block p{margin:0 0 .65em}</style></head><body><main class="rofan-export" data-rofan-export="GetChatLogs" data-chat-id="'+M(I)+'" data-log-count="'+G.length+'" data-item-count="'+H.length+'"><h1>'+Z(T)+'</h1><div class="rofan-meta">GetChatLogs / '+G.length+' logs / '+H.length+' blocks</div>'+H.join("\n")+'</main></body></html>';a=document.createElement("a");u=URL.createObjectURL(new Blob([D],{type:"text/html;charset=utf-8"}));a.href=u;a.download=F(T)+".rofan.html";a.rel="noopener";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(u);a.remove()},1500);S("done:"+G.length);alert("done:"+G.length)}catch(e){console.error(e);S("fail:"+(e.message||e));alert("fail:"+(e.message||e))}finally{window.__RME=0}})()`;
+  var DIRECT_BOOKMARKLET_SOURCE = String.raw`(async(A,S,N,P,I,L,O,E,V,Q,C,Z,M,F,W,Y,G,H,T,R,J,x,k,p,m,b,u,a,D)=>{if(!/(^|\.)rofan\.ai$/i.test(location.hostname))return(alert("RofanAi_chat_page"));if(window.__RME)return(alert("already_running"));window.__RME=1;A=document.createElement("div");A.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;padding:12px;border-radius:14px;background:white;color:black;font-size:14px;font-family:sans-serif;line-height:1.5;box-shadow:0\x208px\x2032px\x20#0004";document.body.appendChild(A);S=x=>A.textContent="RofanAi:"+x;try{if(!/\/chat\/[^/?#]+/i.test(location.pathname))throw(Error("not_chat_page"));N=window.__NEXT_DATA__||{};P=N.props&&N.props.pageProps||N.props&&N.props.initialProps&&N.props.initialProps.pageProps||N.pageProps||{};I=P.chatId||P.oriChatData&&P.oriChatData.chat_id||P.chatData&&P.chatData.chat_id||(location.pathname.match(/\/chat\/([^/?#]+)/i)||[])[1];if(!I)throw(Error("no_chatId"));G=[];V={};Q=x=>{k=String(x&&(x.log_id||x.pk)||"");if(k&&!V[k]){V[k]=1;G.push(x)}};L=20;O=0;E=0;for(;;){S("loading:"+O+"/"+G.length);R=await(fetch("/api/chat/GetChatLogs",{method:"POST",credentials:"include",headers:{Accept:"application/json","Content-Type":"application/json"},body:JSON.stringify({chatId:I,offset:O,limit:L})}));if(!R.ok)throw(Error("HTTP_"+R.status));J=await(R.json());if(!Array.isArray(J))throw(Error("bad_response"));J.length?E=0:E++;J.forEach(Q);if(J.length<L||E>1)break;O+=L;if(O>5e5)throw(Error("too_many_logs"));await(new(Promise)(r=>setTimeout(r,120)))}if(!G.length&&Array.isArray(P.initialChatLogs))P.initialChatLogs.forEach(Q);if(!G.length)throw(Error("no_logs"));G.sort((a,b)=>Number(a&&a.pk||0)-Number(b&&b.pk||0));C=x=>String(x==null?"":x).replace(/\r/g,"").replace(/\u00a0/g,"\x20").replace(/\u200b/g,"").trim();Z=x=>C(x).replace(/[&<>"']/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[s]));M=x=>Z(C(x).replace(/-->/g,"--＞").replace(/[;\n\r]/g,"_"));F=x=>(C(x).replace(/[\\/:*?"<>|]+/g,"_").replace(/\s+/g,"_").slice(0,80)||"rofan-chat");W=p=>{p=C(p);m=p.match(/^(\*{1,3}|_{1,3})([\s\S]*?)\1$/);if(m&&C(m[2]))return[{k:"scene",t:C(m[2])}];J=[];R=/(\*{1,3}|_{1,3})([\s\S]+?)\1/g;O=0;while(m=R.exec(p)){b=C(p.slice(O,m.index));if(b)J.push({k:"normal",t:b});b=C(m[2]);if(b)J.push({k:"scene",t:b});O=R.lastIndex}b=C(p.slice(O));if(b)J.push({k:"normal",t:b});return(J.length?J:[{k:"normal",t:p}])};H=[];Y=(id,o,t,split)=>{t=C(t);if(!t)return;t.split(/\n\s*\n+/).map(C).filter(Boolean).forEach((p,i)=>{(split?W(p):[{k:"normal",t:p}]).forEach((z,j)=>{if(z&&z.t)H.push('<div\x20class="rofan-block"\x20data-block-id="'+M(id+"-"+i+"-"+j)+'"\x20data-owner="'+o+'"\x20data-kind="'+z.k+'"><p>'+Z(z.t).replace(/\n+/g,"</p><p>")+'</p></div>')})})};G.forEach((x,i)=>{k=M(x.log_id||x.pk||("log"+i));Y(k+"-user","user",x.user_chat,0);Y(k+"-bot","character",x.bot_chat,1)});T=C(P.oriChatData&&P.oriChatData.chat_title||P.chatData&&P.chatData.chat_title||P.botDetail&&(P.botDetail.name||P.botDetail.bot_name||P.botDetail.title)||P.oriBotDetail&&(P.oriBotDetail.name||P.oriBotDetail.bot_name||P.oriBotDetail.title)||document.title||"rofan-chat").replace(/\s*\|\s*로판\s*AI\s*$/i,"")||"rofan-chat";D='<!doctype\x20html><html\x20lang="ko"><head><meta\x20charset="utf-8"><title>'+Z(T)+'</title></head><body><main\x20class="rofan-export"><h1>'+Z(T)+'</h1>'+H.join("\n")+'</main></body></html>';a=document.createElement("a");u=URL.createObjectURL(new(Blob)([D],{type:"text/html;charset=utf-8"}));a.href=u;a.download=F(T)+".rofan.html";a.rel="noopener";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(u);a.remove()},1500);S("done:"+G.length);alert("done:"+G.length)}catch(e){console.error(e);S("fail:"+(e.message||e));alert("fail:"+(e.message||e))}finally{window.__RME=0}})()`;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", installAppHelper);
@@ -50,8 +49,8 @@
   function installOneHelper(opts){
     if (!opts || !opts.targetBox || document.getElementById(opts.id)) return;
 
-    var encodedBookmarklet = buildEncodedBookmarklet();
     var rawBookmarklet = buildRawBookmarklet();
+    var encodedBookmarklet = buildEncodedBookmarklet();
 
     var wrap = document.createElement("details");
     wrap.className = "filePicker fileExtractFold rofanMobileExportHelper";
@@ -72,20 +71,20 @@
     var actions = document.createElement("div");
     actions.className = "optionRow compactControls rofanMobileExportActions";
 
-    var copyEncodedBtn = document.createElement("button");
-    copyEncodedBtn.type = "button";
-    copyEncodedBtn.className = "btn primary";
-    copyEncodedBtn.textContent = "북마클릿 코드 복사";
-    copyEncodedBtn.addEventListener("click", function(){
-      copyText(encodedBookmarklet, "북마클릿 코드를 복사했습니다.");
-    });
-
     var copyRawBtn = document.createElement("button");
     copyRawBtn.type = "button";
-    copyRawBtn.className = "btn subtle";
-    copyRawBtn.textContent = "일반 코드 복사";
+    copyRawBtn.className = "btn primary";
+    copyRawBtn.textContent = "북마클릿 코드 복사";
     copyRawBtn.addEventListener("click", function(){
-      copyText(rawBookmarklet, "일반 북마클릿 코드를 복사했습니다.");
+      copyText(rawBookmarklet, "북마클릿 코드를 복사했습니다.");
+    });
+
+    var copyEncodedBtn = document.createElement("button");
+    copyEncodedBtn.type = "button";
+    copyEncodedBtn.className = "btn subtle";
+    copyEncodedBtn.textContent = "인코딩 코드 복사";
+    copyEncodedBtn.addEventListener("click", function(){
+      copyText(encodedBookmarklet, "인코딩 북마클릿 코드를 복사했습니다.");
     });
 
     var toggleCodeBtn = document.createElement("button");
@@ -97,8 +96,8 @@
       toggleCodeBtn.textContent = codeBox.hidden ? "코드 보기" : "코드 숨기기";
     });
 
-    actions.appendChild(copyEncodedBtn);
     actions.appendChild(copyRawBtn);
+    actions.appendChild(copyEncodedBtn);
     actions.appendChild(toggleCodeBtn);
     body.appendChild(actions);
 
@@ -119,7 +118,7 @@
     var codeBox = document.createElement("pre");
     codeBox.className = "rofanMobileExportCode";
     codeBox.hidden = true;
-    codeBox.textContent = encodedBookmarklet;
+    codeBox.textContent = rawBookmarklet;
     body.appendChild(codeBox);
 
     wrap.appendChild(body);
