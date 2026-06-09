@@ -194,6 +194,17 @@ details.foldBlock[open] summary:after{transform:rotate(180deg);}
 .bookPreview p{margin:0 0 1em;}
 .mutedText{color:var(--muted);}
 .exportDock{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+
+.middleRangeFold{grid-column:1/-1;}
+.middleRangePanel{display:grid;gap:16px;margin-top:12px;}
+.middleRangeItem{border:1px solid var(--line2);border-radius:18px;background:var(--paper2);padding:16px;}
+.middleRangeHead{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;}
+.middleRangeHead strong{font-size:16px;font-weight:850;margin-right:auto;color:var(--ink);}
+.middleRangeGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;}
+.middleRangeGrid .control{width:100%;}
+.middleRangeGrid .control textarea{height:96px;min-height:96px;}
+.middleRangeActions{margin-top:12px;display:flex;justify-content:flex-end;}
+@media(max-width:720px){.middleRangeGrid{grid-template-columns:1fr}.middleRangeHead{align-items:stretch}.middleRangeHead .control,.middleRangeHead .btn{width:100%;justify-content:space-between}.middleRangeHead strong{width:100%;}}
 #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:rgba(35,49,58,.94);color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .25s ease;pointer-events:none;z-index:9999;box-shadow:0 12px 35px rgba(35,49,58,.20);}
 
 /* 작은 화면/브라우저 배율에서 카드 내용이 잘리지 않도록 내부 스크롤을 제공합니다. */
@@ -799,6 +810,15 @@ aside.sidebar{display:none!important;}
           </div></div>
         </details>
 
+        <details class="foldBlock middleRangeFold" open>
+          <summary>중간 지문 삭제</summary>
+          <div class="blockBody">
+            <div class="hint">범위 지정하고자 하는 시작/끝 문장 전체 복사 붙여넣기를 권장합니다. 여러 범위를 지정할 수 있습니다.</div>
+            <div id="middleRangePanel" class="middleRangePanel"></div>
+            <div class="middleRangeActions"><button type="button" class="btn subtle" onclick="addMiddleRangeRule()">범위 추가</button></div>
+          </div>
+        </details>
+
         <details class="foldBlock" id="chatOptions" open>
           <summary>검토 규칙</summary>
           <div class="blockBody"><div class="optionRow">
@@ -942,6 +962,7 @@ const indentOutputEl = document.getElementById("indentOutput");
 const deleteContainsEnabledEl = document.getElementById("deleteContainsEnabled");
 const deleteContainsTokenEl = document.getElementById("deleteContainsToken");
 const deleteContainsModeEl = document.getElementById("deleteContainsMode");
+const middleRangePanelEl = document.getElementById("middleRangePanel");
 const removeTablesEl = document.getElementById("removeTables");
 const labelSpeakersEl = document.getElementById("labelSpeakers");
 const userNameEl = document.getElementById("userName");
@@ -1010,6 +1031,7 @@ let duplicateOrderQuery = "";
 let oocGroupPage = 0;
 let oocFilterText = "";
 let oocOrderQuery = "";
+let middleRangeRules = [];
 let cachedChatFileName = "";
 let cachedCoverAsset = null;
 let isRestoringWork = false;
@@ -1212,6 +1234,11 @@ oocReviewPanel.addEventListener("change", handleOocReviewChange);
 oocReviewPanel.addEventListener("click", handleOocReviewClick);
 oocReviewPanel.addEventListener("input", handleOocReviewInput);
 oocReviewPanel.addEventListener("keydown", handleOocReviewKeydown);
+if(middleRangePanelEl){
+  middleRangePanelEl.addEventListener("input", handleMiddleRangeInput);
+  middleRangePanelEl.addEventListener("change", handleMiddleRangeInput);
+  middleRangePanelEl.addEventListener("click", handleMiddleRangeClick);
+}
 
 
 function updateModeVisibility(){
@@ -1298,6 +1325,7 @@ function collectWorkValues(){
     oocGroupPage,
     oocFilterText,
     oocOrderQuery,
+    middleRangeRules: sanitizeMiddleRangeRules(middleRangeRules),
     chapterKeywordQuery,
     chapterOrderQuery,
     chapterMatchPage,
@@ -1407,6 +1435,7 @@ async function restoreSavedWork(){
       oocGroupPage = state.oocGroupPage || 0;
       oocFilterText = state.oocFilterText || "";
       oocOrderQuery = state.oocOrderQuery || "";
+      middleRangeRules = sanitizeMiddleRangeRules((state.options && state.options.middleRangeRules) || state.middleRangeRules || []);
       chapterKeywordQuery = state.chapterKeywordQuery || "";
       chapterOrderQuery = state.chapterOrderQuery || "";
       chapterMatchPage = state.chapterMatchPage || 0;
@@ -1530,6 +1559,203 @@ function shouldDeleteByContains(t, tokens){
     return lowerText.includes(token.toLowerCase());
   });
 }
+
+function createMiddleRangeRule(data){
+  const source = data || {};
+  return {
+    id: source.id || ("range-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8)),
+    start: String(source.start || ""),
+    end: String(source.end || ""),
+    action: "delete",
+    unit: source.unit === "sentence" ? "sentence" : "paragraph"
+  };
+}
+function sanitizeMiddleRangeRules(rules){
+  if(!Array.isArray(rules)) return [];
+  return rules.map(createMiddleRangeRule).filter(Boolean);
+}
+function ensureMiddleRangeRows(){
+  if(!Array.isArray(middleRangeRules)) middleRangeRules = [];
+  if(!middleRangeRules.length) middleRangeRules = [createMiddleRangeRule()];
+}
+function renderMiddleRangePanel(){
+  if(!middleRangePanelEl) return;
+  ensureMiddleRangeRows();
+  middleRangePanelEl.innerHTML = middleRangeRules.map((rule, idx) => `
+    <div class="middleRangeItem" data-middle-range-id="${escapeAttr(rule.id)}">
+      <div class="middleRangeHead">
+        <strong>범위 ${idx + 1}</strong>
+        <span class="control compactControl">처리 <select data-middle-range-field="action"><option value="delete" selected>삭제</option></select></span>
+        <span class="control compactControl">삭제 단위 <select data-middle-range-field="unit"><option value="paragraph" ${rule.unit !== "sentence" ? "selected" : ""}>키워드가 포함된 문단부터 삭제</option><option value="sentence" ${rule.unit === "sentence" ? "selected" : ""}>키워드가 포함된 문장부터 삭제</option></select></span>
+        <button type="button" class="btn subtle warn" data-middle-range-remove="${escapeAttr(rule.id)}">범위 삭제</button>
+      </div>
+      <div class="middleRangeGrid">
+        <label class="control wide">시작 문장<textarea data-middle-range-field="start" placeholder="삭제 범위가 시작되는 문장 전체를 붙여넣기">${escapeHTML(rule.start)}</textarea></label>
+        <label class="control wide">끝 문장<textarea data-middle-range-field="end" placeholder="삭제 범위가 끝나는 문장 전체를 붙여넣기">${escapeHTML(rule.end)}</textarea></label>
+      </div>
+    </div>`).join("");
+}
+function addMiddleRangeRule(){
+  ensureMiddleRangeRows();
+  middleRangeRules.push(createMiddleRangeRule());
+  renderMiddleRangePanel();
+  scheduleAutosave();
+}
+function findMiddleRangeRule(id){
+  return (middleRangeRules || []).find(rule => rule.id === id);
+}
+function handleMiddleRangeInput(e){
+  const field = e.target && e.target.dataset ? e.target.dataset.middleRangeField : "";
+  if(!field) return;
+  const wrap = e.target.closest("[data-middle-range-id]");
+  if(!wrap) return;
+  const rule = findMiddleRangeRule(wrap.dataset.middleRangeId);
+  if(!rule) return;
+  if(field === "action") rule.action = "delete";
+  else rule[field] = e.target.value || "";
+  transformText();
+  scheduleAutosave();
+}
+function handleMiddleRangeClick(e){
+  const btn = e.target.closest("[data-middle-range-remove]");
+  if(!btn) return;
+  const id = btn.dataset.middleRangeRemove;
+  middleRangeRules = (middleRangeRules || []).filter(rule => rule.id !== id);
+  ensureMiddleRangeRows();
+  renderMiddleRangePanel();
+  transformText();
+  scheduleAutosave();
+}
+function normalizeRangeNeedle(text){
+  return String(text || "").replace(/\r/g, "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+}
+function buildNormalizedTextMap(text){
+  const source = String(text || "");
+  let normalized = "";
+  const map = [];
+  let pendingSpace = false;
+  let pendingSpaceIndex = 0;
+  for(let i = 0; i < source.length; i++){
+    const ch = source[i];
+    if(/\s|\u00a0/.test(ch)){
+      if(!pendingSpace){ pendingSpace = true; pendingSpaceIndex = i; }
+      continue;
+    }
+    if(pendingSpace && normalized){ normalized += " "; map.push(pendingSpaceIndex); }
+    pendingSpace = false;
+    normalized += ch;
+    map.push(i);
+  }
+  return { normalized, map };
+}
+function normalizedOriginalMatch(text, needle, fromOriginal){
+  const built = buildNormalizedTextMap(text);
+  const normalizedNeedle = normalizeRangeNeedle(needle);
+  if(!built.normalized || !normalizedNeedle) return null;
+  let fromNorm = 0;
+  while(fromNorm < built.map.length && built.map[fromNorm] < (Number(fromOriginal) || 0)) fromNorm++;
+  const pos = built.normalized.toLowerCase().indexOf(normalizedNeedle.toLowerCase(), fromNorm);
+  if(pos < 0) return null;
+  const last = Math.min(built.map.length - 1, pos + normalizedNeedle.length - 1);
+  const start = built.map[pos];
+  const end = built.map[last] + 1;
+  return {pos:start, len:Math.max(1, end - start)};
+}
+function findRangeNeedleInChunks(chunks, needle, startIndex, startPos){
+  const rawNeedle = String(needle || "").trim();
+  if(!rawNeedle) return null;
+  const normalizedNeedle = normalizeRangeNeedle(rawNeedle);
+  if(!normalizedNeedle) return null;
+  const fromIndex = Math.max(0, Number(startIndex) || 0);
+  for(let i = fromIndex; i < chunks.length; i++){
+    const text = String((chunks[i] && chunks[i].text) || "");
+    const from = i === fromIndex ? Math.max(0, Number(startPos) || 0) : 0;
+    const lowerText = text.toLowerCase();
+    const lowerNeedle = rawNeedle.toLowerCase();
+    let exact = text.indexOf(rawNeedle, from);
+    if(exact < 0) exact = lowerText.indexOf(lowerNeedle, from);
+    if(exact >= 0) return {index:i, pos:exact, len:rawNeedle.length, whole:false};
+    const normalizedMatch = normalizedOriginalMatch(text, rawNeedle, from);
+    if(normalizedMatch) return {index:i, pos:normalizedMatch.pos, len:normalizedMatch.len, whole:false};
+  }
+  return null;
+}
+function getSentenceBoundsForRange(text, pos, len){
+  const s = String(text || "");
+  const safePos = Math.max(0, Math.min(s.length, Number(pos) || 0));
+  const safeEnd = Math.max(safePos, Math.min(s.length, safePos + (Number(len) || 0)));
+  const sentenceEndChars = new Set([".", "?", "!", "。", "？", "！", "…", "\n"]);
+  const closingChars = new Set(['"', "'", "”", "’", "」", "』", "〉", ")", "]", "}"]);
+  let start = safePos;
+  while(start > 0){
+    const prev = s[start - 1];
+    if(sentenceEndChars.has(prev)) break;
+    start--;
+  }
+  while(start < s.length && /\s/.test(s[start])) start++;
+  let end = safeEnd;
+  while(end < s.length){
+    const ch = s[end];
+    end++;
+    if(sentenceEndChars.has(ch)) break;
+  }
+  while(end < s.length && closingChars.has(s[end])) end++;
+  while(end < s.length && /[ \t]/.test(s[end])) end++;
+  return {start, end};
+}
+function deleteTextRangeInChunkText(text, start, end){
+  const s = String(text || "");
+  const from = Math.max(0, Math.min(s.length, start));
+  const to = Math.max(from, Math.min(s.length, end));
+  return (s.slice(0, from) + s.slice(to)).replace(/\n{3,}/g, "\n\n").trim();
+}
+function getActiveMiddleRangeRules(){
+  return (middleRangeRules || [])
+    .filter(rule => rule && rule.action !== "keep")
+    .map(rule => ({
+      start:String(rule.start || "").trim(),
+      end:String(rule.end || "").trim(),
+      unit: rule.unit === "sentence" ? "sentence" : "paragraph"
+    }))
+    .filter(rule => rule.start && rule.end);
+}
+function applyMiddleRangeDeletesToChunks(chunks){
+  const rules = getActiveMiddleRangeRules();
+  if(!rules.length || !Array.isArray(chunks) || !chunks.length) return chunks;
+  let working = chunks.map(chunk => Object.assign({}, chunk));
+  rules.forEach(rule => {
+    const startInfo = findRangeNeedleInChunks(working, rule.start, 0, 0);
+    if(!startInfo) return;
+    const endInfo = findRangeNeedleInChunks(working, rule.end, startInfo.index, startInfo.pos + startInfo.len);
+    if(!endInfo || endInfo.index < startInfo.index) return;
+
+    if(rule.unit === "sentence"){
+      if(startInfo.index === endInfo.index){
+        const text = String((working[startInfo.index] && working[startInfo.index].text) || "");
+        const startBounds = getSentenceBoundsForRange(text, startInfo.pos, startInfo.len);
+        const endBounds = getSentenceBoundsForRange(text, endInfo.pos, endInfo.len);
+        working[startInfo.index].text = deleteTextRangeInChunkText(text, startBounds.start, Math.max(startBounds.start, endBounds.end));
+      }else{
+        const startText = String((working[startInfo.index] && working[startInfo.index].text) || "");
+        const endText = String((working[endInfo.index] && working[endInfo.index].text) || "");
+        const startBounds = getSentenceBoundsForRange(startText, startInfo.pos, startInfo.len);
+        const endBounds = getSentenceBoundsForRange(endText, endInfo.pos, endInfo.len);
+        if(working[startInfo.index]) working[startInfo.index].text = deleteTextRangeInChunkText(startText, startBounds.start, startText.length);
+        for(let i = startInfo.index + 1; i < endInfo.index; i++){
+          if(working[i]) working[i].text = "";
+        }
+        if(working[endInfo.index]) working[endInfo.index].text = deleteTextRangeInChunkText(endText, 0, endBounds.end);
+      }
+    }else{
+      for(let i = startInfo.index; i <= endInfo.index; i++){
+        if(working[i]) working[i].text = "";
+      }
+    }
+    working = working.filter(chunk => String((chunk && chunk.text) || "").trim());
+  });
+  return working;
+}
+
 function resetReviewDecisions(){
   duplicateDecisions = {};
   containsDecisions = {};
@@ -1591,133 +1817,22 @@ function isTableLikeText(t){
   return false;
 }
 
-// ------------------ details 제거 (원본 보존, 결과 단계 삭제 + 보호어 줄 단위 보존) ------------------
-function normalizeDetailsTagDelimiters(value){
-  return String(value || "")
-    .replace(/&lt;\s*(\/?)\s*(details\b[^&<>]*?)&gt;/gi, function(_m, slash, body){ return "<" + (slash || "") + body.trim() + ">"; })
-    .replace(/&lt;\s*(\/?)\s*(summary\b[^&<>]*?)&gt;/gi, function(_m, slash, body){ return "<" + (slash || "") + body.trim() + ">"; });
-}
-function detailsLineToPlain(value){
-  const holder = document.createElement("div");
-  holder.innerHTML = String(value || "")
-    .replace(/<br\s*\/?\s*>/gi, "\n")
-    .replace(/<\/p\s*>/gi, "\n")
-    .replace(/<\/div\s*>/gi, "\n");
-  return (holder.innerText || holder.textContent || String(value || ""))
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&amp;/gi, "&")
-    .replace(/\r/g, "")
-    .trim();
-}
-function protectedLinesFromDetailsText(value, tokens){
-  if(!tokens || !tokens.length) return "";
-  let inner = normalizeDetailsTagDelimiters(value)
-    .replace(/<summary\b[^>]*>[\s\S]*?<\/summary\s*>/gi, function(summary){
-      return "\n" + summary.replace(/<\/?summary\b[^>]*>/gi, "") + "\n";
-    })
-    .replace(/<\/?(?:details|summary)\b[^>]*>/gi, "\n");
-  inner = inner
-    .replace(/<br\s*\/?\s*>/gi, "\n")
-    .replace(/<\/p\s*>/gi, "\n")
-    .replace(/<\/div\s*>/gi, "\n");
-  const lines = inner.split(/\n+/)
-    .map(detailsLineToPlain)
-    .map(line => line.trim())
-    .filter(Boolean);
-  return lines.filter(line => isProtectedText(line, tokens)).join("\n\n");
-}
-function appendDetailsKept(out, hidden, tokens){
-  const kept = protectedLinesFromDetailsText(hidden, tokens);
-  if(!kept) return out;
-  return out + (out && !/\n\n$/.test(out) ? "\n\n" : "") + kept + "\n\n";
-}
-function stripDetailsSegmentsFromText(value, tokens, state){
-  let src = normalizeDetailsTagDelimiters(value);
-  if(!src) return "";
-  const tagRe = /<\/?(?:details|summary)\b[^>]*>/gi;
-  let out = "";
-  let hidden = "";
-  let idx = 0;
-  let inDetails = !!(state && state.open);
-  let match;
-  while((match = tagRe.exec(src))){
-    const tag = match[0];
-    const before = src.slice(idx, match.index);
-    const lower = tag.toLowerCase();
-    if(inDetails) hidden += before;
-    else out += before;
-
-    if(/^<details\b/i.test(tag)){
-      if(!inDetails){
-        inDetails = true;
-        hidden = "";
-      }else{
-        hidden += tag;
-      }
-    }else if(/^<\/details/i.test(tag)){
-      if(inDetails){
-        out = appendDetailsKept(out, hidden, tokens);
-        hidden = "";
-        inDetails = false;
-      }
-      // details 닫힘 태그 자체는 항상 버립니다.
-    }else{
-      // summary 태그는 접힘 토큰의 일부라서 밖에 있어도 버리고, 안에 있으면 보호어 판정용 숨김 버퍼에만 둡니다.
-      if(inDetails) hidden += tag;
-    }
-    idx = tagRe.lastIndex;
-  }
-  const tail = src.slice(idx);
-  if(inDetails){
-    hidden += tail;
-    out = appendDetailsKept(out, hidden, tokens);
-  }else{
-    out += tail;
-  }
-  if(state) state.open = inDetails;
-  return out
-    .replace(/^\s*<\/?summary\b[^>]*>.*?<\/summary\s*>\s*$/gim, "")
-    .replace(/^\s*<\/?(?:details|summary)\b[^>]*>\s*$/gim, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
+// ------------------ details 제거 (기존 로그용, 보호 키워드 예외) ------------------
 function filterDetailsByProtection(text, tokens){
-  return stripDetailsSegmentsFromText(text, tokens || getProtectTokens(), {open:false});
+  return (text || "").replace(/<details\b[\s\S]*?<\/details>/gi, (block) => {
+    if (!tokens || tokens.length === 0) return "";
+    let inner = block
+      .replace(/<summary[\s\S]*?<\/summary>/gi, "")
+      .replace(/<\/?details[^>]*>/gi, "");
+    const paras = inner.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
+    const kept = paras.filter(p => isProtectedText(p, tokens));
+    if (kept.length === 0) return "";
+    return "\n\n" + kept.join("\n\n") + "\n\n";
+  })
+  .replace(/^\s*<\/?details.*?>\s*$/gim, "")
+  .replace(/^\s*<summary.*?>.*?<\/summary>\s*$/gim, "");
 }
-function isDetailsMarkedElement(el){
-  if(!el || el.nodeType !== 1) return false;
-  if(el.tagName === "DETAILS") return true;
-  if(el.getAttribute && el.getAttribute("data-rofan-from-details") === "1") return true;
-  return !!(el.closest && el.closest("details,[data-rofan-from-details='1']"));
-}
-function markDetailsElements(root){
-  if(!root || !root.querySelectorAll) return;
-  root.querySelectorAll("details, details *").forEach(function(el){
-    try{ el.setAttribute("data-rofan-from-details", "1"); }catch(_err){}
-  });
-}
-function applyDetailsRemovalToChunks(chunks){
-  if(!removeDetailsEl || !removeDetailsEl.checked) return chunks || [];
-  const tokens = getProtectTokens();
-  const out = [];
-  const state = {open:false};
-  (chunks || []).forEach(function(chunk){
-    if(!chunk) return;
-    const next = Object.assign({}, chunk);
-    if(next.fromDetails){
-      next.text = protectedLinesFromDetailsText(next.text || "", tokens);
-      next.fromDetails = false;
-      state.open = false;
-    }else{
-      next.text = stripDetailsSegmentsFromText(next.text || "", tokens, state);
-    }
-    if(String(next.text || "").trim()) out.push(next);
-  });
-  return out;
-}
+
 // ------------------ 별표 지문 파서(기존 로그용) ------------------
 function parseChunks(text){
   const s=(text||"").replace(/\r/g,"");
@@ -1832,23 +1947,106 @@ function readFileAsArrayBuffer(file){
 function isZipBytes(bytes){
   return bytes && bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
 }
-function decodeBytesSmart(bytes){
-  if(bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe){
-    return new TextDecoder("utf-16le").decode(bytes);
+
+function bytesToBinaryString(bytes){
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  let out = "";
+  const step = 0x8000;
+  for(let i = 0; i < arr.length; i += step){
+    out += String.fromCharCode.apply(null, arr.subarray(i, i + step));
   }
-  if(bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff){
-    return new TextDecoder("utf-16be").decode(bytes);
-  }
-  let text = new TextDecoder("utf-8").decode(bytes);
-  const replacementCount = (text.match(/�/g) || []).length;
-  if(replacementCount > Math.max(20, text.length * 0.01)){
-    try{
-      const alt = new TextDecoder("windows-949").decode(bytes);
-      if((alt.match(/�/g) || []).length < replacementCount) text = alt;
-    }catch(_err){}
-  }
-  return text.replace(/^\uFEFF/, "");
+  return out;
 }
+function binaryStringToBytes(str){
+  const s = String(str || "");
+  const bytes = new Uint8Array(s.length);
+  for(let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i) & 0xff;
+  return bytes;
+}
+function mimeAsciiHead(bytes){
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  return bytesToBinaryString(arr.subarray(0, Math.min(arr.length, 65536)));
+}
+function normalizeCharsetLabel(label){
+  const raw = String(label || "").trim().replace(/^['\"]|['\"]$/g, "").toLowerCase();
+  if(!raw) return "";
+  const aliases = {
+    "utf8":"utf-8",
+    "utf_8":"utf-8",
+    "unicode":"utf-16le",
+    "utf16":"utf-16le",
+    "utf-16":"utf-16le",
+    "utf16le":"utf-16le",
+    "utf16be":"utf-16be",
+    "cp949":"windows-949",
+    "x-windows-949":"windows-949",
+    "ks_c_5601-1987":"euc-kr",
+    "ks_c_5601-1989":"euc-kr",
+    "ksc5601":"euc-kr",
+    "ksc_5601":"euc-kr",
+    "gb2312":"gb18030",
+    "gbk":"gb18030",
+    "x-gbk":"gb18030",
+    "sjis":"shift_jis",
+    "shift-jis":"shift_jis",
+    "x-sjis":"shift_jis",
+    "ms932":"shift_jis"
+  };
+  return aliases[raw] || raw;
+}
+function uniqueList(list){
+  const seen = new Set();
+  return (list || []).filter(v => {
+    const key = normalizeCharsetLabel(v);
+    if(!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map(normalizeCharsetLabel);
+}
+function decodedTextScore(text){
+  const s = String(text || "");
+  let score = 0;
+  score += (s.match(/\uFFFD/g) || []).length * 100000;
+  score += (s.match(/\u0000/g) || []).length * 10000;
+  score += (s.match(/[\u0001-\u0008\u000B\u000C\u000E-\u001F]/g) || []).length * 2000;
+  score += (s.match(/[ÃÂìëíê]/g) || []).length * 25;
+  score -= (s.match(/<html\b|<body\b|<div\b|<p\b/gi) || []).length * 100;
+  score -= Math.min((s.match(/[\uAC00-\uD7A3]/g) || []).length, 2000);
+  return score;
+}
+function decodeBytesWithCharset(bytes, charsetHint){
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  const bom = arr.length >= 2 && arr[0] === 0xff && arr[1] === 0xfe ? "utf-16le" :
+    arr.length >= 2 && arr[0] === 0xfe && arr[1] === 0xff ? "utf-16be" :
+    arr.length >= 3 && arr[0] === 0xef && arr[1] === 0xbb && arr[2] === 0xbf ? "utf-8" : "";
+  const candidates = uniqueList([bom, charsetHint, "utf-8", "utf-16le", "utf-16be", "windows-949", "euc-kr", "gb18030", "big5", "shift_jis", "windows-1252"]);
+  let best = "";
+  let bestScore = Infinity;
+  candidates.forEach(label => {
+    try{
+      const decoded = new TextDecoder(label).decode(arr).replace(/^\uFEFF/, "");
+      const score = decodedTextScore(decoded);
+      if(score < bestScore){ best = decoded; bestScore = score; }
+    }catch(_err){}
+  });
+  return best || new TextDecoder("utf-8").decode(arr).replace(/^\uFEFF/, "");
+}
+function extractCharsetFromHeaders(headers){
+  const h = String(headers || "").replace(/\r?\n[ \t]+/g, " ");
+  const m = h.match(/charset\s*=\s*(?:"([^"]+)"|'([^']+)'|([^;\s]+))/i);
+  return normalizeCharsetLabel((m && (m[1] || m[2] || m[3])) || "");
+}
+function extractCharsetFromHtml(text){
+  const s = String(text || "");
+  const direct = s.match(/<meta\s+[^>]*charset\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s"'>;]+))/i);
+  if(direct) return normalizeCharsetLabel(direct[1] || direct[2] || direct[3] || "");
+  const httpEquiv = s.match(/<meta\s+[^>]*http-equiv\s*=\s*(?:"content-type"|'content-type'|content-type)[^>]*content\s*=\s*(?:"([^"]+)"|'([^']+)'|([^>\s]+))/i);
+  return httpEquiv ? extractCharsetFromHeaders("Content-Type: " + (httpEquiv[1] || httpEquiv[2] || httpEquiv[3] || "")) : "";
+}
+function decodeBytesSmart(bytes){
+  return decodeBytesWithCharset(bytes, "");
+}
+
 async function loadChatFile(){
   const file = chatFileInput.files && chatFileInput.files[0];
   if(!file) return;
@@ -1857,6 +2055,8 @@ async function loadChatFile(){
     const buffer = await readFileAsArrayBuffer(file);
     const bytes = new Uint8Array(buffer);
     const lowerName = (file.name || "").toLowerCase();
+    const mimeHead = mimeAsciiHead(bytes);
+    const looksMHT = /\.(mht|mhtml)$/i.test(lowerName) || /MIME-Version:\s*1\.0/i.test(mimeHead) || /Content-Type:\s*multipart\/related/i.test(mimeHead);
 
     if(isZipBytes(bytes) || /\.zip$/i.test(lowerName)){
       chatFileInput.value = "";
@@ -1864,10 +2064,9 @@ async function loadChatFile(){
       return;
     }
 
-    const raw = decodeBytesSmart(bytes);
-    const looksMHT = /\.(mht|mhtml)$/i.test(lowerName) || /MIME-Version:\s*1\.0/i.test(raw) || /Content-Type:\s*multipart\/related/i.test(raw);
-    const looksHTML = /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span)\b/i.test(raw);
-    const looksStructuredMarkdown = /<!--\s*rofan:/i.test(raw) || /\.(md|markdown)$/i.test(lowerName);
+    const raw = looksMHT ? "" : decodeBytesSmart(bytes);
+    const looksHTML = !looksMHT && /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span)\b/i.test(raw);
+    const looksStructuredMarkdown = !looksMHT && (/<!--\s*rofan:/i.test(raw) || /\.(md|markdown)$/i.test(lowerName));
     const allowedExt = /\.(mht|mhtml|html|htm|md|markdown|txt)$/i.test(lowerName);
 
     if(!allowedExt && !looksMHT && !looksHTML && !looksStructuredMarkdown){
@@ -1877,15 +2076,17 @@ async function loadChatFile(){
     }
 
     let sanitized = "";
-    if(looksStructuredMarkdown){
-      sanitized = structuredMarkdownToHtml(raw) || plainTextToHtml(raw);
-    }else if(looksMHT || looksHTML){
-      const html = looksMHT ? extractHTMLFromMHT(raw) : raw;
+    if(looksMHT){
+      const html = extractHTMLFromMHTBytes(bytes) || extractHTMLFromMHT(decodeBytesSmart(bytes));
       if(!html || !looksLikeHTML(html)){
         showToast("파일 안에서 HTML 채팅 내용을 찾지 못했습니다.");
         return;
       }
       sanitized = sanitizePastedHTML(extractLikelyChatHTML(html));
+    }else if(looksStructuredMarkdown){
+      sanitized = structuredMarkdownToHtml(raw) || plainTextToHtml(raw);
+    }else if(looksHTML){
+      sanitized = sanitizePastedHTML(extractLikelyChatHTML(raw));
     }else{
       sanitized = plainTextToHtml(raw);
     }
@@ -1907,8 +2108,77 @@ async function loadChatFile(){
     showToast("파일을 읽지 못했습니다.");
   }
 }
+
 function looksLikeHTML(text){
   return /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span|br|i|em|details|table)\b/i.test(String(text || ""));
+}
+function decodeBase64Bytes(str){
+  const cleaned = String(str || "").replace(/[^A-Za-z0-9+/=]/g, "");
+  if(!cleaned) return new Uint8Array();
+  const binary = atob(cleaned);
+  const bytes = new Uint8Array(binary.length);
+  for(let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i) & 0xff;
+  return bytes;
+}
+function decodeQuotedPrintableBytes(str){
+  const qp = String(str || "").replace(/=\r?\n/g, "");
+  const bytes = [];
+  for(let i = 0; i < qp.length; i++){
+    if(qp[i] === "=" && /^[0-9a-fA-F]{2}$/.test(qp.slice(i + 1, i + 3))){
+      bytes.push(parseInt(qp.slice(i + 1, i + 3), 16));
+      i += 2;
+    }else{
+      bytes.push(qp.charCodeAt(i) & 0xff);
+    }
+  }
+  return Uint8Array.from(bytes);
+}
+function decodeMimeBody(headers, bodyBinary){
+  const unfolded = String(headers || "").replace(/\r?\n[ \t]+/g, " ");
+  const encMatch = unfolded.match(/Content-Transfer-Encoding:\s*([^\r\n;]+)/i);
+  const enc = encMatch ? encMatch[1].trim().toLowerCase() : "";
+  const headerCharset = extractCharsetFromHeaders(unfolded);
+  let bodyBytes;
+  if(enc.includes("base64")) bodyBytes = decodeBase64Bytes(bodyBinary);
+  else if(enc.includes("quoted-printable")) bodyBytes = decodeQuotedPrintableBytes(bodyBinary);
+  else bodyBytes = binaryStringToBytes(bodyBinary);
+
+  let decoded = decodeBytesWithCharset(bodyBytes, headerCharset);
+  if(!headerCharset){
+    const metaCharset = extractCharsetFromHtml(decoded);
+    if(metaCharset) decoded = decodeBytesWithCharset(bodyBytes, metaCharset);
+  }
+  return decoded.replace(/^\uFEFF/, "");
+}
+function extractHTMLFromMHTBytes(bytes){
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  if(!arr.length) return "";
+  const binary = bytesToBinaryString(arr);
+  const head = binary.slice(0, Math.min(binary.length, 131072)).replace(/\r?\n[ \t]+/g, " ");
+  const boundaryMatch = head.match(/boundary=(?:"([^"]+)"|([^;\r\n]+))/i);
+  if(!boundaryMatch) return "";
+  const boundary = (boundaryMatch[1] || boundaryMatch[2] || "").trim();
+  if(!boundary) return "";
+  const parts = binary.split("--" + boundary);
+  const htmlParts = [];
+  for(const part of parts){
+    const sepMatch = part.match(/\r?\n\r?\n/);
+    if(!sepMatch) continue;
+    const sepIndex = sepMatch.index;
+    const sepLength = sepMatch[0].length;
+    const headers = part.slice(0, sepIndex).replace(/^\r?\n/, "");
+    const unfolded = headers.replace(/\r?\n[ \t]+/g, " ");
+    if(!/Content-Type:\s*text\/html\b/i.test(unfolded)) continue;
+    let bodyBinary = part.slice(sepIndex + sepLength);
+    bodyBinary = bodyBinary.replace(/\r?\n--\s*$/g, "");
+    const body = decodeMimeBody(headers, bodyBinary);
+    if(body) htmlParts.push(body);
+  }
+  if(htmlParts.length){
+    htmlParts.sort((a,b) => scoreHTMLPart(b) - scoreHTMLPart(a));
+    return htmlParts[0];
+  }
+  return "";
 }
 function extractHTMLFromMHT(raw){
   const text = String(raw || "");
@@ -1923,13 +2193,14 @@ function extractHTMLFromMHT(raw){
       const sepIndex = sepMatch.index;
       const sepLength = sepMatch[0].length;
       const headers = part.slice(0, sepIndex);
-      if(!/Content-Type:\s*text\/html\b/i.test(headers)) continue;
-      let body = part.slice(sepIndex + sepLength);
-      body = body.replace(/\r?\n--\s*$/g, "");
-      const encMatch = headers.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i);
+      const unfolded = headers.replace(/\r?\n[ \t]+/g, " ");
+      if(!/Content-Type:\s*text\/html\b/i.test(unfolded)) continue;
+      let body = part.slice(sepIndex + sepLength).replace(/\r?\n--\s*$/g, "");
+      const encMatch = unfolded.match(/Content-Transfer-Encoding:\s*([^\r\n;]+)/i);
       const enc = encMatch ? encMatch[1].trim().toLowerCase() : "";
-      if(enc.includes("base64")) body = decodeBase64UTF8(body);
-      else if(enc.includes("quoted-printable")) body = decodeQuotedPrintableUTF8(body);
+      const charset = extractCharsetFromHeaders(unfolded);
+      if(enc.includes("base64")) body = decodeBytesWithCharset(decodeBase64Bytes(body), charset);
+      else if(enc.includes("quoted-printable")) body = decodeBytesWithCharset(decodeQuotedPrintableBytes(body), charset);
       htmlParts.push(body);
     }
     if(htmlParts.length){
@@ -1947,35 +2218,17 @@ function scoreHTMLPart(part){
   if(/<!doctype\s+html|<html\b/i.test(s)) score += 500000;
   score += (s.match(/data-narration/gi) || []).length * 1000;
   score += (s.match(/class=["'][^"']*mt-1/gi) || []).length * 1000;
+  score -= decodedTextScore(s);
   return score;
 }
 function decodeBase64UTF8(str){
-  const cleaned = String(str || "").replace(/\s+/g, "");
-  const binary = atob(cleaned);
-  const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
-  return new TextDecoder("utf-8").decode(bytes);
+  return decodeBytesWithCharset(decodeBase64Bytes(str), "utf-8");
 }
 function decodeQuotedPrintableUTF8(str){
-  const qp = String(str || "").replace(/=\r?\n/g, "");
-  const bytes = [];
-  for(let i=0; i<qp.length; i++){
-    if(qp[i] === "=" && /^[0-9a-fA-F]{2}$/.test(qp.slice(i+1, i+3))){
-      bytes.push(parseInt(qp.slice(i+1, i+3), 16));
-      i += 2;
-    }else{
-      const code = qp.charCodeAt(i);
-      if(code <= 0xff) bytes.push(code);
-      else{
-        const encoded = new TextEncoder().encode(qp[i]);
-        encoded.forEach(b => bytes.push(b));
-      }
-    }
-  }
-  return new TextDecoder("utf-8").decode(Uint8Array.from(bytes));
+  return decodeBytesWithCharset(decodeQuotedPrintableBytes(str), "utf-8");
 }
 function extractLikelyChatHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
-  markDetailsElements(doc.body || doc);
   const scoreContainer = (el) => {
     if(!el) return 0;
     const textLen = (el.innerText || el.textContent || "").length;
@@ -2035,7 +2288,6 @@ function handleRichPaste(e){
 }
 function sanitizePastedHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
-  markDetailsElements(doc.body || doc);
   doc.querySelectorAll("script,style,meta,link,iframe,object,embed").forEach(n => n.remove());
   doc.body.querySelectorAll("*").forEach(el => {
     [...el.attributes].forEach(attr => {
@@ -2358,7 +2610,6 @@ function parseRofanChatChunks(root){
   const pushChunksFromElement = (el, baseOwner) => {
     const blockId = getElementBlockId(el) || ("b" + (blockSeq++));
     const baseKind = getElementKindHint(el);
-    const baseFromDetails = isInsideDetailsElement(el);
     const start = chunks.length;
     let buffer = "";
     let bufferKind = null;
@@ -2432,7 +2683,7 @@ function parseRofanChatChunks(root){
         italic: ctx.italic || isItalicElement(childEl),
         kind: getElementKindHint(childEl) || ctx.kind || "",
         fromTable: ctx.fromTable || isRemovableBlockElement(childEl),
-        fromDetails: ctx.fromDetails || isInsideDetailsElement(childEl),
+        fromDetails: ctx.fromDetails || childEl.tagName === "DETAILS",
         owner: ownerHint || ctx.owner || "",
         color
       };
@@ -2447,7 +2698,7 @@ function parseRofanChatChunks(root){
       italic: isItalicElement(el),
       kind: baseKind || "",
       fromTable: isRemovableBlockElement(el),
-      fromDetails: baseFromDetails,
+      fromDetails: el.tagName === "DETAILS",
       owner: baseOwner || getElementOwnerHint(el, getInlineColor(el)) || "",
       color: getInlineColor(el) || ""
     }));
@@ -2998,8 +3249,17 @@ function countSimpleSentences(text){
   const parts = String(text || "").split(/[.!?。！？\n]+/).map(s => s.trim()).filter(Boolean);
   return Math.max(1, parts.length || 0);
 }
+function normalizeOocMarkerText(text){
+  return String(text || "")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\u00a0/g, " ");
+}
+function containsOocMarker(text){
+  return /ooc/i.test(normalizeOocMarkerText(text));
+}
 function isOocPrompt(text){
-  return /ooc/i.test(String(text || ""));
+  return containsOocMarker(text);
 }
 function isTrivialContinuationPrompt(text){
   const t = normalizeParagraphText(text || "");
@@ -3020,7 +3280,7 @@ function stripBracketedOocText(text){
   t = stripInline(t);
   const paragraphs = t.split(/\n\s*\n/).map(part => {
     const cleaned = stripInline(part).trim();
-    if(/ooc/i.test(cleaned)) return "";
+    if(containsOocMarker(cleaned)) return "";
     return cleaned;
   }).filter(Boolean);
   return paragraphs.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -3249,11 +3509,6 @@ function renderChunks(chunks, options){
     }
     if(!t) return "";
 
-    if(removeDetailsEl && removeDetailsEl.checked){
-      t = stripDetailsSegmentsFromText(t, tokens, {open:false});
-      if(!t) return "";
-    }
-
     if(removeHTMLEl.checked){
       t = t.replace(/<script[\s\S]*?<\/script>/gi,"");
       t = t.replace(/<style[\s\S]*?<\/style>/gi,"");
@@ -3361,14 +3616,14 @@ function transformText(){
     const oocDropBlockIds = getDroppedBlockIdsFromOocDecisions(oocItems);
     const oocStripMap = getOocStripMap(oocItems);
     const dropBlockIds = mergeSets(duplicateDropBlockIds, oocDropBlockIds);
-    const detailChunks = applyDetailsRemovalToChunks(parsed.chunks);
-    const structuralPlan = createStructuralDeletePlan(detailChunks, dropBlockIds);
+    const rangeAdjustedChunks = applyMiddleRangeDeletesToChunks(parsed.chunks);
+    const structuralPlan = createStructuralDeletePlan(rangeAdjustedChunks, dropBlockIds);
 
     const deleteTokens = getDeleteContainsTokens();
-    const containsItems = buildContainsReviewItems(detailChunks, dropBlockIds, deleteTokens, structuralPlan.dropChunkIds);
+    const containsItems = buildContainsReviewItems(rangeAdjustedChunks, dropBlockIds, deleteTokens, structuralPlan.dropChunkIds);
     updateContainsReviewPanel(containsItems);
 
-    const renderedPack = renderChunks(detailChunks, {
+    const renderedPack = renderChunks(rangeAdjustedChunks, {
       removeTables: removeTablesEl.checked,
       deleteTokens,
       deleteContainsMode: deleteContainsModeEl.value,
@@ -3382,7 +3637,7 @@ function transformText(){
     const rendered = renderedPack.text;
     lastStructuredItems = renderedPack.items || [];
     setResultOutput(chatOutput, rendered);
-    afterTransform(detailChunks, parsed.blocks, rendered);
+    afterTransform(rangeAdjustedChunks, parsed.blocks, rendered);
     return;
   }
 
@@ -3409,18 +3664,18 @@ function transformText(){
     text = text.replace(/__(.*?)__/g,"$1");
   }
 
-  const baseChunks = (classicActiveChunks && classicActiveChunks.length) ? cloneChunks(classicActiveChunks) : (structuredChunks || parseChunks(text));
-  const chunks = applyDetailsRemovalToChunks(baseChunks);
+  const chunks = (classicActiveChunks && classicActiveChunks.length) ? cloneChunks(classicActiveChunks) : (structuredChunks || parseChunks(text));
+  const rangeAdjustedChunks = applyMiddleRangeDeletesToChunks(chunks);
   const deleteTokens = getDeleteContainsTokens();
   currentDuplicateGroups = [];
   duplicateReviewPanel.classList.add("hidden");
   duplicateReviewPanel.innerHTML = "";
   if(oocReviewPanel){ oocReviewPanel.classList.add("hidden"); oocReviewPanel.innerHTML = ""; }
   const emptyDrop = new Set();
-  const structuralPlan = createStructuralDeletePlan(chunks, emptyDrop);
-  const containsItems = buildContainsReviewItems(chunks, emptyDrop, deleteTokens, structuralPlan.dropChunkIds);
+  const structuralPlan = createStructuralDeletePlan(rangeAdjustedChunks, emptyDrop);
+  const containsItems = buildContainsReviewItems(rangeAdjustedChunks, emptyDrop, deleteTokens, structuralPlan.dropChunkIds);
   updateContainsReviewPanel(containsItems);
-  const renderedPack = renderChunks(chunks, {
+  const renderedPack = renderChunks(rangeAdjustedChunks, {
     removeTables: removeTablesEl.checked,
     deleteTokens,
     deleteContainsMode: deleteContainsModeEl.value,
@@ -3433,7 +3688,7 @@ function transformText(){
   const rendered = renderedPack.text;
   lastStructuredItems = renderedPack.items || [];
   setResultOutput(output, rendered);
-  afterTransform(chunks, [], rendered);
+  afterTransform(rangeAdjustedChunks, [], rendered);
 }
 
 // ------------------ UI ------------------
@@ -3506,6 +3761,8 @@ function clearAll(){
   oocGroupPage = 0;
   oocFilterText = "";
   oocOrderQuery = "";
+  middleRangeRules = [createMiddleRangeRule()];
+  renderMiddleRangePanel();
   chapterKeywordQuery = "";
   chapterOrderQuery = "";
   chapterMatchPage = 0;
@@ -3623,7 +3880,7 @@ function updateResultStats(chunks, blocks, renderedText){
     workflowHintEl.textContent = missing;
   }
 }
-const RISK_TERMS = ["OOC", "시스템", "기록지", "설정", "요약", "이전 대화", "AI", "모델", "검열", "�"];
+const RISK_TERMS = ["OOC", "시스템", "기록지", "설정", "요약", "이전 대화", "AI", "모델", "검열", "�", "제3자 개입", "분위기 반전", "복선 회수", "상황 주도", "장면 전환", "시간 경과", "사건 발생", "이어서 진행"];
 function countTermInsensitive(text, term){
   const hay = String(text || "").toLowerCase();
   const needle = String(term || "").toLowerCase();
@@ -4080,7 +4337,8 @@ function parseHtmlToRofanChunks(html){
   holder.innerHTML = sanitizePastedHTML(extractLikelyChatHTML(String(html || '')));
   return parseRofanChatChunks(holder).chunks || [];
 }
-function fileContentToChunks(raw, fileName){
+
+function fileContentToChunks(raw, fileName, bytes){
   const lower = String(fileName || '').toLowerCase();
   const text = String(raw || '');
   if(/\.(md|markdown)$/i.test(lower) || /<!--\s*rofan:/i.test(text)){
@@ -4088,7 +4346,7 @@ function fileContentToChunks(raw, fileName){
     if(chunks && chunks.length) return chunks;
   }
   if(/\.(mht|mhtml)$/i.test(lower) || /MIME-Version:\s*1\.0/i.test(text) || /Content-Type:\s*multipart\/related/i.test(text)){
-    const html = extractHTMLFromMHT(text);
+    const html = bytes ? (extractHTMLFromMHTBytes(bytes) || extractHTMLFromMHT(text)) : extractHTMLFromMHT(text);
     const chunks = parseHtmlToRofanChunks(html);
     if(chunks && chunks.length) return chunks;
   }
@@ -4309,6 +4567,7 @@ function collectPresetValues(){
     if(!el) return;
     data[id] = el.type === "checkbox" ? el.checked : el.value;
   });
+  data.middleRangeRules = sanitizeMiddleRangeRules(middleRangeRules);
   return data;
 }
 function refreshColorWidgets(){
@@ -4324,6 +4583,8 @@ function applyPresetValues(data){
     if(el.type === "checkbox") el.checked = !!value;
     else el.value = value;
   });
+  if(data && Object.prototype.hasOwnProperty.call(data, "middleRangeRules")) middleRangeRules = sanitizeMiddleRangeRules(data.middleRangeRules);
+  renderMiddleRangePanel();
   refreshColorWidgets();
 }
 function saveCurrentPreset(){
@@ -4368,17 +4629,24 @@ function editorPlainText(el){
   if(!el) return "";
   return (el.innerText || el.textContent || "").replace(/\u00a0/g," ").trim();
 }
+
 async function readFileAsTextSmart(file){
   const buffer = await readFileAsArrayBuffer(file);
   const bytes = new Uint8Array(buffer);
   return decodeBytesSmart(bytes);
 }
+async function readFileAsBytesAndText(file){
+  const buffer = await readFileAsArrayBuffer(file);
+  const bytes = new Uint8Array(buffer);
+  return {bytes, text:decodeBytesSmart(bytes)};
+}
 async function loadClassicFile(){
   const file = classicFileInput && classicFileInput.files && classicFileInput.files[0];
   if(!file) return;
   try{
-    const raw = await readFileAsTextSmart(file);
-    const chunks = fileContentToChunks(raw, file.name || "");
+    const fileData = await readFileAsBytesAndText(file);
+    const raw = fileData.text;
+    const chunks = fileContentToChunks(raw, file.name || "", fileData.bytes);
     if(chunks && chunks.length){
       classicLoadedChunks = chunks;
       classicLoadedFileText = chunksDisplayText(chunks);
@@ -4868,6 +5136,7 @@ function chapterBodyToXhtml(ch){
 window.addEventListener("resize", () => requestAnimationFrame(syncActiveResultHeight));
 restoreSavedWork();
 refreshColorWidgets();
+renderMiddleRangePanel();
 syncResultPreview(output);
 syncResultPreview(chatOutput);
 requestAnimationFrame(syncActiveResultHeight);
@@ -7428,5 +7697,6 @@ requestAnimationFrame(syncActiveResultHeight);
 })();
 
 </script>
+<script src="rofan-mobile-export.js"></script>
 </body>
 </html>
