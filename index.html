@@ -1591,68 +1591,133 @@ function isTableLikeText(t){
   return false;
 }
 
-// ------------------ details 제거 (되돌리기 가능, 보호 키워드 줄 단위 보존) ------------------
-function normalizeDetailsTagText(value){
+// ------------------ details 제거 (원본 보존, 결과 단계 삭제 + 보호어 줄 단위 보존) ------------------
+function normalizeDetailsTagDelimiters(value){
   return String(value || "")
+    .replace(/&lt;\s*(\/?)\s*(details\b[^&<>]*?)&gt;/gi, function(_m, slash, body){ return "<" + (slash || "") + body.trim() + ">"; })
+    .replace(/&lt;\s*(\/?)\s*(summary\b[^&<>]*?)&gt;/gi, function(_m, slash, body){ return "<" + (slash || "") + body.trim() + ">"; });
+}
+function detailsLineToPlain(value){
+  const holder = document.createElement("div");
+  holder.innerHTML = String(value || "")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/p\s*>/gi, "\n")
+    .replace(/<\/div\s*>/gi, "\n");
+  return (holder.innerText || holder.textContent || String(value || ""))
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#039;|&apos;/gi, "'");
+    .replace(/&amp;/gi, "&")
+    .replace(/\r/g, "")
+    .trim();
 }
-function removeDetailsSyntax(value){
-  return normalizeDetailsTagText(value)
-    .replace(/<summary\b[^>]*>[\s\S]*?<\/summary\s*>/gi, "")
-    .replace(/<\/?(?:details|summary)\b[^>]*>/gi, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\u00a0/g, " ");
-}
-function keepProtectedLinesFromDetailsText(value, tokens){
+function protectedLinesFromDetailsText(value, tokens){
   if(!tokens || !tokens.length) return "";
-  const cleaned = removeDetailsSyntax(value);
-  const lines = cleaned
-    .split(/\n+/)
-    .map(line => line.replace(/[ \t]+/g, " ").trim())
+  let inner = normalizeDetailsTagDelimiters(value)
+    .replace(/<summary\b[^>]*>[\s\S]*?<\/summary\s*>/gi, function(summary){
+      return "\n" + summary.replace(/<\/?summary\b[^>]*>/gi, "") + "\n";
+    })
+    .replace(/<\/?(?:details|summary)\b[^>]*>/gi, "\n");
+  inner = inner
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/p\s*>/gi, "\n")
+    .replace(/<\/div\s*>/gi, "\n");
+  const lines = inner.split(/\n+/)
+    .map(detailsLineToPlain)
+    .map(line => line.trim())
     .filter(Boolean);
-  const kept = lines.filter(line => isProtectedText(line, tokens));
-  return kept.join("\n");
+  return lines.filter(line => isProtectedText(line, tokens)).join("\n\n");
 }
-function stripDetailsRangesPreserveProtectedLines(value, tokens){
-  let s = normalizeDetailsTagText(value);
-  if(!/<details\b/i.test(s)) return String(value || "");
-  s = s.replace(/<details\b[^>]*>[\s\S]*?<\/details\s*>/gi, block => {
-    const kept = keepProtectedLinesFromDetailsText(block, tokens);
-    return kept ? "\n" + kept + "\n" : "";
-  });
-  // 한 응답 셀/chunk 안에서 닫히지 않은 details는 그 지점부터 chunk 끝까지 접힘 영역으로 봅니다.
-  s = s.replace(/<details\b[^>]*>[\s\S]*$/gi, block => {
-    const kept = keepProtectedLinesFromDetailsText(block, tokens);
-    return kept ? "\n" + kept : "";
-  });
-  return s
-    .replace(/^\s*<\/?details\b[^>]*>\s*$/gim, "")
-    .replace(/^\s*<summary\b[^>]*>[\s\S]*?<\/summary\s*>\s*$/gim, "")
+function appendDetailsKept(out, hidden, tokens){
+  const kept = protectedLinesFromDetailsText(hidden, tokens);
+  if(!kept) return out;
+  return out + (out && !/\n\n$/.test(out) ? "\n\n" : "") + kept + "\n\n";
+}
+function stripDetailsSegmentsFromText(value, tokens, state){
+  let src = normalizeDetailsTagDelimiters(value);
+  if(!src) return "";
+  const tagRe = /<\/?(?:details|summary)\b[^>]*>/gi;
+  let out = "";
+  let hidden = "";
+  let idx = 0;
+  let inDetails = !!(state && state.open);
+  let match;
+  while((match = tagRe.exec(src))){
+    const tag = match[0];
+    const before = src.slice(idx, match.index);
+    const lower = tag.toLowerCase();
+    if(inDetails) hidden += before;
+    else out += before;
+
+    if(/^<details\b/i.test(tag)){
+      if(!inDetails){
+        inDetails = true;
+        hidden = "";
+      }else{
+        hidden += tag;
+      }
+    }else if(/^<\/details/i.test(tag)){
+      if(inDetails){
+        out = appendDetailsKept(out, hidden, tokens);
+        hidden = "";
+        inDetails = false;
+      }
+      // details 닫힘 태그 자체는 항상 버립니다.
+    }else{
+      // summary 태그는 접힘 토큰의 일부라서 밖에 있어도 버리고, 안에 있으면 보호어 판정용 숨김 버퍼에만 둡니다.
+      if(inDetails) hidden += tag;
+    }
+    idx = tagRe.lastIndex;
+  }
+  const tail = src.slice(idx);
+  if(inDetails){
+    hidden += tail;
+    out = appendDetailsKept(out, hidden, tokens);
+  }else{
+    out += tail;
+  }
+  if(state) state.open = inDetails;
+  return out
+    .replace(/^\s*<\/?summary\b[^>]*>.*?<\/summary\s*>\s*$/gim, "")
+    .replace(/^\s*<\/?(?:details|summary)\b[^>]*>\s*$/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 function filterDetailsByProtection(text, tokens){
-  return stripDetailsRangesPreserveProtectedLines(text, tokens);
+  return stripDetailsSegmentsFromText(text, tokens || getProtectTokens(), {open:false});
 }
-function isElementInsideDetails(el){
-  return !!(el && el.nodeType === Node.ELEMENT_NODE && (
-    el.tagName === "DETAILS" ||
-    (el.closest && el.closest("details")) ||
-    (el.getAttribute && el.getAttribute("data-rofan-from-details") === "1") ||
-    (el.closest && el.closest('[data-rofan-from-details="1"]'))
-  ));
+function isDetailsMarkedElement(el){
+  if(!el || el.nodeType !== 1) return false;
+  if(el.tagName === "DETAILS") return true;
+  if(el.getAttribute && el.getAttribute("data-rofan-from-details") === "1") return true;
+  return !!(el.closest && el.closest("details,[data-rofan-from-details='1']"));
 }
-function markDetailsForExtraction(root){
-  if(!root || !root.querySelectorAll) return root;
-  root.querySelectorAll("details").forEach(details => {
-    details.setAttribute("data-rofan-from-details", "1");
-    details.querySelectorAll("*").forEach(child => child.setAttribute("data-rofan-from-details", "1"));
+function markDetailsElements(root){
+  if(!root || !root.querySelectorAll) return;
+  root.querySelectorAll("details, details *").forEach(function(el){
+    try{ el.setAttribute("data-rofan-from-details", "1"); }catch(_err){}
   });
-  return root;
 }
-
+function applyDetailsRemovalToChunks(chunks){
+  if(!removeDetailsEl || !removeDetailsEl.checked) return chunks || [];
+  const tokens = getProtectTokens();
+  const out = [];
+  const state = {open:false};
+  (chunks || []).forEach(function(chunk){
+    if(!chunk) return;
+    const next = Object.assign({}, chunk);
+    if(next.fromDetails){
+      next.text = protectedLinesFromDetailsText(next.text || "", tokens);
+      next.fromDetails = false;
+      state.open = false;
+    }else{
+      next.text = stripDetailsSegmentsFromText(next.text || "", tokens, state);
+    }
+    if(String(next.text || "").trim()) out.push(next);
+  });
+  return out;
+}
 // ------------------ 별표 지문 파서(기존 로그용) ------------------
 function parseChunks(text){
   const s=(text||"").replace(/\r/g,"");
@@ -1910,7 +1975,7 @@ function decodeQuotedPrintableUTF8(str){
 }
 function extractLikelyChatHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
-  markDetailsForExtraction(doc.body);
+  markDetailsElements(doc.body || doc);
   const scoreContainer = (el) => {
     if(!el) return 0;
     const textLen = (el.innerText || el.textContent || "").length;
@@ -1970,6 +2035,7 @@ function handleRichPaste(e){
 }
 function sanitizePastedHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
+  markDetailsElements(doc.body || doc);
   doc.querySelectorAll("script,style,meta,link,iframe,object,embed").forEach(n => n.remove());
   doc.body.querySelectorAll("*").forEach(el => {
     [...el.attributes].forEach(attr => {
@@ -2279,7 +2345,7 @@ function collectRofanContentBlocks(root){
         blocks.splice(i, 1);
       }
     }
-    blocks.push({el, owner, index, fromDetails: isElementInsideDetails(el)});
+    blocks.push({el, owner, index});
   });
   return blocks;
 }
@@ -2289,10 +2355,10 @@ function parseRofanChatChunks(root){
   let chunkSeq = 0;
   let blockSeq = 0;
 
-  const pushChunksFromElement = (el, baseOwner, inheritedFromDetails) => {
-    const elementFromDetails = !!inheritedFromDetails || isElementInsideDetails(el);
+  const pushChunksFromElement = (el, baseOwner) => {
     const blockId = getElementBlockId(el) || ("b" + (blockSeq++));
     const baseKind = getElementKindHint(el);
+    const baseFromDetails = isInsideDetailsElement(el);
     const start = chunks.length;
     let buffer = "";
     let bufferKind = null;
@@ -2366,7 +2432,7 @@ function parseRofanChatChunks(root){
         italic: ctx.italic || isItalicElement(childEl),
         kind: getElementKindHint(childEl) || ctx.kind || "",
         fromTable: ctx.fromTable || isRemovableBlockElement(childEl),
-        fromDetails: ctx.fromDetails || isElementInsideDetails(childEl),
+        fromDetails: ctx.fromDetails || isInsideDetailsElement(childEl),
         owner: ownerHint || ctx.owner || "",
         color
       };
@@ -2381,7 +2447,7 @@ function parseRofanChatChunks(root){
       italic: isItalicElement(el),
       kind: baseKind || "",
       fromTable: isRemovableBlockElement(el),
-      fromDetails: elementFromDetails,
+      fromDetails: baseFromDetails,
       owner: baseOwner || getElementOwnerHint(el, getInlineColor(el)) || "",
       color: getInlineColor(el) || ""
     }));
@@ -2389,7 +2455,7 @@ function parseRofanChatChunks(root){
 
     const blockText = chunks.slice(start).map(c => c.text).join("\n\n").trim();
     if(blockText){
-      blocks.push({id:blockId, owner:baseOwner || "", text:blockText, startChunk:start, endChunk:chunks.length, fromDetails: elementFromDetails});
+      blocks.push({id:blockId, owner:baseOwner || "", text:blockText, startChunk:start, endChunk:chunks.length});
     }else{
       chunks.splice(start);
     }
@@ -2397,9 +2463,9 @@ function parseRofanChatChunks(root){
 
   const semanticBlocks = collectRofanContentBlocks(root);
   if(semanticBlocks.length){
-    semanticBlocks.forEach(block => pushChunksFromElement(block.el, block.owner, block.fromDetails));
+    semanticBlocks.forEach(block => pushChunksFromElement(block.el, block.owner));
   }else{
-    pushChunksFromElement(root, "", isElementInsideDetails(root));
+    pushChunksFromElement(root, "");
   }
 
   const mergedBlocks = mergeRofanBlocksById(blocks, chunks);
@@ -3183,13 +3249,8 @@ function renderChunks(chunks, options){
     }
     if(!t) return "";
 
-    if(removeDetailsEl.checked){
-      if(fromDetails){
-        t = keepProtectedLinesFromDetailsText(t, tokens);
-      }else{
-        t = stripDetailsRangesPreserveProtectedLines(t, tokens);
-      }
-      t = String(t || "").trim();
+    if(removeDetailsEl && removeDetailsEl.checked){
+      t = stripDetailsSegmentsFromText(t, tokens, {open:false});
       if(!t) return "";
     }
 
@@ -3209,6 +3270,7 @@ function renderChunks(chunks, options){
 
     const protectedHere = isProtectedText(t, tokens);
 
+    if(removeDetailsEl.checked && fromDetails && !protectedHere) return "";
     if(options.removeTables && !protectedHere && (fromTable || isRemovableBlockText(t))) return "";
 
     if(shouldDeleteByContains(t, deleteTokens) && !protectedHere){
@@ -3299,13 +3361,14 @@ function transformText(){
     const oocDropBlockIds = getDroppedBlockIdsFromOocDecisions(oocItems);
     const oocStripMap = getOocStripMap(oocItems);
     const dropBlockIds = mergeSets(duplicateDropBlockIds, oocDropBlockIds);
-    const structuralPlan = createStructuralDeletePlan(parsed.chunks, dropBlockIds);
+    const detailChunks = applyDetailsRemovalToChunks(parsed.chunks);
+    const structuralPlan = createStructuralDeletePlan(detailChunks, dropBlockIds);
 
     const deleteTokens = getDeleteContainsTokens();
-    const containsItems = buildContainsReviewItems(parsed.chunks, dropBlockIds, deleteTokens, structuralPlan.dropChunkIds);
+    const containsItems = buildContainsReviewItems(detailChunks, dropBlockIds, deleteTokens, structuralPlan.dropChunkIds);
     updateContainsReviewPanel(containsItems);
 
-    const renderedPack = renderChunks(parsed.chunks, {
+    const renderedPack = renderChunks(detailChunks, {
       removeTables: removeTablesEl.checked,
       deleteTokens,
       deleteContainsMode: deleteContainsModeEl.value,
@@ -3319,7 +3382,7 @@ function transformText(){
     const rendered = renderedPack.text;
     lastStructuredItems = renderedPack.items || [];
     setResultOutput(chatOutput, rendered);
-    afterTransform(parsed.chunks, parsed.blocks, rendered);
+    afterTransform(detailChunks, parsed.blocks, rendered);
     return;
   }
 
@@ -3346,7 +3409,8 @@ function transformText(){
     text = text.replace(/__(.*?)__/g,"$1");
   }
 
-  const chunks = (classicActiveChunks && classicActiveChunks.length) ? cloneChunks(classicActiveChunks) : (structuredChunks || parseChunks(text));
+  const baseChunks = (classicActiveChunks && classicActiveChunks.length) ? cloneChunks(classicActiveChunks) : (structuredChunks || parseChunks(text));
+  const chunks = applyDetailsRemovalToChunks(baseChunks);
   const deleteTokens = getDeleteContainsTokens();
   currentDuplicateGroups = [];
   duplicateReviewPanel.classList.add("hidden");
@@ -4014,7 +4078,6 @@ function structuredMarkdownToHtml(raw){
 function parseHtmlToRofanChunks(html){
   const holder = document.createElement('div');
   holder.innerHTML = sanitizePastedHTML(extractLikelyChatHTML(String(html || '')));
-  markDetailsForExtraction(holder);
   return parseRofanChatChunks(holder).chunks || [];
 }
 function fileContentToChunks(raw, fileName){
