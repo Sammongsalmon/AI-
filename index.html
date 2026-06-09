@@ -1226,6 +1226,17 @@ const WORK_STORE_NAME = "work";
 const WORK_STATE_KEY = "current";
 const WORK_META_KEY = "rofan-cleaner-work-meta";
 const WORK_FALLBACK_KEY = "rofan-cleaner-work-fallback";
+function safeLocalStorageGet(key){
+  try{ return window.localStorage ? window.localStorage.getItem(key) : null; }catch(_err){ return null; }
+}
+function safeLocalStorageSet(key, value){
+  try{ if(window.localStorage){ window.localStorage.setItem(key, value); return true; } }catch(_err){}
+  return false;
+}
+function safeLocalStorageRemove(key){
+  try{ if(window.localStorage) window.localStorage.removeItem(key); }catch(_err){}
+}
+
 
 function openWorkDB(){
   return new Promise((resolve, reject) => {
@@ -1322,12 +1333,12 @@ async function saveWorkNow(){
   const state = collectWorkValues();
   try{
     await idbPut(WORK_STATE_KEY, state);
-    localStorage.setItem(WORK_META_KEY, JSON.stringify({savedAt: state.savedAt, fileName: cachedChatFileName || "", mode: activeMode}));
+    safeLocalStorageSet(WORK_META_KEY, JSON.stringify({savedAt: state.savedAt, fileName: cachedChatFileName || "", mode: activeMode}));
     updateAutosaveBadge("자동 저장됨");
   }catch(err){
     try{
-      localStorage.setItem(WORK_FALLBACK_KEY, JSON.stringify(state));
-      localStorage.setItem(WORK_META_KEY, JSON.stringify({savedAt: state.savedAt, fileName: cachedChatFileName || "", mode: activeMode, fallback:true}));
+      safeLocalStorageSet(WORK_FALLBACK_KEY, JSON.stringify(state));
+      safeLocalStorageSet(WORK_META_KEY, JSON.stringify({savedAt: state.savedAt, fileName: cachedChatFileName || "", mode: activeMode, fallback:true}));
       updateAutosaveBadge("자동 저장됨");
     }catch(err2){
       console.warn("autosave failed", err, err2);
@@ -1337,7 +1348,7 @@ async function saveWorkNow(){
 }
 function scheduleAutosave(){
   if(isRestoringWork) return;
-  updateAutosaveBadge("저장 중…");
+  try{ updateAutosaveBadge("저장 중…"); }catch(_err){}
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(saveWorkNow, 500);
 }
@@ -1345,7 +1356,7 @@ function updateAutosaveBadge(text){
   const el = document.getElementById("autosaveStatus");
   if(!el) return;
   let suffix = "";
-  const raw = localStorage.getItem(WORK_META_KEY);
+  const raw = safeLocalStorageGet(WORK_META_KEY);
   if(raw){
     try{
       const meta = JSON.parse(raw);
@@ -1371,7 +1382,7 @@ async function restoreSavedWork(){
   let state = null;
   try{ state = await idbGet(WORK_STATE_KEY); }catch(_err){}
   if(!state){
-    const fallback = localStorage.getItem(WORK_FALLBACK_KEY);
+    const fallback = safeLocalStorageGet(WORK_FALLBACK_KEY);
     if(fallback){
       try{ state = JSON.parse(fallback); }catch(_err){}
     }
@@ -1438,8 +1449,8 @@ async function restoreSavedWork(){
 async function clearSavedWork(){
   if(!window.confirm("저장된 작업 캐시를 삭제하시겠습니까? 새로고침 복원 데이터도 함께 지워집니다.")) return;
   try{ await idbDelete(WORK_STATE_KEY); }catch(_err){}
-  localStorage.removeItem(WORK_META_KEY);
-  localStorage.removeItem(WORK_FALLBACK_KEY);
+  safeLocalStorageRemove(WORK_META_KEY);
+  safeLocalStorageRemove(WORK_FALLBACK_KEY);
   cachedChatFileName = "";
   cachedCoverAsset = null;
   updateAutosaveBadge("캐시 삭제됨");
@@ -4330,12 +4341,12 @@ function applyPresetValues(data){
   refreshColorWidgets();
 }
 function saveCurrentPreset(){
-  localStorage.setItem("rofan-cleaner-preset", JSON.stringify(collectPresetValues()));
+  if(!safeLocalStorageSet("rofan-cleaner-preset", JSON.stringify(collectPresetValues()))){ showToast("브라우저 저장소를 사용할 수 없습니다."); return; }
   showToast("현재 옵션을 저장했습니다.");
   scheduleAutosave();
 }
 function loadSavedPreset(){
-  const raw = localStorage.getItem("rofan-cleaner-preset");
+  const raw = safeLocalStorageGet("rofan-cleaner-preset");
   if(!raw){ showToast("저장된 프리셋이 없습니다."); return; }
   try{
     applyPresetValues(JSON.parse(raw));
@@ -4350,7 +4361,7 @@ function loadSavedPreset(){
 }
 function clearSavedPreset(){
   if(!window.confirm("저장된 프리셋을 삭제하시겠습니까?")) return;
-  localStorage.removeItem("rofan-cleaner-preset");
+  safeLocalStorageRemove("rofan-cleaner-preset");
   showToast("저장된 프리셋을 삭제했습니다.");
 }
 function updateFileNameLabel(inputEl, labelEl, emptyText){
