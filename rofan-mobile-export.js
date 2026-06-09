@@ -36,7 +36,7 @@
       id: "rofanMobileExportHelperClassic",
       title: "RofanAi 모바일 간편 백업",
       subtitle: "MHT 없이 .rofan.html 저장",
-      intro: "RofanAi 채팅방에서 실행할 북마클릿 코드를 복사합니다. 전체 로그와 첫 유저 입력 위에 보이는 캐릭터 문단을 우리 앱이 읽을 수 있는 구조 보존 .rofan.html로 저장합니다.",
+      intro: "RofanAi 채팅방에서 실행할 북마클릿 코드를 복사합니다. 전체 로그를 우리 앱이 읽을 수 있는 구조 보존 .rofan.html로 저장합니다.",
       finalStep: "저장된 .rofan.html 파일을 위의 파일에서 발췌로 불러오거나 원본 로그에 붙여넣습니다."
     });
     if (fileFold) fileFold.classList.add("rofanMobileExportBefore");
@@ -54,7 +54,7 @@
       id: "rofanMobileExportHelperChat",
       title: "RofanAi 모바일 간편 백업",
       subtitle: "MHT 없이 .rofan.html 저장",
-      intro: "RofanAi 채팅방에서 실행할 북마클릿 코드를 복사합니다. 실행하면 전체 로그와 첫 유저 입력 위에 보이는 캐릭터 문단을 우리 앱이 읽을 수 있는 구조 보존 .rofan.html로 저장합니다.",
+      intro: "RofanAi 채팅방에서 실행할 북마클릿 코드를 복사합니다. 실행하면 전체 로그를 우리 앱이 읽을 수 있는 구조 보존 .rofan.html로 저장합니다.",
       finalStep: "저장된 .rofan.html 파일을 위의 저장 파일 불러오기로 넣습니다."
     });
     if (filePicker) filePicker.classList.add("rofanMobileExportBefore");
@@ -177,7 +177,7 @@
   }
 
   function buildDirectBookmarklet(encoded){
-    var code = "(async()=>{try{if(!/(^|\\.)rofan\\.ai$/i.test(location.hostname)||!/\\/chat\\//i.test(location.pathname))throw'open_rofan_chat';z=document.createElement('div');z.style='position:fixed;left:8px;right:8px;bottom:8px;z-index:2147483647;padding:12px;border-radius:12px;background:#fff;color:#111;font-size:14px;line-height:1.5';z.textContent='Rofan_export_start';(document.body||document.documentElement).appendChild(z);p=(window.__NEXT_DATA__&&window.__NEXT_DATA__.props&&window.__NEXT_DATA__.props.pageProps)||{};id=p.chatId||(p.oriChatData&&p.oriChatData.chat_id)||(p.chatData&&p.chatData.chat_id)||location.pathname.split('/').filter(Boolean).pop();L=20;A=[];S={};if(!id)throw'no_chatId';for(o=0;;o+=L){z.textContent='loading_offset_'+o+'_saved_'+A.length;r=await(fetch('/api/chat/GetChatLogs',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({chatId:id,offset:o,limit:L})}));if(!r.ok)throw'HTTP_'+r.status;d=await(r.json());if(!Array.isArray(d))throw'bad_response';for(i=0;i<d.length;i++){x=d[i];k=x.log_id||x.pk;if(k&&!S[k]){S[k]=1;A.push(x)}}if(d.length<L)break;await(new(Promise)(v=>setTimeout(v,120)))}if(!A.length&&Array.isArray(p.initialChatLogs))A=p.initialChatLogs;A.sort((a,b)=>Number(a.pk||0)-Number(b.pk||0));C=v=>String(v==null?'':v).replace(/\\r/g,'').replace(/\\u00a0/g,String.fromCharCode(32)).trim();E=v=>C(v).replace(/[&<>\"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[ch]));M=v=>C(v).replace(/-->/g,'--＞').replace(/[;\"<>\\n\\r]/g,'_');t=C((p.oriChatData&&p.oriChatData.chat_title)||(p.chatData&&p.chatData.chat_title)||document.title||'rofan-chat').replace(/\\s*\\|\\s*로판\\s*AI\\s*$/i,'')||'rofan-chat';N=s=>C(s).replace(/\\s+/g,'');O=e=>{d=String((e.getAttribute('data-owner')||e.getAttribute('data-role')||e.getAttribute('data-author')||e.getAttribute('data-message-author')||'')).toLowerCase();cl=String(e.className||'').toLowerCase();st=String(e.getAttribute('style')||'').toLowerCase();if(/user|human|me|내|유저/.test(d)||/text-indigo/.test(cl)||/#818cf8|#a5b4fc|rgb\\(129,\\s*140,\\s*248\\)|rgb\\(165,\\s*180,\\s*252\\)/.test(st))return'user';if(/assistant|ai|character|bot|캐릭터/.test(d)||/(^|\\s)mt-1(\\s|$)|text-white|text-yellow|text-amber/.test(cl)||/#fff|#ffffff|#ffc200|#facc15|#eab308|rgb\\(255,\\s*255,\\s*255\\)|rgb\\(250,\\s*204,\\s*21\\)/.test(st))return'character';return''};Q=()=>{u=C(A[0]&&A[0].user_chat);if(!u)return'';un=N(u);es=[].slice.call(document.querySelectorAll('[data-owner][data-kind],.rofan-block,p,div.mt-1,span[style*=color],div[style*=color]'));B=[];for(i=0;i<es.length;i++){e=es[i];if(!e||!e.isConnected)continue;if(e.id==='rofanMobileExporterStatus'||e.closest&&e.closest('#rofanMobileExporterStatus,script,style,textarea,input,button,nav,header,footer,[aria-hidden=true]'))continue;r=e.getBoundingClientRect&&e.getBoundingClientRect();if(r&&(!r.width||!r.height))continue;tx=C(e.innerText||e.textContent);if(!tx||tx.length<2||/^(복사|삭제|수정|북마크|분기|다시생성|재생성|닫기|다시다운로드|Rofan_export_start)$/.test(N(tx)))continue;if(B.some(v=>v.el.contains(e)))continue;for(j=B.length-1;j>=0;j--)if(e.contains(B[j].el))B.splice(j,1);B.push({el:e,ow:O(e),tx:tx,n:N(tx)})}idx=-1;for(i=0;i<B.length;i++){bn=B[i].n;if(!bn)continue;pr=bn.slice(0,Math.min(80,bn.length));up=un.slice(0,Math.min(80,un.length));if(B[i].ow!=='character'&&(un.indexOf(pr)===0||bn.indexOf(up)===0||un.indexOf(bn)>=0)){idx=i;break}}if(idx<0)return'';R=[];for(i=idx-1;i>=0;i--){if(B[i].ow==='user')break;if(B[i].ow==='character')R.unshift(B[i].tx);else{if(R.length)break}}return(C(R.join('\\n\\n')))};fm=Q();W=String.fromCharCode(32);G=(b,ow,ki,tx,em)=>{tx=C(tx);if(!tx)return'';R=tx.split(/\\n+/).map(y=>C(y)).filter(Boolean).map(y=>'<p>'+(em?'<em>'+E(y)+'</em>':E(y))+'</p>').join('');return'<div'+W+'class=rofan-block'+W+'data-block-id=\"'+E(b)+'\"'+W+'data-owner=\"'+ow+'\"'+W+'data-kind=\"'+ki+'\">'+R+'</div>'};H=[];F=(tx,ow,b,dk)=>{tx=C(tx);if(!tx)return;if(ow==='user'){h=G(b+'-0',ow,dk,tx,0);if(h)H.push(h);return}re=/(\\*\\*[\\s\\S]+?\\*\\*|\\*[\\s\\S]+?\\*)/g;n=0;last=0;while((mt=re.exec(tx))){if(mt.index>last){h=G(b+'-'+n++,ow,dk,tx.slice(last,mt.index),0);if(h)H.push(h)}y=mt[0].replace(/^\\*+|\\*+$/g,'');h=G(b+'-'+n++,ow,'scene',y,1);if(h)H.push(h);last=re.lastIndex}if(last<tx.length){h=G(b+'-'+n++,ow,dk,tx.slice(last),0);if(h)H.push(h)}};if(fm&&!A.some(q=>C(q.bot_chat)==fm))F(fm,'character','first-message','normal');for(i=0;i<A.length;i++){x=A[i];b=M(x.log_id||x.pk||i);F(x.user_chat,'user',b+'-user','normal');F(x.bot_chat,'character',b+'-bot','normal')}css='<style>body{font-family:sans-serif;line-height:1.8;word-break:keep-all;overflow-wrap:break-word}.rofan-block{margin-bottom:1em}.rofan-block[data-owner=user]{color:#818CF8}.rofan-block[data-owner=character]{color:#111}.rofan-block[data-kind=scene]{font-style:italic;color:#555}p{margin-bottom:.85em}</style>';html='<html><head><title>'+E(t)+'</title>'+css+'</head><body><main'+W+'data-rofan-export=\"GetChatLogs\"'+W+'data-chat-id=\"'+E(id)+'\"><h1>'+E(t)+'</h1>'+H.join('')+'</main></body></html>';a=document.createElement('a');a.href=URL.createObjectURL(new(Blob)([html],{type:'text/html;charset=utf-8'}));a.download=(t.replace(/[\\\\/:*?\"<>|]+/g,'_').replace(/\\s+/g,'_').slice(0,80)||'rofan-chat')+'.rofan.html';a.textContent='download_again';a.style='display:inline-block;margin-top:8px;padding:10px;border-radius:10px;background:#4f8aa4;color:#fff;text-decoration:none;font-weight:700';(document.body||document.documentElement).appendChild(a);a.click();z.textContent='done_'+A.length;z.appendChild(document.createElement('br'));z.appendChild(a);setTimeout(()=>URL.revokeObjectURL(a.href),60000)}catch(e){alert('Rofan_export_fail:'+(e.message||e));console.error(e)}})()";
+    var code = "(async()=>{try{if(!/(^|\\.)rofan\\.ai$/i.test(location.hostname)||!/\\/chat\\//i.test(location.pathname))throw'open_rofan_chat';z=document.createElement('div');z.style='position:fixed;left:8px;right:8px;bottom:8px;z-index:2147483647;padding:12px;border-radius:12px;background:#fff;color:#111;font-size:14px;line-height:1.5';z.textContent='Rofan_export_start';(document.body||document.documentElement).appendChild(z);p=(window.__NEXT_DATA__&&window.__NEXT_DATA__.props&&window.__NEXT_DATA__.props.pageProps)||{};id=p.chatId||(p.oriChatData&&p.oriChatData.chat_id)||(p.chatData&&p.chatData.chat_id)||location.pathname.split('/').filter(Boolean).pop();L=20;A=[];S={};if(!id)throw'no_chatId';for(o=0;;o+=L){z.textContent='loading_offset_'+o+'_saved_'+A.length;r=await(fetch('/api/chat/GetChatLogs',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({chatId:id,offset:o,limit:L})}));if(!r.ok)throw'HTTP_'+r.status;d=await(r.json());if(!Array.isArray(d))throw'bad_response';for(i=0;i<d.length;i++){x=d[i];k=x.log_id||x.pk;if(k&&!S[k]){S[k]=1;A.push(x)}}if(d.length<L)break;await(new(Promise)(v=>setTimeout(v,120)))}if(!A.length&&Array.isArray(p.initialChatLogs))A=p.initialChatLogs;A.sort((a,b)=>Number(a.pk||0)-Number(b.pk||0));C=v=>String(v==null?'':v).replace(/\\r/g,'').replace(/\\u00a0/g,String.fromCharCode(32)).trim();E=v=>C(v).replace(/[&<>\"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[ch]));M=v=>C(v).replace(/-->/g,'--＞').replace(/[;\"<>\\n\\r]/g,'_');t=C((p.oriChatData&&p.oriChatData.chat_title)||(p.chatData&&p.chatData.chat_title)||document.title||'rofan-chat').replace(/\\s*\\|\\s*로판\\s*AI\\s*$/i,'')||'rofan-chat';W=String.fromCharCode(32);G=(b,ow,ki,tx,em)=>{tx=C(tx);if(!tx)return'';R=tx.split(/\\n+/).map(y=>C(y)).filter(Boolean).map(y=>'<p>'+(em?'<em>'+E(y)+'</em>':E(y))+'</p>').join('');return'<div'+W+'class=rofan-block'+W+'data-block-id=\"'+E(b)+'\"'+W+'data-owner=\"'+ow+'\"'+W+'data-kind=\"'+ki+'\">'+R+'</div>'};H=[];U=(tx,ow,b,dk)=>{h=G(b+'-0',ow,dk,tx,0);if(h)H.push(h)};F=(tx,ow,b,dk)=>{tx=C(tx);if(!tx)return;re=/(\\*\\*[\\s\\S]+?\\*\\*|\\*[\\s\\S]+?\\*)/g;n=0;last=0;while((mt=re.exec(tx))){if(mt.index>last){h=G(b+'-'+n++,ow,dk,tx.slice(last,mt.index),0);if(h)H.push(h)}y=mt[0].replace(/^\\*+|\\*+$/g,'');h=G(b+'-'+n++,ow,'scene',y,1);if(h)H.push(h);last=re.lastIndex}if(last<tx.length){h=G(b+'-'+n++,ow,dk,tx.slice(last),0);if(h)H.push(h)}};fm=C((p.oriBotDetail&&p.oriBotDetail.first_message)||(p.botDetail&&p.botDetail.first_message)||(p.oriBotData&&p.oriBotData.first_message)||(p.botData&&p.botData.first_message)||'');if(fm&&fm!==C(A[0]&&A[0].bot_chat))F(fm,'character','first-message','normal');for(i=0;i<A.length;i++){x=A[i];b=M(x.log_id||x.pk||i);U(x.user_chat,'user',b+'-user','normal');F(x.bot_chat,'character',b+'-bot','normal')}css='<style>body{font-family:sans-serif;line-height:1.8;word-break:keep-all;overflow-wrap:break-word}.rofan-block{margin-bottom:1em}.rofan-block[data-owner=user]{color:#818CF8}.rofan-block[data-owner=character]{color:#111}.rofan-block[data-kind=scene]{font-style:italic;color:#555}p{margin-bottom:.85em}</style>';html='<html><head><title>'+E(t)+'</title>'+css+'</head><body><main'+W+'data-rofan-export=\"GetChatLogs\"'+W+'data-chat-id=\"'+E(id)+'\"><h1>'+E(t)+'</h1>'+H.join('')+'</main></body></html>';a=document.createElement('a');a.href=URL.createObjectURL(new(Blob)([html],{type:'text/html;charset=utf-8'}));a.download=(t.replace(/[\\\\/:*?\"<>|]+/g,'_').replace(/\\s+/g,'_').slice(0,80)||'rofan-chat')+'.rofan.html';a.textContent='download_again';a.style='display:inline-block;margin-top:8px;padding:10px;border-radius:10px;background:#4f8aa4;color:#fff;text-decoration:none;font-weight:700';(document.body||document.documentElement).appendChild(a);a.click();z.textContent='done_'+A.length;z.appendChild(document.createElement('br'));z.appendChild(a);setTimeout(()=>URL.revokeObjectURL(a.href),60000)}catch(e){alert('Rofan_export_fail:'+(e.message||e));console.error(e)}})()";
     return "javascript:" + (encoded ? encodeURIComponent(code) : code);
   }
 
@@ -373,91 +373,18 @@
     return cleanText(title).replace(/\s*\|\s*로판\s*AI\s*$/i, "").trim() || "rofan-chat";
   }
 
-  function getRofanFirstMessage(_pageProps, logs){
-    return findRenderedLeadingCharacterMessage(logs || []);
-  }
-
-  function findRenderedLeadingCharacterMessage(logs){
-    var firstUser = "";
-    for (var i = 0; i < (logs || []).length; i++) {
-      firstUser = cleanText(logs[i] && logs[i].user_chat);
-      if (firstUser) break;
-    }
-    if (!firstUser || !document.querySelectorAll) return "";
-
-    var firstUserNorm = compactText(firstUser);
-    if (!firstUserNorm) return "";
-
-    var selector = '[data-owner][data-kind], .rofan-block, p, div.mt-1, span[style*="color"], div[style*="color"]';
-    var nodes = Array.prototype.slice.call(document.querySelectorAll(selector));
-    var blocks = [];
-
-    for (var n = 0; n < nodes.length; n++) {
-      var el = nodes[n];
-      if (!el || !el.isConnected) continue;
-      if (el.id === "rofanMobileExporterStatus" || (el.closest && el.closest("#rofanMobileExporterStatus"))) continue;
-      if (el.closest && el.closest('script,style,textarea,input,button,nav,header,footer,[aria-hidden="true"]')) continue;
-      if (typeof el.getBoundingClientRect === "function") {
-        var rect = el.getBoundingClientRect();
-        if (rect && (!rect.width || !rect.height)) continue;
-      }
-
-      var text = cleanText(el.innerText || el.textContent || "");
-      if (!text || text.length < 2 || isExporterUiText(text)) continue;
-      if (blocks.some(function(block){ return block.el && block.el.contains && block.el.contains(el); })) continue;
-      for (var b = blocks.length - 1; b >= 0; b--) {
-        if (el.contains && el.contains(blocks[b].el)) blocks.splice(b, 1);
-      }
-      blocks.push({ el: el, owner: ownerHintFromRenderedElement(el), text: text, norm: compactText(text) });
-    }
-
-    var firstUserIndex = -1;
-    for (var j = 0; j < blocks.length; j++) {
-      var blockNorm = blocks[j].norm || "";
-      if (!blockNorm) continue;
-      var probe = blockNorm.slice(0, Math.min(80, blockNorm.length));
-      var userProbe = firstUserNorm.slice(0, Math.min(80, firstUserNorm.length));
-      var matchesFirstUser = firstUserNorm.indexOf(probe) === 0 || blockNorm.indexOf(userProbe) === 0 || firstUserNorm.indexOf(blockNorm) >= 0;
-      if (blocks[j].owner !== "character" && matchesFirstUser) {
-        firstUserIndex = j;
-        break;
-      }
-    }
-    if (firstUserIndex < 0) return "";
-
-    var leading = [];
-    for (var k = firstUserIndex - 1; k >= 0; k--) {
-      if (blocks[k].owner === "user") break;
-      if (blocks[k].owner === "character") leading.unshift(blocks[k].text);
-      else if (leading.length) break;
-    }
-    return cleanText(leading.join("\n\n"));
-  }
-
-  function compactText(value){
-    return cleanText(value).replace(/\s+/g, "");
-  }
-
-  function ownerHintFromRenderedElement(el){
-    if (!el || el.nodeType !== 1) return "";
-    var meta = String(
-      el.getAttribute("data-owner") ||
-      el.getAttribute("data-role") ||
-      el.getAttribute("data-author") ||
-      el.getAttribute("data-message-author") ||
+  function getRofanFirstMessage(pageProps, logs){
+    var firstMessage = cleanText(
+      pageProps.oriBotDetail && pageProps.oriBotDetail.first_message ||
+      pageProps.botDetail && pageProps.botDetail.first_message ||
+      pageProps.oriBotData && pageProps.oriBotData.first_message ||
+      pageProps.botData && pageProps.botData.first_message ||
       ""
-    ).toLowerCase();
-    var className = String(el.className || "").toLowerCase();
-    var style = String(el.getAttribute("style") || "").toLowerCase();
-    if (/user|human|me|내|유저/.test(meta) || /text-indigo/.test(className) || /#818cf8|#a5b4fc|rgb\(129,\s*140,\s*248\)|rgb\(165,\s*180,\s*252\)/.test(style)) return "user";
-    if (/assistant|ai|character|bot|캐릭터/.test(meta) || /(^|\s)mt-1(\s|$)|text-white|text-yellow|text-amber/.test(className) || /#fff|#ffffff|#ffc200|#facc15|#eab308|rgb\(255,\s*255,\s*255\)|rgb\(250,\s*204,\s*21\)/.test(style)) return "character";
-    return "";
-  }
-
-  function isExporterUiText(text){
-    var s = compactText(text);
-    if (!s) return true;
-    return /^(복사|삭제|수정|북마크|분기|다시생성|재생성|닫기|다시다운로드|Rofan_export_start)$/.test(s);
+    );
+    if (!firstMessage) return "";
+    var firstBotChat = cleanText(logs && logs[0] && logs[0].bot_chat);
+    if (firstBotChat && firstBotChat === firstMessage) return "";
+    return firstMessage;
   }
 
   async function fetchRofanLogs(chatId, offset, limit){
@@ -511,14 +438,14 @@
 
   function buildStructuredHTML(logs, title, chatId, firstMessage){
     var parts = [];
-    var firstText = cleanText(firstMessage);
-    if (firstText && !logsContainBotText(logs, firstText)) {
-      pushHtmlSegments(parts, firstText, "character", "first-message", "normal");
+    var first = cleanText(firstMessage);
+    if (first) {
+      pushHtmlSegments(parts, first, "character", "first-message", "normal");
     }
     for (var i = 0; i < logs.length; i++) {
       var log = logs[i] || {};
       var blockBase = safeMeta(log.log_id || log.pk || ("log-" + (i + 1)));
-      pushHtmlSegments(parts, log.user_chat, "user", blockBase + "-user", "normal");
+      pushHtmlBlock(parts, blockBase + "-user-0", "user", "normal", log.user_chat, false);
       pushHtmlSegments(parts, log.bot_chat, "character", blockBase + "-bot", "normal");
     }
     var safeTitle = escapeHTML(title || "rofan-chat");
@@ -528,22 +455,9 @@
       parts.join("") + "</main></body></html>";
   }
 
-  function logsContainBotText(logs, text){
-    var target = cleanText(text);
-    if (!target) return false;
-    for (var i = 0; i < (logs || []).length; i++) {
-      if (cleanText(logs[i] && logs[i].bot_chat) === target) return true;
-    }
-    return false;
-  }
-
   function pushHtmlSegments(parts, value, owner, blockBase, defaultKind){
     var text = cleanText(value);
     if (!text) return;
-    if (owner === "user") {
-      pushHtmlBlock(parts, blockBase + "-0", owner, defaultKind || "normal", text, false);
-      return;
-    }
     var re = /(\*\*[\s\S]+?\*\*|\*[\s\S]+?\*)/g;
     var last = 0;
     var seq = 0;
