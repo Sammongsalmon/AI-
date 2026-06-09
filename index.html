@@ -1591,20 +1591,25 @@ function isTableLikeText(t){
   return false;
 }
 
-// ------------------ details 제거 (기존 로그용, 보호 키워드 예외) ------------------
+// ------------------ details 제거 (기존 로그용) ------------------
+function stripDetailsForRemoval(text){
+  let s = String(text || "");
+  // 닫힌 details는 내부까지 전부 제거합니다.
+  s = s.replace(/<details\b[\s\S]*?<\/details\s*>/gi, "");
+  // 한 응답 셀/문단 안에서 details가 열리고 닫히지 않은 경우, 그 지점부터 셀 끝까지 제거합니다.
+  s = s.replace(/<details\b[\s\S]*$/gi, "");
+  // 혹시 남은 summary/details 태그 조각도 제거합니다.
+  s = s.replace(/<summary\b[\s\S]*?<\/summary\s*>/gi, "");
+  s = s.replace(/^\s*<\/?(?:details|summary)[^>]*>\s*$/gim, "");
+  return s.trim();
+}
 function filterDetailsByProtection(text, tokens){
-  return (text || "").replace(/<details\b[\s\S]*?<\/details>/gi, (block) => {
-    if (!tokens || tokens.length === 0) return "";
-    let inner = block
-      .replace(/<summary[\s\S]*?<\/summary>/gi, "")
-      .replace(/<\/?details[^>]*>/gi, "");
-    const paras = inner.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
-    const kept = paras.filter(p => isProtectedText(p, tokens));
-    if (kept.length === 0) return "";
-    return "\n\n" + kept.join("\n\n") + "\n\n";
-  })
-  .replace(/^\s*<\/?details.*?>\s*$/gim, "")
-  .replace(/^\s*<summary.*?>.*?<\/summary>\s*$/gim, "");
+  // tokens 인자는 예전 호환용으로만 남깁니다. 접힘 토큰 제거는 details 내용을 보존하지 않습니다.
+  const pieces = String(text || "").replace(/\r/g, "").split(/(\n\s*\n+)/);
+  return pieces.map(part => /^\n\s*\n+$/.test(part) ? part : stripDetailsForRemoval(part)).join("");
+}
+function isElementInDetails(el){
+  return !!(el && el.closest && el.closest("details"));
 }
 
 // ------------------ 별표 지문 파서(기존 로그용) ------------------
@@ -1864,12 +1869,6 @@ function decodeQuotedPrintableUTF8(str){
 }
 function extractLikelyChatHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
-  // details 자체를 잘라낸 뒤 내부 HTML만 쓰는 경우에도 접힘 영역 표시가 남도록
-  // details와 모든 하위 요소에 보존용 마커를 먼저 심어 둡니다.
-  doc.querySelectorAll("details").forEach(detailsEl => {
-    detailsEl.setAttribute("data-rofan-from-details", "1");
-    detailsEl.querySelectorAll("*").forEach(child => child.setAttribute("data-rofan-from-details", "1"));
-  });
   const scoreContainer = (el) => {
     if(!el) return 0;
     const textLen = (el.innerText || el.textContent || "").length;
@@ -2215,12 +2214,6 @@ function hasSkippableAncestor(el, root){
   }
   return false;
 }
-function isInsideDetailsElement(el){
-  if(!el || el.nodeType !== 1) return false;
-  if(el.tagName === "DETAILS") return true;
-  if(el.getAttribute && el.getAttribute("data-rofan-from-details") === "1") return true;
-  return !!(el.closest && (el.closest("details") || el.closest('[data-rofan-from-details="1"]')));
-}
 function collectRofanContentBlocks(root){
   const blocks = [];
   // 기본 대화는 p / div.mt-1로 잡히지만, MHT 저장본의 첫 캐릭터 메시지는
@@ -2244,7 +2237,7 @@ function collectRofanContentBlocks(root){
         blocks.splice(i, 1);
       }
     }
-    blocks.push({el, owner, index, fromDetails: isInsideDetailsElement(el)});
+    blocks.push({el, owner, index});
   });
   return blocks;
 }
@@ -2254,10 +2247,9 @@ function parseRofanChatChunks(root){
   let chunkSeq = 0;
   let blockSeq = 0;
 
-  const pushChunksFromElement = (el, baseOwner, inheritedFromDetails) => {
+  const pushChunksFromElement = (el, baseOwner) => {
     const blockId = getElementBlockId(el) || ("b" + (blockSeq++));
     const baseKind = getElementKindHint(el);
-    const elementFromDetails = !!(inheritedFromDetails || isInsideDetailsElement(el));
     const start = chunks.length;
     let buffer = "";
     let bufferKind = null;
@@ -2276,7 +2268,7 @@ function parseRofanChatChunks(root){
           owner: bufferOwner || "",
           color: bufferColor || "",
           fromTable: bufferFromTable,
-          fromDetails: bufferFromDetails || elementFromDetails,
+          fromDetails: bufferFromDetails,
           blockId
         });
       }
@@ -2331,7 +2323,7 @@ function parseRofanChatChunks(root){
         italic: ctx.italic || isItalicElement(childEl),
         kind: getElementKindHint(childEl) || ctx.kind || "",
         fromTable: ctx.fromTable || isRemovableBlockElement(childEl),
-        fromDetails: ctx.fromDetails || childEl.tagName === "DETAILS",
+        fromDetails: ctx.fromDetails || isElementInDetails(childEl),
         owner: ownerHint || ctx.owner || "",
         color
       };
@@ -2346,7 +2338,7 @@ function parseRofanChatChunks(root){
       italic: isItalicElement(el),
       kind: baseKind || "",
       fromTable: isRemovableBlockElement(el),
-      fromDetails: elementFromDetails,
+      fromDetails: el.tagName === "DETAILS",
       owner: baseOwner || getElementOwnerHint(el, getInlineColor(el)) || "",
       color: getInlineColor(el) || ""
     }));
@@ -2354,7 +2346,7 @@ function parseRofanChatChunks(root){
 
     const blockText = chunks.slice(start).map(c => c.text).join("\n\n").trim();
     if(blockText){
-      blocks.push({id:blockId, owner:baseOwner || "", text:blockText, startChunk:start, endChunk:chunks.length, fromDetails: elementFromDetails});
+      blocks.push({id:blockId, owner:baseOwner || "", text:blockText, startChunk:start, endChunk:chunks.length});
     }else{
       chunks.splice(start);
     }
@@ -2362,9 +2354,9 @@ function parseRofanChatChunks(root){
 
   const semanticBlocks = collectRofanContentBlocks(root);
   if(semanticBlocks.length){
-    semanticBlocks.forEach(block => pushChunksFromElement(block.el, block.owner, block.fromDetails));
+    semanticBlocks.forEach(block => pushChunksFromElement(block.el, block.owner));
   }else{
-    pushChunksFromElement(root, "", isInsideDetailsElement(root));
+    pushChunksFromElement(root, "");
   }
 
   const mergedBlocks = mergeRofanBlocksById(blocks, chunks);
@@ -3099,11 +3091,11 @@ function createStructuralDeletePlan(chunks, dropBlockIds){
     if(!chunk || (dropBlockIds && dropBlockIds.has(chunk.blockId))) return;
     const t = String(chunk.text || "").trim();
     if(!t) return;
-    const protectedHere = isProtectedText(t, tokens);
-    if(removeDetailsEl.checked && chunk.fromDetails && !protectedHere){
+    if(removeDetailsEl.checked && (chunk.fromDetails || /<details\b/i.test(t))){
       dropChunkIds.add(chunk.id);
       return;
     }
+    const protectedHere = isProtectedText(t, tokens);
     if(removeTablesEl.checked && !protectedHere && (chunk.fromTable || isRemovableBlockText(t))){
       // 표/블록 제거는 문단 단위(chunk)로만 처리합니다.
       // 같은 응답 블록 안의 뒤쪽 지문까지 blockId로 삭제하지 않도록 여기에서 범위를 고정합니다.
@@ -3162,9 +3154,14 @@ function renderChunks(chunks, options){
     t = t.replace(/\*\*(.*?)\*\*/g,"$1");
     t = t.replace(/__(.*?)__/g,"$1");
 
+    if(removeDetailsEl.checked){
+      if(fromDetails) return "";
+      t = stripDetailsForRemoval(t);
+      if(!t) return "";
+    }
+
     const protectedHere = isProtectedText(t, tokens);
 
-    if(removeDetailsEl.checked && fromDetails && !protectedHere) return "";
     if(options.removeTables && !protectedHere && (fromTable || isRemovableBlockText(t))) return "";
 
     if(shouldDeleteByContains(t, deleteTokens) && !protectedHere){
