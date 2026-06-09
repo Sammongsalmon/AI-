@@ -1,6 +1,6 @@
 /* RofanAi mobile export helper + exporter
  * Add this file next to index.html, then load it from index.html.
- * - On this app page: injects small helper panels in "로그 다듬기" and "채팅방 전체 백업".
+ * - On this app page: injects a helper panel into both log-cleaning and full-backup inputs.
  * - On rofan.ai chat pages: exports the whole chat through /api/chat/GetChatLogs.
  */
 (function(){
@@ -10,80 +10,78 @@
   var ROFAN_HOST_RE = /(^|\.)rofan\.ai$/i;
 
   if (ROFAN_HOST_RE.test(location.hostname)) {
-    runRofanExporter();
+    directRofanExporter();
     return;
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", installAppHelpers);
+    document.addEventListener("DOMContentLoaded", installAppHelper);
   } else {
-    installAppHelpers();
+    installAppHelper();
   }
 
-  function installAppHelpers(){
-    installAppHelperStyle();
-    installClassicHelper();
-    installChatHelper();
-  }
-
-  function installClassicHelper(){
-    var input = document.getElementById("inputText");
-    if (!input) return;
-    var editorBox = input.closest ? input.closest(".editorBox") : null;
-    if (!editorBox) return;
-    var fileFold = editorBox.querySelector("details.filePicker, .filePicker");
-    var panel = createHelperPanel({
-      id: "rofanMobileExportHelperClassic",
-      title: "RofanAi 모바일 간편 백업",
-      subtitle: "MHT 없이 .rofan.md 저장",
-      intro: "RofanAi 채팅방에서 실행할 북마클릿을 만들어 줍니다. 저장된 .rofan.md 파일은 파일에서 발췌로 불러오거나 원본 로그에 붙여넣을 수 있습니다.",
-      finalStep: "저장된 .rofan.md 파일을 위의 파일에서 발췌로 불러오거나 원본 로그에 붙여넣습니다."
-    });
-    if (fileFold && fileFold.nextSibling) editorBox.insertBefore(panel, fileFold.nextSibling);
-    else editorBox.insertBefore(panel, input);
-  }
-
-  function installChatHelper(){
+  function installAppHelper(){
     var chatPaste = document.getElementById("chatPaste");
-    if (!chatPaste) return;
-    var editorBox = chatPaste.closest ? chatPaste.closest(".editorBox") : null;
-    if (!editorBox) return;
-    var filePicker = editorBox.querySelector(".filePicker");
-    var panel = createHelperPanel({
-      id: "rofanMobileExportHelperChat",
-      title: "RofanAi 모바일 간편 백업",
-      subtitle: "MHT 없이 .rofan.md 저장",
-      intro: "RofanAi 채팅방에서 실행할 북마클릿을 만들어 줍니다. 실행하면 /api/chat/GetChatLogs를 offset 순서로 불러와 .rofan.md 파일로 저장합니다.",
-      finalStep: "저장된 .rofan.md 파일을 위의 저장 파일 불러오기로 넣습니다."
-    });
-    if (filePicker && filePicker.nextSibling) editorBox.insertBefore(panel, filePicker.nextSibling);
-    else editorBox.insertBefore(panel, chatPaste);
+    var inputText = document.getElementById("inputText");
+    if (!chatPaste && !inputText) return;
+
+    installAppHelperStyle();
+
+    if (inputText) {
+      var classicBox = inputText.closest ? inputText.closest(".editorBox") : null;
+      var classicFold = classicBox ? classicBox.querySelector("details.fileExtractFold") : null;
+      installOneHelper({
+        id: "rofanMobileExportHelperClassic",
+        targetBox: classicBox,
+        insertAfter: classicFold,
+        fallbackBefore: inputText,
+        finalStep: "저장된 .rofan.html 또는 .rofan.md 파일을 위의 파일 선택으로 넣습니다."
+      });
+    }
+
+    if (chatPaste) {
+      var chatBox = chatPaste.closest ? chatPaste.closest(".editorBox") : null;
+      var chatPicker = chatBox ? chatBox.querySelector(".filePicker") : null;
+      installOneHelper({
+        id: "rofanMobileExportHelperChat",
+        targetBox: chatBox,
+        insertAfter: chatPicker,
+        fallbackBefore: chatPaste,
+        finalStep: "저장된 .rofan.html 또는 .rofan.md 파일을 위의 저장 파일 불러오기로 넣습니다."
+      });
+    }
   }
 
-  function createHelperPanel(options){
-    var old = document.getElementById(options.id);
-    if (old) old.remove();
+  function installOneHelper(opts){
+    if (!opts || !opts.targetBox || document.getElementById(opts.id)) return;
 
-    var directBookmarklet = buildDirectBookmarklet(false);
-    var encodedBookmarklet = buildDirectBookmarklet(true);
-    var loaderBookmarklet = buildLoaderBookmarklet(getCurrentScriptUrl());
+    var scriptUrl = getCurrentScriptUrl();
+    var directBookmarklet = buildDirectBookmarklet();
+    var loaderBookmarklet = buildLoaderBookmarklet(scriptUrl);
+    var isLocalFile = /^file:/i.test(scriptUrl);
 
     var wrap = document.createElement("details");
     wrap.className = "filePicker fileExtractFold rofanMobileExportHelper";
-    wrap.id = options.id;
+    wrap.id = opts.id;
 
     var summary = document.createElement("summary");
-    summary.innerHTML = "<span>" + escapeHTML(options.title) + "</span><span class=\"fileNameText\">" + escapeHTML(options.subtitle) + "</span>";
+    summary.innerHTML = "<span>RofanAi 모바일 간편 백업</span><span class=\"fileNameText\">MHT 없이 .rofan.html / .rofan.md 저장</span>";
     wrap.appendChild(summary);
 
     var body = document.createElement("div");
     body.className = "fileExtractBody rofanMobileExportBody";
 
     var intro = document.createElement("div");
-    intro.className = "hint rofanMobileExportIntro";
-    intro.textContent = options.intro;
+    intro.className = "hint";
+    intro.textContent = "RofanAi 채팅방에서 실행할 즐겨찾기 코드를 만들어 줍니다. 실행하면 전체 로그를 구조 보존 HTML/Markdown으로 저장합니다.";
     body.appendChild(intro);
 
+    if (isLocalFile) {
+      var localWarn = document.createElement("div");
+      localWarn.className = "emptyState rofanMobileExportWarn";
+      localWarn.textContent = "현재 index.html을 로컬 파일로 열어서 짧은 코드 주소가 file://로 만들어졌습니다. GitHub Pages에 올린 뒤 열린 페이지에서 다시 복사하면 모바일에서 사용할 수 있습니다.";
+      body.appendChild(localWarn);
+    }
 
     var actions = document.createElement("div");
     actions.className = "optionRow compactControls rofanMobileExportActions";
@@ -93,15 +91,15 @@
     copyDirectBtn.className = "btn primary";
     copyDirectBtn.textContent = "공백 없는 코드 복사";
     copyDirectBtn.addEventListener("click", function(){
-      copyText(directBookmarklet, "공백 없는 직접 실행 코드를 복사했습니다.");
+      copyText(directBookmarklet, "북마클릿 코드를 복사했습니다.");
     });
 
-    var copyEncodedBtn = document.createElement("button");
-    copyEncodedBtn.type = "button";
-    copyEncodedBtn.className = "btn subtle";
-    copyEncodedBtn.textContent = "인코딩 코드 복사";
-    copyEncodedBtn.addEventListener("click", function(){
-      copyText(encodedBookmarklet, "인코딩된 직접 실행 코드를 복사했습니다.");
+    var copyLoaderBtn = document.createElement("button");
+    copyLoaderBtn.type = "button";
+    copyLoaderBtn.className = "btn subtle";
+    copyLoaderBtn.textContent = "짧은 코드 복사";
+    copyLoaderBtn.addEventListener("click", function(){
+      copyText(loaderBookmarklet, "짧은 북마클릿 코드를 복사했습니다.");
     });
 
     var toggleCodeBtn = document.createElement("button");
@@ -113,28 +111,18 @@
       toggleCodeBtn.textContent = codeBox.hidden ? "코드 보기" : "코드 숨기기";
     });
 
-    var copyLoaderBtn = document.createElement("button");
-    copyLoaderBtn.type = "button";
-    copyLoaderBtn.className = "btn subtle rofanMobileExportAdvanced";
-    copyLoaderBtn.textContent = "짧은 로더 복사";
-    copyLoaderBtn.addEventListener("click", function(){
-      copyText(loaderBookmarklet, "짧은 로더 코드를 복사했습니다. 직접 코드가 너무 길 때만 써 보세요.");
-    });
-
     actions.appendChild(copyDirectBtn);
-    actions.appendChild(copyEncodedBtn);
-    actions.appendChild(toggleCodeBtn);
     actions.appendChild(copyLoaderBtn);
+    actions.appendChild(toggleCodeBtn);
     body.appendChild(actions);
 
     var steps = document.createElement("ol");
     steps.className = "rofanMobileExportSteps";
     [
-      "공백 없는 코드 복사 버튼을 누릅니다. 삼성 브라우저에서 주소 등록이 막히면 인코딩 코드 복사를 사용합니다.",
-      "모바일 브라우저에서 즐겨찾기 하나를 만든 뒤, 주소를 복사한 코드로 바꿉니다. 제목은 로판백업처럼 짧게 저장하면 편합니다.",
-      "RofanAi 채팅방을 연 상태에서 실행합니다. Chrome 모바일은 북마크 목록에서 누르기보다 주소창에 저장한 제목을 검색해서 선택하는 쪽이 안정적입니다.",
-      "실행되면 화면 아래에 Rofan_export_start 또는 loading_offset 문구가 떠야 합니다.",
-      options.finalStep
+      "공백 없는 코드 복사 버튼을 누릅니다.",
+      "모바일 브라우저에서 즐겨찾기 하나를 만든 뒤, 주소를 복사한 코드로 바꿉니다.",
+      "RofanAi 채팅방 페이지를 열고 그 즐겨찾기를 실행합니다.",
+      opts.finalStep || "저장된 파일을 불러옵니다."
     ].forEach(function(text){
       var li = document.createElement("li");
       li.textContent = text;
@@ -142,15 +130,26 @@
     });
     body.appendChild(steps);
 
+    var mini = document.createElement("div");
+    mini.className = "hint rofanMobileExportMini";
+    mini.textContent = "완료 화면에서 HTML 저장을 누르면 MHT처럼 구조와 지문/대사 구분을 보존한 파일이 저장됩니다. Markdown 저장은 앱에서 내려받는 .md와 비슷한 구조 보존 형식입니다.";
+    body.appendChild(mini);
+
     var codeBox = document.createElement("pre");
     codeBox.className = "rofanMobileExportCode";
     codeBox.hidden = true;
     codeBox.textContent = directBookmarklet;
     body.appendChild(codeBox);
 
-
     wrap.appendChild(body);
-    return wrap;
+
+    if (opts.insertAfter && opts.insertAfter.parentNode) {
+      opts.insertAfter.parentNode.insertBefore(wrap, opts.insertAfter.nextSibling);
+    } else if (opts.fallbackBefore && opts.fallbackBefore.parentNode) {
+      opts.fallbackBefore.parentNode.insertBefore(wrap, opts.fallbackBefore);
+    } else {
+      opts.targetBox.appendChild(wrap);
+    }
   }
 
   function installAppHelperStyle(){
@@ -160,21 +159,15 @@
     style.textContent = [
       ".rofanMobileExportHelper{margin-top:8px;margin-bottom:10px;padding:0}",
       ".rofanMobileExportHelper summary{padding:13px 16px}",
-      ".rofanMobileExportHelper .fileExtractBody{padding:0 16px 14px}",
-      ".rofanMobileExportIntro{margin-top:10px}",
-      ".rofanMobileExportHelper .rofanMobileExportActions{margin-top:10px;gap:7px}",
-      ".rofanMobileExportHelper .rofanMobileExportActions .btn{min-height:34px;padding:7px 11px;border-radius:11px;font-size:12px}",
-      ".rofanMobileExportHelper .rofanMobileExportSteps{margin:10px 0 0;padding-left:18px;color:var(--sub);font-size:12px;line-height:1.62}",
-      ".rofanMobileExportHelper .rofanMobileExportSteps li{margin:2px 0}",
-      ".rofanMobileExportHelper .rofanMobileExportCode{margin:10px 0 0;padding:10px;border:1px solid var(--line2);border-radius:12px;background:#fff;color:var(--ink);font-size:11px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;max-height:150px;overflow:auto}",
-      "@media(max-width:640px){.rofanMobileExportHelper{margin-top:6px;margin-bottom:8px}.rofanMobileExportHelper summary{padding:12px 14px}.rofanMobileExportHelper .fileExtractBody{padding:0 14px 12px}.rofanMobileExportHelper .rofanMobileExportActions .btn{width:100%}}"
+      ".rofanMobileExportHelper .rofanMobileExportBody{padding-top:10px}",
+      ".rofanMobileExportHelper .rofanMobileExportActions{margin-top:8px;gap:7px}",
+      ".rofanMobileExportHelper .rofanMobileExportSteps{margin:8px 0 0;padding-left:20px;color:var(--sub);font-size:12px;line-height:1.62}",
+      ".rofanMobileExportHelper .rofanMobileExportMini{margin-top:8px}",
+      ".rofanMobileExportHelper .rofanMobileExportCode{margin:8px 0 0;padding:10px;border:1px solid var(--line2);border-radius:12px;background:#fff;color:var(--ink);font-size:11px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;max-height:160px;overflow:auto}",
+      ".rofanMobileExportHelper .rofanMobileExportWarn{margin-top:8px}",
+      "@media(max-width:640px){.rofanMobileExportHelper{margin-top:6px;margin-bottom:8px}.rofanMobileExportHelper summary{padding:12px 14px}.rofanMobileExportHelper .rofanMobileExportActions .btn{width:100%}.rofanMobileExportHelper .rofanMobileExportSteps{font-size:11.5px;line-height:1.55}}"
     ].join("");
     document.head.appendChild(style);
-  }
-
-  function buildDirectBookmarklet(encoded){
-    var code = "(async()=>{try{if(!/(^|\\.)rofan\\.ai$/i.test(location.hostname)||!/\\/chat\\//i.test(location.pathname))throw'open_rofan_chat';z=document.createElement('div');z.style='position:fixed;left:8px;right:8px;bottom:8px;z-index:2147483647;padding:12px;border-radius:12px;background:#fff;color:#111;font-size:14px;line-height:1.5';z.textContent='Rofan_export_start';(document.body||document.documentElement).appendChild(z);p=(window.__NEXT_DATA__&&window.__NEXT_DATA__.props&&window.__NEXT_DATA__.props.pageProps)||{};id=p.chatId||(p.oriChatData&&p.oriChatData.chat_id)||(p.chatData&&p.chatData.chat_id)||location.pathname.split('/').filter(Boolean).pop();L=20;A=[];S={};if(!id)throw'no_chatId';for(o=0;;o+=L){z.textContent='loading_offset_'+o+'_saved_'+A.length;r=await(fetch('/api/chat/GetChatLogs',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({chatId:id,offset:o,limit:L})}));if(!r.ok)throw'HTTP_'+r.status;d=await(r.json());if(!Array.isArray(d))throw'bad_response';for(i=0;i<d.length;i++){x=d[i];k=x.log_id||x.pk;if(k&&!S[k]){S[k]=1;A.push(x)}}if(d.length<L)break;await(new(Promise)(v=>setTimeout(v,120)))}if(!A.length&&Array.isArray(p.initialChatLogs))A=p.initialChatLogs;A.sort((a,b)=>Number(a.pk||0)-Number(b.pk||0));c=v=>String(v==null?'':v).replace(/\\r/g,'').replace(/\\u00a0/g,String.fromCharCode(32)).trim();m=v=>c(v).replace(/-->/g,'--＞').replace(/[;\\n\\r]/g,'_');t=c((p.oriChatData&&p.oriChatData.chat_title)||(p.chatData&&p.chatData.chat_title)||document.title||'rofan-chat').replace(/\\s*\\|\\s*로판\\s*AI\\s*$/i,'')||'rofan-chat';P=[];for(i=0;i<A.length;i++){x=A[i];b=m(x.log_id||x.pk||i);u=c(x.user_chat);q=c(x.bot_chat);if(u)P.push('<!--rofan:block='+b+'-user;owner=user;kind=dialogue-->\\n'+u);if(q)P.push('<!--rofan:block='+b+'-bot;owner=character;kind=normal-->\\n'+q)}md=P.join('\\n\\n')+'\\n';a=document.createElement('a');a.href=URL.createObjectURL(new(Blob)([md],{type:'text/markdown;charset=utf-8'}));a.download=(t.replace(/[\\\\/:*?\"<>|]+/g,'_').replace(/\\s+/g,'_').slice(0,80)||'rofan-chat')+'.rofan.md';a.textContent='download_again';a.style='display:inline-block;margin-top:8px;padding:10px;border-radius:10px;background:#4f8aa4;color:#fff;text-decoration:none;font-weight:700';(document.body||document.documentElement).appendChild(a);a.click();z.textContent='done_'+A.length;z.appendChild(document.createElement('br'));z.appendChild(a);setTimeout(()=>URL.revokeObjectURL(a.href),60000)}catch(e){alert('Rofan_export_fail:'+(e.message||e));console.error(e)}})()";
-    return "javascript:" + (encoded ? encodeURIComponent(code) : code);
   }
 
   function getCurrentScriptUrl(){
@@ -202,8 +195,13 @@
 
   function buildLoaderBookmarklet(scriptUrl){
     var src = String(scriptUrl || SCRIPT_FILE_NAME);
-    var code = "(u=>{u+=(u.includes('?')?'&':'?')+'v='+Date.now();s=document.createElement('script');s.src=u;s.dataset.rofanMobileExporter='1';(document.head||document.documentElement).appendChild(s)})(" + JSON.stringify(src) + ")";
-    return "javascript:" + code.replace(/\s+/g, "");
+    var code = "(()=>{var u=" + JSON.stringify(src) + ";u+=(u.indexOf('?')>-1?'&':'?')+'v='+Date.now();var s=document.createElement('script');s.src=u;s.dataset.rofanMobileExporter='1';(document.head||document.documentElement).appendChild(s)})()";
+    return "javascript:" + encodeURIComponent(code);
+  }
+
+  function buildDirectBookmarklet(){
+    var code = "(" + directRofanExporter.toString() + ")();";
+    return "javascript:" + encodeURIComponent(code);
   }
 
   function copyText(text, okMessage){
@@ -245,41 +243,42 @@
     }
   }
 
-  function escapeHTML(value){
-    return String(value == null ? "" : value).replace(/[&<>"]/g, function(ch){
-      return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[ch];
-    });
-  }
+  async function directRofanExporter(){
+    "use strict";
 
-  async function runRofanExporter(){
+    var ROFAN_HOST_RE = /(^|\.)rofan\.ai$/i;
+    if (!ROFAN_HOST_RE.test(location.hostname)) {
+      alert("RofanAi 채팅방 페이지에서 실행해 주세요.");
+      return;
+    }
     if (window.__rofanMobileExporterActive) {
       alert("이미 RofanAi 로그 내보내기를 실행 중입니다.");
       return;
     }
     window.__rofanMobileExporterActive = true;
 
-    var ui = createRofanStatusBox();
+    var ui = createStatusBox();
 
     try {
       if (!/\/chat\/[^/?#]+/i.test(location.pathname)) {
         throw new Error("RofanAi 채팅방 페이지에서 실행해 주세요.");
       }
 
-      var pageProps = getRofanPageProps();
-      var chatId = getRofanChatId(pageProps);
+      var pageProps = getPageProps();
+      var chatId = getChatId(pageProps);
       if (!chatId) throw new Error("chatId를 찾지 못했습니다.");
 
       var limit = 20;
       var offset = 0;
       var all = [];
-      var seen = {};
+      var seen = new Set();
       var emptyStreak = 0;
 
       ui.set("로그 수집을 시작합니다.", "chatId: " + chatId);
 
       while (true) {
         ui.set("로그를 불러오는 중입니다.", "offset " + offset + " / 현재 " + all.length + "개");
-        var logs = await fetchRofanLogs(chatId, offset, limit);
+        var logs = await fetchLogs(chatId, offset, limit);
 
         if (!logs.length) emptyStreak += 1;
         else emptyStreak = 0;
@@ -287,8 +286,8 @@
         for (var i = 0; i < logs.length; i++) {
           var log = logs[i] || {};
           var key = String(log.log_id || log.pk || "");
-          if (!key || seen[key]) continue;
-          seen[key] = true;
+          if (!key || seen.has(key)) continue;
+          seen.add(key);
           all.push(log);
         }
 
@@ -305,8 +304,8 @@
         for (var j = 0; j < pageProps.initialChatLogs.length; j++) {
           var initLog = pageProps.initialChatLogs[j] || {};
           var initKey = String(initLog.log_id || initLog.pk || "");
-          if (!initKey || seen[initKey]) continue;
-          seen[initKey] = true;
+          if (!initKey || seen.has(initKey)) continue;
+          seen.add(initKey);
           all.push(initLog);
         }
       }
@@ -319,224 +318,398 @@
         return ap - bp;
       });
 
-      var title = getRofanTitle(pageProps);
-      var markdown = buildStructuredMarkdown(all);
-      var fileName = safeFileName(title || "rofan-chat") + ".rofan.md";
+      var title = getTitle(pageProps);
+      var items = logsToStructuredItems(all);
+      var html = buildStructuredHtml(items, chatId, title, all.length);
+      var markdown = buildStructuredMarkdown(items, chatId, title, all.length);
+      var baseName = safeFileName(title || "rofan-chat");
+      var htmlName = baseName + ".rofan.html";
+      var mdName = baseName + ".rofan.md";
 
-      downloadTextFile(fileName, markdown);
+      ui.done("완료: " + all.length + "개 로그를 변환했습니다.", "아래 버튼으로 저장해 주세요.", [
+        {label:"HTML 저장", primary:true, action:function(){ downloadTextFile(htmlName, html, "text/html;charset=utf-8"); }},
+        {label:"Markdown 저장", primary:false, action:function(){ downloadTextFile(mdName, markdown, "text/markdown;charset=utf-8"); }}
+      ]);
 
-      ui.done("완료: " + all.length + "개 로그를 저장했습니다.", function(){
-        downloadTextFile(fileName, markdown);
-      });
+      if (!isLikelyMobile()) {
+        downloadTextFile(htmlName, html, "text/html;charset=utf-8");
+      }
     } catch (err) {
       console.error("[rofan-mobile-export]", err);
       ui.fail(err && err.message ? err.message : String(err));
     } finally {
       window.__rofanMobileExporterActive = false;
     }
-  }
 
-  function getRofanPageProps(){
-    var next = window.__NEXT_DATA__ || {};
-    return (
-      next.props && next.props.pageProps ||
-      next.props && next.props.initialProps && next.props.initialProps.pageProps ||
-      next.pageProps ||
-      {}
-    );
-  }
-
-  function getRofanChatId(pageProps){
-    var fromPath = (location.pathname.match(/\/chat\/([^/?#]+)/i) || [])[1] || "";
-    return (
-      pageProps.chatId ||
-      pageProps.oriChatData && pageProps.oriChatData.chat_id ||
-      pageProps.chatData && pageProps.chatData.chat_id ||
-      fromPath
-    );
-  }
-
-  function getRofanTitle(pageProps){
-    var title = (
-      pageProps.oriChatData && pageProps.oriChatData.chat_title ||
-      pageProps.chatData && pageProps.chatData.chat_title ||
-      pageProps.botDetail && (pageProps.botDetail.name || pageProps.botDetail.bot_name || pageProps.botDetail.title) ||
-      pageProps.oriBotDetail && (pageProps.oriBotDetail.name || pageProps.oriBotDetail.bot_name || pageProps.oriBotDetail.title) ||
-      document.title ||
-      "rofan-chat"
-    );
-    return cleanText(title).replace(/\s*\|\s*로판\s*AI\s*$/i, "").trim() || "rofan-chat";
-  }
-
-  async function fetchRofanLogs(chatId, offset, limit){
-    var res = await fetch("/api/chat/GetChatLogs", {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        chatId: chatId,
-        offset: offset,
-        limit: limit
-      })
-    });
-
-    if (!res.ok) {
-      throw new Error("GetChatLogs 요청 실패: HTTP " + res.status);
+    function getPageProps(){
+      var next = window.__NEXT_DATA__ || {};
+      return (
+        next.props && next.props.pageProps ||
+        next.props && next.props.initialProps && next.props.initialProps.pageProps ||
+        next.pageProps ||
+        {}
+      );
     }
 
-    var data = await res.json();
-    if (!Array.isArray(data)) {
-      throw new Error("GetChatLogs 응답 형식이 배열이 아닙니다.");
+    function getChatId(pageProps){
+      var fromPath = (location.pathname.match(/\/chat\/([^/?#]+)/i) || [])[1] || "";
+      return (
+        pageProps.chatId ||
+        pageProps.oriChatData && pageProps.oriChatData.chat_id ||
+        pageProps.chatData && pageProps.chatData.chat_id ||
+        fromPath
+      );
     }
 
-    return data;
-  }
+    function getTitle(pageProps){
+      var title = (
+        pageProps.oriChatData && pageProps.oriChatData.chat_title ||
+        pageProps.chatData && pageProps.chatData.chat_title ||
+        pageProps.botDetail && (pageProps.botDetail.name || pageProps.botDetail.bot_name || pageProps.botDetail.title) ||
+        pageProps.oriBotDetail && (pageProps.oriBotDetail.name || pageProps.oriBotDetail.bot_name || pageProps.oriBotDetail.title) ||
+        document.title ||
+        "rofan-chat"
+      );
+      return cleanText(title).replace(/\s*\|\s*로판\s*AI\s*$/i, "").trim() || "rofan-chat";
+    }
 
-  function buildStructuredMarkdown(logs){
-    var parts = [];
-    for (var i = 0; i < logs.length; i++) {
-      var log = logs[i] || {};
-      var blockBase = safeMeta(log.log_id || log.pk || ("log-" + (i + 1)));
+    async function fetchLogs(chatId, offset, limit){
+      var res = await fetch("/api/chat/GetChatLogs", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          chatId: chatId,
+          offset: offset,
+          limit: limit
+        })
+      });
 
-      var userText = cleanText(log.user_chat);
-      var botText = cleanText(log.bot_chat);
-
-      if (userText) {
-        parts.push("<!--rofan:block=" + blockBase + "-user;owner=user;kind=dialogue-->\n" + userText);
+      if (!res.ok) {
+        throw new Error("GetChatLogs 요청 실패: HTTP " + res.status);
       }
 
-      if (botText) {
-        parts.push("<!--rofan:block=" + blockBase + "-bot;owner=character;kind=normal-->\n" + botText);
+      var data = await res.json();
+      if (!Array.isArray(data)) {
+        throw new Error("GetChatLogs 응답 형식이 배열이 아닙니다.");
       }
+
+      return data;
     }
 
-    return parts.join("\n\n") + "\n";
-  }
+    function logsToStructuredItems(logs){
+      var out = [];
+      for (var i = 0; i < logs.length; i++) {
+        var log = logs[i] || {};
+        var base = safeMeta(log.log_id || log.pk || ("log-" + (i + 1)));
+        appendMessage(out, base + "-user", "user", log.user_chat);
+        appendMessage(out, base + "-bot", "character", log.bot_chat);
+      }
+      return out;
+    }
 
-  function cleanText(value){
-    return String(value == null ? "" : value)
-      .replace(/\r/g, "")
-      .replace(/\u00a0/g, " ")
-      .trim();
-  }
-
-  function safeMeta(value){
-    return cleanText(value)
-      .replace(/-->/g, "--＞")
-      .replace(/[;\n\r]/g, "_");
-  }
-
-  function safeFileName(value){
-    return cleanText(value)
-      .replace(/[\\/:*?"<>|]+/g, "_")
-      .replace(/\s+/g, " ")
-      .slice(0, 80) || "rofan-chat";
-  }
-
-  function downloadTextFile(fileName, text){
-    var blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.rel = "noopener";
-    a.textContent = "다시 다운로드";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){
-      URL.revokeObjectURL(url);
-      a.remove();
-    }, 60000);
-  }
-
-  function sleep(ms){
-    return new Promise(function(resolve){ setTimeout(resolve, ms); });
-  }
-
-  function createRofanStatusBox(){
-    var old = document.getElementById("rofanMobileExporterStatus");
-    if (old) old.remove();
-
-    var box = document.createElement("div");
-    box.id = "rofanMobileExporterStatus";
-    box.style.cssText = [
-      "position:fixed",
-      "left:12px",
-      "right:12px",
-      "bottom:12px",
-      "z-index:2147483647",
-      "padding:14px",
-      "border-radius:16px",
-      "background:#ffffff",
-      "color:#1f2d36",
-      "box-shadow:0 10px 36px rgba(0,0,0,.22)",
-      "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
-      "font-size:14px",
-      "line-height:1.55",
-      "word-break:keep-all"
-    ].join(";");
-
-    var title = document.createElement("div");
-    title.style.cssText = "font-weight:800;margin-bottom:4px";
-    title.textContent = "RofanAi 로그 내보내기";
-
-    var main = document.createElement("div");
-    main.textContent = "준비 중입니다.";
-
-    var sub = document.createElement("div");
-    sub.style.cssText = "margin-top:4px;color:#496574;font-size:12px";
-
-    var actions = document.createElement("div");
-    actions.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin-top:10px";
-
-    var closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.textContent = "닫기";
-    closeBtn.style.cssText = buttonCss(false);
-    closeBtn.addEventListener("click", function(){ box.remove(); });
-
-    actions.appendChild(closeBtn);
-    box.appendChild(title);
-    box.appendChild(main);
-    box.appendChild(sub);
-    box.appendChild(actions);
-    document.body.appendChild(box);
-
-    return {
-      set: function(message, detail){
-        main.textContent = message || "";
-        sub.textContent = detail || "";
-      },
-      done: function(message, downloadAgain){
-        main.textContent = message || "완료했습니다.";
-        sub.textContent = "다운로드가 보이지 않으면 아래 버튼을 다시 눌러 주세요.";
-        var retry = document.createElement("button");
-        retry.type = "button";
-        retry.textContent = "다시 다운로드";
-        retry.style.cssText = buttonCss(true);
-        retry.addEventListener("click", function(){
-          if (typeof downloadAgain === "function") downloadAgain();
+    function appendMessage(out, baseBlockId, owner, text){
+      var segments = splitRoleplayText(text);
+      for (var i = 0; i < segments.length; i++) {
+        var seg = segments[i];
+        if (!seg || !cleanText(seg.text)) continue;
+        out.push({
+          blockId: baseBlockId + "-" + String(i + 1).padStart(2, "0"),
+          owner: owner,
+          kind: seg.kind || "normal",
+          text: cleanText(seg.text)
         });
-        actions.insertBefore(retry, closeBtn);
-      },
-      fail: function(message){
-        main.textContent = "실패했습니다.";
-        sub.textContent = message || "";
       }
-    };
-  }
+    }
 
-  function buttonCss(primary){
-    return [
-      "border:0",
-      "border-radius:12px",
-      "padding:8px 12px",
-      "font-weight:800",
-      "background:" + (primary ? "#4f8aa4" : "#eef7fb"),
-      "color:" + (primary ? "#fff" : "#1f2d36")
-    ].join(";");
+    function splitRoleplayText(value){
+      var text = cleanText(value);
+      if (!text) return [];
+      var paragraphs = text.split(/\n\s*\n+/).map(function(p){ return p.trim(); }).filter(Boolean);
+      var out = [];
+      for (var i = 0; i < paragraphs.length; i++) {
+        var pieces = splitParagraph(paragraphs[i]);
+        for (var j = 0; j < pieces.length; j++) {
+          if (pieces[j] && cleanText(pieces[j].text)) out.push(pieces[j]);
+        }
+      }
+      return mergeNearbySegments(out);
+    }
+
+    function splitParagraph(paragraph){
+      var p = cleanText(paragraph);
+      if (!p) return [];
+
+      var whole = p.match(/^(\*{1,3}|_{1,3})([\s\S]*?)\1$/);
+      if (whole && cleanText(whole[2])) {
+        return [{kind:"scene", text:cleanText(whole[2])}];
+      }
+
+      var re = /(\*{1,3}|_{1,3})([\s\S]+?)\1/g;
+      var out = [];
+      var last = 0;
+      var match;
+      while ((match = re.exec(p))) {
+        var before = p.slice(last, match.index).trim();
+        var inner = cleanText(match[2]);
+        if (before) out.push({kind:"normal", text:before});
+        if (inner) out.push({kind:"scene", text:inner});
+        last = re.lastIndex;
+      }
+      var rest = p.slice(last).trim();
+      if (rest) out.push({kind:"normal", text:rest});
+      return out.length ? out : [{kind:"normal", text:p}];
+    }
+
+    function mergeNearbySegments(items){
+      var out = [];
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        if (!item || !cleanText(item.text)) continue;
+        var last = out[out.length - 1];
+        if (last && last.kind === item.kind) {
+          last.text = [last.text, item.text].filter(Boolean).join("\n\n");
+        } else {
+          out.push({kind:item.kind || "normal", text:cleanText(item.text)});
+        }
+      }
+      return out;
+    }
+
+    function buildStructuredMarkdown(items, chatId, title, logCount){
+      var parts = [];
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i] || {};
+        var body = cleanText(item.text);
+        if (!body) continue;
+        parts.push("<!-- rofan:block=" + safeMeta(item.blockId || ("block-" + i)) + ";owner=" + safeMeta(item.owner || "character") + ";kind=" + safeMeta(item.kind || "normal") + " -->\n" + body);
+      }
+
+      return [
+        "<!-- rofan:export=GetChatLogs;format=structured-markdown;chatId=" + safeMeta(chatId) + ";logCount=" + safeMeta(logCount) + ";itemCount=" + safeMeta(items.length) + ";exportedAt=" + new Date().toISOString() + " -->",
+        "# " + cleanText(title || "rofan-chat").replace(/^#\s*/, ""),
+        "",
+        parts.join("\n\n"),
+        ""
+      ].join("\n");
+    }
+
+    function buildStructuredHtml(items, chatId, title, logCount){
+      var blocks = [];
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i] || {};
+        var body = cleanText(item.text);
+        if (!body) continue;
+        var paragraphs = body.split(/\n+/).map(function(line){ return line.trim(); }).filter(Boolean).map(function(line){
+          return "<p>" + escapeHTML(line) + "</p>";
+        }).join("\n");
+        var owner = item.owner || "character";
+        var kind = item.kind || "normal";
+        var inlineStyle = blockInlineStyle(owner, kind);
+        blocks.push("<div class=\"rofan-block\" data-block-id=\"" + escapeAttr(item.blockId || ("block-" + i)) + "\" data-owner=\"" + escapeAttr(owner) + "\" data-kind=\"" + escapeAttr(kind) + "\" style=\"" + escapeAttr(inlineStyle) + "\">\n" + paragraphs + "\n</div>");
+      }
+
+      var safeTitle = cleanText(title || "rofan-chat").replace(/^#\s*/, "");
+      return [
+        "<!doctype html>",
+        "<html lang=\"ko\">",
+        "<head>",
+        "<meta charset=\"utf-8\">",
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+        "<title>" + escapeHTML(safeTitle) + "</title>",
+        "<meta name=\"rofan-export\" content=\"GetChatLogs\">",
+        "<meta name=\"rofan-chat-id\" content=\"" + escapeAttr(chatId) + "\">",
+        "<meta name=\"rofan-log-count\" content=\"" + escapeAttr(logCount) + "\">",
+        "<style>",
+        ":root{color-scheme:light;--ink:#1f2d36;--sub:#496574;--line:#cfe4ee;--paper:#fff;--user:#eef2ff;--bot:#fff8d6;}",
+        "body{margin:0;background:#eef7fb;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans-serif;line-height:1.75;}",
+        ".rofan-export{max-width:860px;margin:0 auto;padding:22px;}",
+        "h1{font-size:22px;line-height:1.35;margin:0 0 18px;}",
+        ".rofan-block{margin:0 0 13px;padding:12px 14px;border:1px solid var(--line);border-radius:16px;background:var(--paper);white-space:normal;overflow-wrap:anywhere;}",
+        ".rofan-block[data-owner='user']{background:var(--user);margin-left:8%;}",
+        ".rofan-block[data-owner='character']{background:var(--bot);margin-right:8%;}",
+        ".rofan-block[data-kind='scene']{font-style:italic;color:var(--sub);}",
+        ".rofan-block p{margin:.35em 0;}",
+        "@media(max-width:640px){.rofan-export{padding:14px}.rofan-block{margin-bottom:10px}.rofan-block[data-owner='user']{margin-left:3%}.rofan-block[data-owner='character']{margin-right:3%}}",
+        "</style>",
+        "</head>",
+        "<body>",
+        "<!-- rofan:export=GetChatLogs;format=structured-html;chatId=" + safeMeta(chatId) + ";logCount=" + safeMeta(logCount) + ";itemCount=" + safeMeta(items.length) + ";exportedAt=" + new Date().toISOString() + " -->",
+        "<main class=\"rofan-export\">",
+        "<h1>" + escapeHTML(safeTitle) + "</h1>",
+        blocks.join("\n"),
+        "</main>",
+        "</body>",
+        "</html>",
+        ""
+      ].join("\n");
+    }
+
+    function blockInlineStyle(owner, kind){
+      var styles = [
+        "margin:0 0 13px",
+        "padding:12px 14px",
+        "border:1px solid #cfe4ee",
+        "border-radius:16px",
+        "white-space:normal",
+        "overflow-wrap:anywhere",
+        "background:#ffffff"
+      ];
+      if (owner === "user") {
+        styles.push("background:#eef2ff", "margin-left:8%");
+      } else if (owner === "character") {
+        styles.push("background:#fff8d6", "margin-right:8%");
+      }
+      if (kind === "scene") {
+        styles.push("font-style:italic", "color:#496574");
+      }
+      return styles.join(";");
+    }
+
+    function cleanText(value){
+      return String(value == null ? "" : value)
+        .replace(/\r/g, "")
+        .replace(/\u00a0/g, " ")
+        .replace(/\u200b/g, "")
+        .trim();
+    }
+
+    function safeMeta(value){
+      return cleanText(value)
+        .replace(/-->/g, "--＞")
+        .replace(/[;\n\r>]/g, "_");
+    }
+
+    function safeFileName(value){
+      return cleanText(value)
+        .replace(/[\\/:*?"<>|]+/g, "_")
+        .replace(/\s+/g, " ")
+        .slice(0, 80) || "rofan-chat";
+    }
+
+    function escapeHTML(value){
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function escapeAttr(value){
+      return escapeHTML(value).replace(/`/g, "&#096;");
+    }
+
+    function downloadTextFile(fileName, text, mime){
+      var blob = new Blob([text], { type: mime || "text/plain;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){
+        URL.revokeObjectURL(url);
+        a.remove();
+      }, 1500);
+    }
+
+    function sleep(ms){
+      return new Promise(function(resolve){ setTimeout(resolve, ms); });
+    }
+
+    function isLikelyMobile(){
+      return /Android|iPhone|iPad|iPod|Mobile|SamsungBrowser/i.test(navigator.userAgent || "");
+    }
+
+    function createStatusBox(){
+      var old = document.getElementById("rofanMobileExporterStatus");
+      if (old) old.remove();
+
+      var box = document.createElement("div");
+      box.id = "rofanMobileExporterStatus";
+      box.style.cssText = [
+        "position:fixed",
+        "left:12px",
+        "right:12px",
+        "bottom:12px",
+        "z-index:2147483647",
+        "padding:14px",
+        "border-radius:16px",
+        "background:#ffffff",
+        "color:#1f2d36",
+        "box-shadow:0 10px 36px rgba(0,0,0,.22)",
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+        "font-size:14px",
+        "line-height:1.55",
+        "word-break:keep-all"
+      ].join(";");
+
+      var title = document.createElement("div");
+      title.style.cssText = "font-weight:800;margin-bottom:4px";
+      title.textContent = "RofanAi 로그 내보내기";
+
+      var main = document.createElement("div");
+      main.textContent = "준비 중입니다.";
+
+      var sub = document.createElement("div");
+      sub.style.cssText = "margin-top:4px;color:#496574;font-size:12px";
+
+      var actions = document.createElement("div");
+      actions.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin-top:10px";
+
+      var closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.textContent = "닫기";
+      closeBtn.style.cssText = buttonCss(false);
+      closeBtn.addEventListener("click", function(){ box.remove(); });
+
+      actions.appendChild(closeBtn);
+      box.appendChild(title);
+      box.appendChild(main);
+      box.appendChild(sub);
+      box.appendChild(actions);
+      document.body.appendChild(box);
+
+      return {
+        set: function(message, detail){
+          main.textContent = message || "";
+          sub.textContent = detail || "";
+        },
+        done: function(message, detail, buttons){
+          main.textContent = message || "완료했습니다.";
+          sub.textContent = detail || "아래 버튼으로 저장해 주세요.";
+          if (Array.isArray(buttons)) {
+            buttons.forEach(function(btn){
+              var b = document.createElement("button");
+              b.type = "button";
+              b.textContent = btn.label || "저장";
+              b.style.cssText = buttonCss(!!btn.primary);
+              b.addEventListener("click", function(){ if (typeof btn.action === "function") btn.action(); });
+              actions.insertBefore(b, closeBtn);
+            });
+          }
+        },
+        fail: function(message){
+          main.textContent = "실패했습니다.";
+          sub.textContent = message || "";
+        }
+      };
+    }
+
+    function buttonCss(primary){
+      return [
+        "border:0",
+        "border-radius:12px",
+        "padding:8px 12px",
+        "font-weight:800",
+        "background:" + (primary ? "#4f8aa4" : "#eef7fb"),
+        "color:" + (primary ? "#fff" : "#1f2d36")
+      ].join(";");
+    }
   }
 })();
