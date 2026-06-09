@@ -1591,133 +1591,22 @@ function isTableLikeText(t){
   return false;
 }
 
-// ------------------ details 제거 (원본 보존, 결과 단계 삭제 + 보호어 줄 단위 보존) ------------------
-function normalizeDetailsTagDelimiters(value){
-  return String(value || "")
-    .replace(/&lt;\s*(\/?)\s*(details\b[^&<>]*?)&gt;/gi, function(_m, slash, body){ return "<" + (slash || "") + body.trim() + ">"; })
-    .replace(/&lt;\s*(\/?)\s*(summary\b[^&<>]*?)&gt;/gi, function(_m, slash, body){ return "<" + (slash || "") + body.trim() + ">"; });
-}
-function detailsLineToPlain(value){
-  const holder = document.createElement("div");
-  holder.innerHTML = String(value || "")
-    .replace(/<br\s*\/?\s*>/gi, "\n")
-    .replace(/<\/p\s*>/gi, "\n")
-    .replace(/<\/div\s*>/gi, "\n");
-  return (holder.innerText || holder.textContent || String(value || ""))
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&amp;/gi, "&")
-    .replace(/\r/g, "")
-    .trim();
-}
-function protectedLinesFromDetailsText(value, tokens){
-  if(!tokens || !tokens.length) return "";
-  let inner = normalizeDetailsTagDelimiters(value)
-    .replace(/<summary\b[^>]*>[\s\S]*?<\/summary\s*>/gi, function(summary){
-      return "\n" + summary.replace(/<\/?summary\b[^>]*>/gi, "") + "\n";
-    })
-    .replace(/<\/?(?:details|summary)\b[^>]*>/gi, "\n");
-  inner = inner
-    .replace(/<br\s*\/?\s*>/gi, "\n")
-    .replace(/<\/p\s*>/gi, "\n")
-    .replace(/<\/div\s*>/gi, "\n");
-  const lines = inner.split(/\n+/)
-    .map(detailsLineToPlain)
-    .map(line => line.trim())
-    .filter(Boolean);
-  return lines.filter(line => isProtectedText(line, tokens)).join("\n\n");
-}
-function appendDetailsKept(out, hidden, tokens){
-  const kept = protectedLinesFromDetailsText(hidden, tokens);
-  if(!kept) return out;
-  return out + (out && !/\n\n$/.test(out) ? "\n\n" : "") + kept + "\n\n";
-}
-function stripDetailsSegmentsFromText(value, tokens, state){
-  let src = normalizeDetailsTagDelimiters(value);
-  if(!src) return "";
-  const tagRe = /<\/?(?:details|summary)\b[^>]*>/gi;
-  let out = "";
-  let hidden = "";
-  let idx = 0;
-  let inDetails = !!(state && state.open);
-  let match;
-  while((match = tagRe.exec(src))){
-    const tag = match[0];
-    const before = src.slice(idx, match.index);
-    const lower = tag.toLowerCase();
-    if(inDetails) hidden += before;
-    else out += before;
-
-    if(/^<details\b/i.test(tag)){
-      if(!inDetails){
-        inDetails = true;
-        hidden = "";
-      }else{
-        hidden += tag;
-      }
-    }else if(/^<\/details/i.test(tag)){
-      if(inDetails){
-        out = appendDetailsKept(out, hidden, tokens);
-        hidden = "";
-        inDetails = false;
-      }
-      // details 닫힘 태그 자체는 항상 버립니다.
-    }else{
-      // summary 태그는 접힘 토큰의 일부라서 밖에 있어도 버리고, 안에 있으면 보호어 판정용 숨김 버퍼에만 둡니다.
-      if(inDetails) hidden += tag;
-    }
-    idx = tagRe.lastIndex;
-  }
-  const tail = src.slice(idx);
-  if(inDetails){
-    hidden += tail;
-    out = appendDetailsKept(out, hidden, tokens);
-  }else{
-    out += tail;
-  }
-  if(state) state.open = inDetails;
-  return out
-    .replace(/^\s*<\/?summary\b[^>]*>.*?<\/summary\s*>\s*$/gim, "")
-    .replace(/^\s*<\/?(?:details|summary)\b[^>]*>\s*$/gim, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
+// ------------------ details 제거 (기존 로그용, 보호 키워드 예외) ------------------
 function filterDetailsByProtection(text, tokens){
-  return stripDetailsSegmentsFromText(text, tokens || getProtectTokens(), {open:false});
+  return (text || "").replace(/<details\b[\s\S]*?<\/details>/gi, (block) => {
+    if (!tokens || tokens.length === 0) return "";
+    let inner = block
+      .replace(/<summary[\s\S]*?<\/summary>/gi, "")
+      .replace(/<\/?details[^>]*>/gi, "");
+    const paras = inner.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
+    const kept = paras.filter(p => isProtectedText(p, tokens));
+    if (kept.length === 0) return "";
+    return "\n\n" + kept.join("\n\n") + "\n\n";
+  })
+  .replace(/^\s*<\/?details.*?>\s*$/gim, "")
+  .replace(/^\s*<summary.*?>.*?<\/summary>\s*$/gim, "");
 }
-function isDetailsMarkedElement(el){
-  if(!el || el.nodeType !== 1) return false;
-  if(el.tagName === "DETAILS") return true;
-  if(el.getAttribute && el.getAttribute("data-rofan-from-details") === "1") return true;
-  return !!(el.closest && el.closest("details,[data-rofan-from-details='1']"));
-}
-function markDetailsElements(root){
-  if(!root || !root.querySelectorAll) return;
-  root.querySelectorAll("details, details *").forEach(function(el){
-    try{ el.setAttribute("data-rofan-from-details", "1"); }catch(_err){}
-  });
-}
-function applyDetailsRemovalToChunks(chunks){
-  if(!removeDetailsEl || !removeDetailsEl.checked) return chunks || [];
-  const tokens = getProtectTokens();
-  const out = [];
-  const state = {open:false};
-  (chunks || []).forEach(function(chunk){
-    if(!chunk) return;
-    const next = Object.assign({}, chunk);
-    if(next.fromDetails){
-      next.text = protectedLinesFromDetailsText(next.text || "", tokens);
-      next.fromDetails = false;
-      state.open = false;
-    }else{
-      next.text = stripDetailsSegmentsFromText(next.text || "", tokens, state);
-    }
-    if(String(next.text || "").trim()) out.push(next);
-  });
-  return out;
-}
+
 // ------------------ 별표 지문 파서(기존 로그용) ------------------
 function parseChunks(text){
   const s=(text||"").replace(/\r/g,"");
@@ -1975,7 +1864,6 @@ function decodeQuotedPrintableUTF8(str){
 }
 function extractLikelyChatHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
-  markDetailsElements(doc.body || doc);
   const scoreContainer = (el) => {
     if(!el) return 0;
     const textLen = (el.innerText || el.textContent || "").length;
@@ -2035,7 +1923,6 @@ function handleRichPaste(e){
 }
 function sanitizePastedHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
-  markDetailsElements(doc.body || doc);
   doc.querySelectorAll("script,style,meta,link,iframe,object,embed").forEach(n => n.remove());
   doc.body.querySelectorAll("*").forEach(el => {
     [...el.attributes].forEach(attr => {
@@ -2358,7 +2245,6 @@ function parseRofanChatChunks(root){
   const pushChunksFromElement = (el, baseOwner) => {
     const blockId = getElementBlockId(el) || ("b" + (blockSeq++));
     const baseKind = getElementKindHint(el);
-    const baseFromDetails = isInsideDetailsElement(el);
     const start = chunks.length;
     let buffer = "";
     let bufferKind = null;
@@ -2432,7 +2318,7 @@ function parseRofanChatChunks(root){
         italic: ctx.italic || isItalicElement(childEl),
         kind: getElementKindHint(childEl) || ctx.kind || "",
         fromTable: ctx.fromTable || isRemovableBlockElement(childEl),
-        fromDetails: ctx.fromDetails || isInsideDetailsElement(childEl),
+        fromDetails: ctx.fromDetails || childEl.tagName === "DETAILS",
         owner: ownerHint || ctx.owner || "",
         color
       };
@@ -2447,7 +2333,7 @@ function parseRofanChatChunks(root){
       italic: isItalicElement(el),
       kind: baseKind || "",
       fromTable: isRemovableBlockElement(el),
-      fromDetails: baseFromDetails,
+      fromDetails: el.tagName === "DETAILS",
       owner: baseOwner || getElementOwnerHint(el, getInlineColor(el)) || "",
       color: getInlineColor(el) || ""
     }));
@@ -3249,11 +3135,6 @@ function renderChunks(chunks, options){
     }
     if(!t) return "";
 
-    if(removeDetailsEl && removeDetailsEl.checked){
-      t = stripDetailsSegmentsFromText(t, tokens, {open:false});
-      if(!t) return "";
-    }
-
     if(removeHTMLEl.checked){
       t = t.replace(/<script[\s\S]*?<\/script>/gi,"");
       t = t.replace(/<style[\s\S]*?<\/style>/gi,"");
@@ -3361,14 +3242,13 @@ function transformText(){
     const oocDropBlockIds = getDroppedBlockIdsFromOocDecisions(oocItems);
     const oocStripMap = getOocStripMap(oocItems);
     const dropBlockIds = mergeSets(duplicateDropBlockIds, oocDropBlockIds);
-    const detailChunks = applyDetailsRemovalToChunks(parsed.chunks);
-    const structuralPlan = createStructuralDeletePlan(detailChunks, dropBlockIds);
+    const structuralPlan = createStructuralDeletePlan(parsed.chunks, dropBlockIds);
 
     const deleteTokens = getDeleteContainsTokens();
-    const containsItems = buildContainsReviewItems(detailChunks, dropBlockIds, deleteTokens, structuralPlan.dropChunkIds);
+    const containsItems = buildContainsReviewItems(parsed.chunks, dropBlockIds, deleteTokens, structuralPlan.dropChunkIds);
     updateContainsReviewPanel(containsItems);
 
-    const renderedPack = renderChunks(detailChunks, {
+    const renderedPack = renderChunks(parsed.chunks, {
       removeTables: removeTablesEl.checked,
       deleteTokens,
       deleteContainsMode: deleteContainsModeEl.value,
@@ -3382,7 +3262,7 @@ function transformText(){
     const rendered = renderedPack.text;
     lastStructuredItems = renderedPack.items || [];
     setResultOutput(chatOutput, rendered);
-    afterTransform(detailChunks, parsed.blocks, rendered);
+    afterTransform(parsed.chunks, parsed.blocks, rendered);
     return;
   }
 
@@ -3409,8 +3289,7 @@ function transformText(){
     text = text.replace(/__(.*?)__/g,"$1");
   }
 
-  const baseChunks = (classicActiveChunks && classicActiveChunks.length) ? cloneChunks(classicActiveChunks) : (structuredChunks || parseChunks(text));
-  const chunks = applyDetailsRemovalToChunks(baseChunks);
+  const chunks = (classicActiveChunks && classicActiveChunks.length) ? cloneChunks(classicActiveChunks) : (structuredChunks || parseChunks(text));
   const deleteTokens = getDeleteContainsTokens();
   currentDuplicateGroups = [];
   duplicateReviewPanel.classList.add("hidden");
@@ -7428,5 +7307,6 @@ requestAnimationFrame(syncActiveResultHeight);
 })();
 
 </script>
+<script src="rofan-mobile-export.js"></script>
 </body>
 </html>
