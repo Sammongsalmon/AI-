@@ -1693,6 +1693,9 @@ function isDetailsMarkedElement(el){
   if(el.getAttribute && el.getAttribute("data-rofan-from-details") === "1") return true;
   return !!(el.closest && el.closest("details,[data-rofan-from-details='1']"));
 }
+function isInsideDetailsElement(el){
+  return isDetailsMarkedElement(el);
+}
 function markDetailsElements(root){
   if(!root || !root.querySelectorAll) return;
   root.querySelectorAll("details, details *").forEach(function(el){
