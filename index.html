@@ -1226,17 +1226,6 @@ const WORK_STORE_NAME = "work";
 const WORK_STATE_KEY = "current";
 const WORK_META_KEY = "rofan-cleaner-work-meta";
 const WORK_FALLBACK_KEY = "rofan-cleaner-work-fallback";
-function safeLocalStorageGet(key){
-  try{ return window.localStorage ? window.localStorage.getItem(key) : null; }catch(_err){ return null; }
-}
-function safeLocalStorageSet(key, value){
-  try{ if(window.localStorage){ window.localStorage.setItem(key, value); return true; } }catch(_err){}
-  return false;
-}
-function safeLocalStorageRemove(key){
-  try{ if(window.localStorage) window.localStorage.removeItem(key); }catch(_err){}
-}
-
 
 function openWorkDB(){
   return new Promise((resolve, reject) => {
@@ -3646,14 +3635,39 @@ function countTermInsensitive(text, term){
   while((pos = hay.indexOf(needle, pos)) !== -1){ count++; pos += needle.length; }
   return count;
 }
+function getTemplateRiskTerms(text){
+  const source = String(text || "");
+  const found = new Map();
+  const re = new RegExp("\\{\\{\\s*([^{}\\n\\r]+?)\\s*\\}\\}", "g");
+  let match;
+  while((match = re.exec(source))){
+    const inner = String(match[1] || "").trim();
+    if(!inner) continue;
+    const term = String(match[0] || "").trim();
+    const key = term.toLowerCase();
+    if(!found.has(key)) found.set(key, {term, count:0});
+    found.get(key).count++;
+  }
+  return Array.from(found.values());
+}
 function updateRiskPanel(text){
   if(!riskPanelEl) return;
-  const found = RISK_TERMS.map(term => ({term, count:countTermInsensitive(text, term)})).filter(x => x.count > 0);
+  const merged = new Map();
+  RISK_TERMS.map(term => ({term, count:countTermInsensitive(text, term)}))
+    .filter(x => x.count > 0)
+    .concat(getTemplateRiskTerms(text))
+    .forEach(item => {
+      const key = String(item.term || "").toLowerCase();
+      if(!key) return;
+      if(!merged.has(key)) merged.set(key, {term:item.term, count:0});
+      merged.get(key).count += item.count || 0;
+    });
+  const found = Array.from(merged.values()).filter(x => x.count > 0);
   if(!found.length){
     riskPanelEl.innerHTML = `<div class="emptyState">위험 문구 없음</div>`;
     return;
   }
-  riskPanelEl.innerHTML = found.map(x => `<button type="button" class="riskChip" onclick="appendDeleteKeyword('${escapeAttr(x.term)}')"><span>${escapeHTML(x.term)}</span><b>${x.count}</b></button>`).join("") + `<div class="miniHelp">누르면 삭제 키워드에 추가됩니다.</div>`;
+  riskPanelEl.innerHTML = found.map(x => `<button type="button" class="riskChip" onclick="appendDeleteKeyword(${escapeAttr(JSON.stringify(String(x.term || "")))})"><span>${escapeHTML(x.term)}</span><b>${x.count}</b></button>`).join("") + `<div class="miniHelp">누르면 삭제 키워드에 추가됩니다.</div>`;
 }
 function appendDeleteKeyword(term){
   const tokens = splitTokens(deleteContainsTokenEl.value || "");
