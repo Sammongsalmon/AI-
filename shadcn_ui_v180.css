@@ -1,0 +1,722 @@
+/* ───────────────────────────────────────────────────────────────
+   shadcn_ui_v180.css — v170 위에 얹는 정제 레이어 (shadcn/ui 기준)
+
+   v170은 구조를 정리했다(그림자 걷어내기·특이도 싸움·레이아웃 교정).
+   이 파일은 그 위에서 '결'만 바꾼다. v170의 규칙 대부분이 --nui-* 변수를
+   참조하므로, 변수를 다시 잡는 것만으로 팔레트 전체가 따라온다.
+
+   v170(노션)과 무엇이 다른가
+   · 회색이 따뜻한 회색(#37352f·#e9e9e7)에서 중성 회색(zinc: #09090b·#e4e4e7)으로
+   · 그림자를 완전히 없애는 대신 shadow-xs(0 1px 2px /.05)를 컨트롤에 되살린다
+     — shadcn은 종이처럼 눕히지 않고 아주 얕게 띄운다
+   · 포커스는 2px 실선 아웃라인에서 3px 반투명 링으로
+   · 글자 굵기 600 → 500(font-medium), 크기 14px 기준으로 통일
+   · 탭은 밑줄에서 세그먼티드 컨트롤로 — 흰 썸이 미끄러진다
+
+   로드 순서: shadcn_ui_v180.js 가 <link>를 v170 다음, <head> 맨 끝으로 유지한다.
+   ─────────────────────────────────────────────────────────────── */
+
+/* ── 토큰 ────────────────────────────────────────────────────── */
+:root{
+  --nui-bg:#ffffff;
+  --nui-surface:#ffffff;
+  --nui-fill:#f4f4f5;            /* muted */
+  --nui-fill2:#e4e4e7;           /* pressed */
+  --nui-ink:#09090b;             /* foreground */
+  --nui-sub:#3f3f46;
+  --nui-muted:#71717a;           /* muted-foreground */
+  --nui-line:#e4e4e7;            /* border */
+  --nui-input:#ffffff;
+  --nui-danger:#dc2626;
+  --nui-overlay:rgba(0,0,0,.5);
+
+  --nui-r-sm:6px; --nui-r:8px; --nui-r-lg:10px; --nui-r-xl:14px;
+  --nui-fast:.12s; --nui-dur:.15s; --nui-slow:.2s;
+  --nui-ease:cubic-bezier(0,0,.2,1);      /* ease-out */
+
+  /* shadcn의 그림자 층위 */
+  --nui-xs:0 1px 2px 0 rgba(0,0,0,.05);
+  --nui-sm:0 1px 3px 0 rgba(0,0,0,.1),0 1px 2px -1px rgba(0,0,0,.1);
+  --nui-pop-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);
+  --nui-ring:color-mix(in srgb,var(--theme-accent,#5eacc8) 50%,transparent);
+}
+html[data-theme="dark"]{
+  --nui-bg:#09090b;
+  --nui-surface:#18181b;
+  --nui-fill:#27272a;
+  --nui-fill2:#3f3f46;
+  --nui-ink:#fafafa;
+  --nui-sub:#d4d4d8;
+  --nui-muted:#a1a1aa;
+  --nui-line:#27272a;
+  --nui-input:#111113;
+  --nui-danger:#f87171;
+  --nui-overlay:rgba(0,0,0,.6);
+  --nui-xs:0 1px 2px 0 rgba(0,0,0,.3);
+  --nui-sm:0 1px 3px 0 rgba(0,0,0,.4),0 1px 2px -1px rgba(0,0,0,.4);
+  --nui-pop-shadow:0 10px 15px -3px rgba(0,0,0,.5),0 4px 6px -4px rgba(0,0,0,.5);
+}
+
+/* ── 타이포 ──────────────────────────────────────────────────── */
+body{letter-spacing:normal;font-size:14px}
+h1{font-size:24px;font-weight:600;letter-spacing:-.025em;line-height:1.2}
+h2,.sectionTitle{font-size:16px;font-weight:600;letter-spacing:-.015em}
+.heroText,.hint,.rfS2Sub,.rfS2Help,.logLibraryPath,.logLibraryStatus{
+  font-size:13px;line-height:1.5;letter-spacing:normal}
+html body .sectionHead{font-size:12px;font-weight:500;letter-spacing:.01em}
+
+/* ── 컨트롤 공통: 높이 36px, 14px/500, shadow-xs ────────────── */
+html .btn,
+html:not([data-theme="dark"]) body .rfS2Button,html[data-theme="dark"] body .rfS2Button,
+html body .logLibraryDialog .logLibraryImportBtn{
+  min-height:36px;padding:0 16px;font-size:14px;font-weight:500;letter-spacing:normal;
+  border-radius:var(--nui-r)!important;box-shadow:var(--nui-xs)!important;
+  transition:background-color var(--nui-dur) var(--nui-ease),
+             border-color var(--nui-dur) var(--nui-ease),
+             box-shadow var(--nui-dur) var(--nui-ease),
+             transform .1s var(--nui-ease);
+}
+/* 손가락 반응 — shadcn 자체엔 없지만 터치 화면에서는 눌린 게 보여야 한다 */
+html .btn:active,
+html:not([data-theme="dark"]) body .rfS2Button:active,html[data-theme="dark"] body .rfS2Button:active{
+  transform:scale(.985)}
+html .btn.subtle,html .btn[data-ghost]{box-shadow:none!important}
+
+/* 주 버튼: 사용자가 고른 테마색을 그대로 쓴다(앱의 설정 항목이다).
+   shadcn의 primary 처리(불투명도 90%로 눌림)만 가져온다. */
+html .btn.primary:hover,
+html:not([data-theme="dark"]) body .rfS2Button.save:hover,
+html:not([data-theme="dark"]) body .rfS2Button.primary:hover,
+html[data-theme="dark"] body .rfS2Button.save:hover,
+html[data-theme="dark"] body .rfS2Button.primary:hover{filter:none;opacity:.9}
+
+/* ── 포커스: 3px 반투명 링 ──────────────────────────────────── */
+:focus-visible{outline:none!important}
+html .btn:focus-visible,
+html .tabs .tab:focus-visible,
+html body .toggle:focus-within,
+html:not([data-theme="dark"]) body .rfS2Button:focus-visible,
+html[data-theme="dark"] body .rfS2Button:focus-visible,
+html body .logLibraryDialog .logLibraryTab:focus-visible{
+  border-color:var(--theme-accent,#5eacc8)!important;
+  box-shadow:0 0 0 3px var(--nui-ring)!important}
+html:not([data-theme="dark"]) textarea:focus,
+html:not([data-theme="dark"]) .pastebox:focus,
+html:not([data-theme="dark"]) .richResultBox:focus,
+html:not([data-theme="dark"]) .epubRichEditor:focus,
+html:not([data-theme="dark"]) input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):focus,
+html:not([data-theme="dark"]) select:focus,
+html[data-theme="dark"] textarea:focus,
+html[data-theme="dark"] input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):focus,
+html[data-theme="dark"] select:focus{
+  border-color:var(--theme-accent,#5eacc8)!important;
+  box-shadow:0 0 0 3px var(--nui-ring)!important}
+
+/* ── 입력면 ─────────────────────────────────────────────────── */
+html:not([data-theme="dark"]) body input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+html:not([data-theme="dark"]) body select,
+html:not([data-theme="dark"]) body .rfS2Input,
+html:not([data-theme="dark"]) body .rfS2Select,
+html[data-theme="dark"] body input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+html[data-theme="dark"] body select,
+html[data-theme="dark"] body .rfS2Input,
+html[data-theme="dark"] body .rfS2Select{
+  min-height:36px;font-size:14px;border-radius:var(--nui-r)!important;
+  box-shadow:var(--nui-xs)!important}
+html:not([data-theme="dark"]) body textarea,html[data-theme="dark"] body textarea,
+html:not([data-theme="dark"]) body .pastebox,html[data-theme="dark"] body .pastebox,
+html:not([data-theme="dark"]) body .richResultBox,html[data-theme="dark"] body .richResultBox{
+  border-radius:var(--nui-r)!important;box-shadow:var(--nui-xs)!important;font-size:14px}
+::placeholder{color:var(--nui-muted);opacity:1}
+
+/* ── 카드: rounded-xl + shadow-sm ───────────────────────────── */
+html:not([data-theme="dark"]) .card,html[data-theme="dark"] .card,
+html:not([data-theme="dark"]) .sideCard,html[data-theme="dark"] .sideCard{
+  border-radius:var(--nui-r-xl)!important;box-shadow:var(--nui-sm)!important;padding:20px}
+html .card.hero{box-shadow:none!important;padding:12px 2px 0!important}
+html:not([data-theme="dark"]) body #statsCard,html[data-theme="dark"] body #statsCard{
+  box-shadow:none!important}
+html:not([data-theme="dark"]) body details.foldBlock,html[data-theme="dark"] body details.foldBlock,
+html:not([data-theme="dark"]) body #optionsBoard,html[data-theme="dark"] body #optionsBoard,
+html:not([data-theme="dark"]) body #reviewBoard,html[data-theme="dark"] body #reviewBoard,
+html:not([data-theme="dark"]) body .rfS2Section,html[data-theme="dark"] body .rfS2Section{
+  border-radius:var(--nui-r-lg)!important;box-shadow:var(--nui-xs)!important}
+
+/* ── 탭: 밑줄 → 세그먼티드 컨트롤 ───────────────────────────
+      shadcn Tabs 의 기본형. 회색 트랙 안에서 흰 썸이 활성 탭을 따라간다.
+      썸은 shadcn_ui_v180.js 가 위치·폭을 재서 움직인다.
+      theme_v79_overrides 가 .tab:not(.active) 를 (0,3,1) 로 잡으므로
+      여기서도 같은 급 이상으로 맞춘다. */
+html:not([data-theme="dark"]) body .tabs,
+html[data-theme="dark"] body .tabs{
+  position:relative;background:var(--nui-fill)!important;border:0!important;
+  border-radius:var(--nui-r-lg)!important;padding:3px!important;gap:0;
+  display:flex;align-items:stretch;margin-top:16px;box-shadow:none!important}
+html:not([data-theme="dark"]) body .tabs .tab,
+html[data-theme="dark"] body .tabs .tab,
+html:not([data-theme="dark"]) body .tabs .tab:not(.active),
+html[data-theme="dark"] body .tabs .tab:not(.active){
+  flex:1 1 0;min-width:0;position:relative;z-index:1;
+  padding:7px 10px;border:0!important;border-radius:var(--nui-r-sm)!important;
+  font-size:14px;font-weight:500;letter-spacing:normal;
+  background:transparent!important;color:var(--nui-muted)!important;
+  box-shadow:none!important;
+  transition:color var(--nui-dur) var(--nui-ease)}
+html:not([data-theme="dark"]) body .tabs .tab:hover,
+html[data-theme="dark"] body .tabs .tab:hover{background:transparent!important;color:var(--nui-sub)!important}
+html:not([data-theme="dark"]) body .tabs .tab.active,
+html[data-theme="dark"] body .tabs .tab.active{
+  color:var(--nui-ink)!important;background:transparent!important;box-shadow:none!important}
+/* v170 의 밑줄 대비책을 끈다 — 이제 대비책은 흰 알약이다 */
+html:not([data-theme="dark"]) body .tabs:not(.hasInk) .tab.active,
+html[data-theme="dark"] body .tabs:not(.hasInk) .tab.active{box-shadow:none!important}
+html:not([data-theme="dark"]) body .tabs:not(.hasThumb) .tab.active,
+html[data-theme="dark"] body .tabs:not(.hasThumb) .tab.active{
+  background:var(--nui-surface)!important;box-shadow:var(--nui-xs)!important}
+.nuiTabInk{display:none!important}
+.nuiTabThumb{position:absolute;top:3px;bottom:3px;left:0;width:0;z-index:0;
+  background:var(--nui-surface);border-radius:var(--nui-r-sm);box-shadow:var(--nui-xs);
+  pointer-events:none;
+  transition:transform var(--nui-slow) var(--nui-ease),width var(--nui-slow) var(--nui-ease)}
+html[data-theme="dark"] .nuiTabThumb{background:var(--nui-fill2)}
+
+/* 보관함 탭도 같은 규칙으로 */
+html body .logLibraryDialog .logLibraryTabs{
+  background:var(--nui-fill)!important;border:0!important;
+  border-radius:var(--nui-r-lg)!important;padding:3px!important;gap:0;
+  margin:0 16px 4px;display:flex}
+html body .logLibraryDialog .logLibraryTab{
+  flex:1 1 0;padding:7px 8px;border-radius:var(--nui-r-sm)!important;
+  font-size:13px;font-weight:500;box-shadow:none!important;
+  color:var(--nui-muted)!important;background:transparent!important}
+html body .logLibraryDialog .logLibraryTab:hover{background:transparent!important;color:var(--nui-sub)!important}
+html body .logLibraryDialog .logLibraryTab.active{
+  background:var(--nui-surface)!important;color:var(--nui-ink)!important;
+  box-shadow:var(--nui-xs)!important}
+html[data-theme="dark"] body .logLibraryDialog .logLibraryTab.active{background:var(--nui-fill2)!important}
+
+/* ── 배지 ───────────────────────────────────────────────────── */
+html:not([data-theme="dark"]) body .badge,html[data-theme="dark"] body .badge,
+html:not([data-theme="dark"]) body .saveBadge,html[data-theme="dark"] body .saveBadge{
+  background:transparent!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-sm)!important;color:var(--nui-muted)!important;
+  font-size:12px;font-weight:500;padding:2px 8px}
+
+/* ── 통계 칩 ────────────────────────────────────────────────── */
+html:not([data-theme="dark"]) body .stat,html[data-theme="dark"] body .stat{
+  background:transparent!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-lg)!important;padding:10px 8px}
+
+/* ── 선택 상태: 옅은 채움 대신 강조 테두리 + 링 ─────────────── */
+/* 선택 상태: 테두리에 쓰던 강조색을 바탕으로 옮긴다.
+   테두리 + 링만으로는 무엇이 켜졌는지 훑기 어렵다는 지적을 반영했다.
+   글자는 흰색으로 뒤집고, 안쪽 라디오 표시도 같이 뒤집어 대비를 지킨다. */
+html:not([data-theme="dark"]) body .toggle:has(input:checked),
+html[data-theme="dark"] body .toggle:has(input:checked),
+html:not([data-theme="dark"]) body .miniChoiceBtn.active,
+html[data-theme="dark"] body .miniChoiceBtn.active,
+html:not([data-theme="dark"]) body .reviewChoice.active,
+html[data-theme="dark"] body .reviewChoice.active{
+  background:var(--theme-accent,#5eacc8)!important;
+  border-color:var(--theme-accent,#5eacc8)!important;
+  color:#fff!important;box-shadow:none!important}
+html:not([data-theme="dark"]) body .toggle:has(input:checked) *,
+html[data-theme="dark"] body .toggle:has(input:checked) *{color:#fff!important}
+html:not([data-theme="dark"]) body .toggle:has(input:checked) input,
+html[data-theme="dark"] body .toggle:has(input:checked) input{
+  accent-color:#fff;border-color:#fff!important}
+html body .toggle,html body .miniChoiceBtn,html body .reviewChoice{
+  min-height:36px;font-size:14px;font-weight:500;border-radius:var(--nui-r)!important}
+
+/* ── 대화상자 ───────────────────────────────────────────────── */
+html body .logLibraryDialog,
+html:not([data-theme="dark"]) body .rfS2Dialog,html[data-theme="dark"] body .rfS2Dialog{
+  border-radius:var(--nui-r-xl)!important;box-shadow:var(--nui-pop-shadow)!important}
+html body .logLibraryDialog .logLibraryTitle,
+html:not([data-theme="dark"]) body .rfS2Dialog h2,html[data-theme="dark"] body .rfS2Dialog h2{
+  font-size:18px;font-weight:600;letter-spacing:-.015em}
+html body .logLibraryDialog .logLibraryEmpty{
+  background:transparent!important;border:1px dashed var(--nui-line)!important;
+  border-radius:var(--nui-r-lg)!important;color:var(--nui-muted)!important;font-size:13px}
+
+/* 가운데 대화상자는 95%에서 확대되며 뜬다(shadcn zoom-in-95) */
+@keyframes nuiZoomIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:none}}
+html:not([data-theme="dark"]) body .rfS2Modal:not([hidden]) .rfS2Dialog,
+html[data-theme="dark"] body .rfS2Modal:not([hidden]) .rfS2Dialog{
+  animation:nuiZoomIn var(--nui-slow) var(--nui-ease)!important}
+/* 하단에 붙는 보관함은 시트 그대로 — 붙어 있는 변에서 밀려 올라온다 */
+html body .logLibraryModal:not([hidden]) .logLibraryDialog{
+  animation:nuiSheetIn var(--nui-slow) var(--nui-ease)!important}
+
+/* ── 아이콘 버튼 ────────────────────────────────────────────── */
+html .navIconBtn,html .themeIconButton,html .logLibraryIconBtn{
+  border-radius:var(--nui-r)!important;box-shadow:none!important}
+html .navIconBtn:active,html .themeIconButton:active,html .logLibraryIconBtn:active{
+  transform:scale(.96)}
+
+/* ── 접힘 블록 번호 배지 ────────────────────────────────────── */
+details.foldBlock>summary::before{
+  background:transparent!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-sm)!important;color:var(--nui-muted)!important;
+  font-size:11px;font-weight:500}
+details.foldBlock>summary{font-size:15px;font-weight:600;letter-spacing:-.01em}
+
+/* ── 위/아래 이동 패드 ──────────────────────────────────────── */
+html .aiJumpPad button{border-radius:var(--nui-r)!important;box-shadow:var(--nui-xs)!important}
+
+/* ── 스크롤바 ───────────────────────────────────────────────── */
+::-webkit-scrollbar-thumb{background:var(--nui-fill2)!important}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb{background:#3f3f46!important}
+
+@media (prefers-reduced-motion:reduce){
+  .nuiTabThumb{transition:none!important}
+  html:not([data-theme="dark"]) body .rfS2Modal:not([hidden]) .rfS2Dialog,
+  html[data-theme="dark"] body .rfS2Modal:not([hidden]) .rfS2Dialog,
+  html body .logLibraryModal:not([hidden]) .logLibraryDialog{animation:none!important}
+}
+
+/* ── 남은 청록 자리 ──────────────────────────────────────────────
+      theme_v79_overrides 가 (0,3,2)·(0,1,1) 로 잡아 두어 아래 두 곳이
+      계속 청록으로 남았다. 같은 급 이상으로 맞춘다. */
+html:not([data-theme="dark"]) body details.foldBlock>.blockBody,
+html[data-theme="dark"] body details.foldBlock>.blockBody{
+  border-color:var(--nui-line)!important;background:transparent!important}
+html:not([data-theme="dark"]),html:not([data-theme="dark"]) body,
+html[data-theme="dark"],html[data-theme="dark"] body{
+  background:var(--nui-bg)!important;background-image:none!important}
+
+/* 배율 입력(80%) 등 강조 파스텔로 칠해지던 작은 필드 */
+html:not([data-theme="dark"]) body .zoomValue,html[data-theme="dark"] body .zoomValue,
+html:not([data-theme="dark"]) body .riskChip,html[data-theme="dark"] body .riskChip,
+html:not([data-theme="dark"]) body .quickBackup,html[data-theme="dark"] body .quickBackup,
+html:not([data-theme="dark"]) body [data-mobile-backup],html[data-theme="dark"] body [data-mobile-backup]{
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;
+  color:var(--nui-ink)!important;border-radius:var(--nui-r-sm)!important}
+
+/* 설정 대화상자 안내문이 버튼 줄에 붙어 보이던 것 */
+html:not([data-theme="dark"]) body .rfS2Help,html[data-theme="dark"] body .rfS2Help,
+html:not([data-theme="dark"]) body .rfS2Status,html[data-theme="dark"] body .rfS2Status{
+  margin-top:8px;line-height:1.55}
+html:not([data-theme="dark"]) body .rfS2Button.danger,html[data-theme="dark"] body .rfS2Button.danger{
+  color:var(--nui-danger)!important}
+html:not([data-theme="dark"]) body .rfS2Button.danger:hover,html[data-theme="dark"] body .rfS2Button.danger:hover{
+  background:color-mix(in srgb,var(--nui-danger) 8%,transparent)!important;
+  border-color:color-mix(in srgb,var(--nui-danger) 30%,transparent)!important}
+
+/* ── 시스템 폰트로 바꾼 뒤의 무게 조정 ────────────────────────────
+      명조는 400 한 벌이라 굵은 자리가 합성으로 흐릿하게 눌렸다.
+      시스템 산세리프는 진짜 굵기를 갖고 있어 같은 600이 훨씬 무겁게 나온다.
+      shadcn 기준(라벨 500 · 카드 제목 600)으로 낮춘다. */
+html,body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+html .filePicker>summary>span:first-child,
+html .filePicker>summary::after,
+html .prettyFile .fileButtonText,
+html:not([data-theme="dark"]) body .fileNameText,html[data-theme="dark"] body .fileNameText{
+  font-weight:500}
+html .filePicker>summary::after{color:var(--nui-muted)}
+html:not([data-theme="dark"]) body .stat,html[data-theme="dark"] body .stat{font-weight:500}
+html:not([data-theme="dark"]) body .sectionHead,html[data-theme="dark"] body .sectionHead{font-weight:500}
+
+/* ═══ v185 — 검토 보드 재정리 ═══════════════════════════════════
+   문제 셋을 각각 다르게 푼다.
+   1) 제목과 옵션이 같은 무게로 보인다 → 층을 셋으로 나눈다
+      카드 제목 16/600 · 아코디언 제목 14/500 · 본문 13/400
+   2) 세로가 지나치게 길다 → 각각 둥근 카드였던 접힘 블록을
+      shadcn Accordion 처럼 헤어라인으로 나뉜 한 덩어리 목록으로
+   3) 버튼·칩이 테두리를 넘는다 → 줄바꿈 허용 + 말줄임 + shrink 금지
+   ─────────────────────────────────────────────────────────────── */
+
+/* ── 1. 머리 층위 ────────────────────────────────────────────── */
+html:not([data-theme="dark"]) body .sectionTitle,
+html[data-theme="dark"] body .sectionTitle{
+  font-size:16px!important;font-weight:600!important;letter-spacing:-.015em;
+  color:var(--nui-ink)!important;line-height:1.3}
+html:not([data-theme="dark"]) body .sectionDesc,
+html[data-theme="dark"] body .sectionDesc{
+  font-size:13px!important;font-weight:400!important;color:var(--nui-muted)!important;
+  margin-top:2px;line-height:1.5}
+/* 머리에 들어가는 버튼·펼침 표시는 줄바꿈하지 않고 줄어들지도 않는다 */
+html body .sectionHead{gap:10px}
+html body .sectionHead>*{min-width:0}
+html body .sectionHead .btn,
+html body summary::after{flex:0 0 auto;white-space:nowrap}
+
+/* ── 2. 초기화 버튼 줄 ───────────────────────────────────────── */
+html:not([data-theme="dark"]) body .reviewResetRow,
+html[data-theme="dark"] body .reviewResetRow{
+  display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;justify-content:flex-start}
+html:not([data-theme="dark"]) body .reviewResetRow .btn,
+html[data-theme="dark"] body .reviewResetRow .btn,
+html:not([data-theme="dark"]) body .reviewResetRow .btn.subtle,
+html[data-theme="dark"] body .reviewResetRow .btn.subtle{
+  flex:0 1 auto;min-height:32px;padding:0 12px;font-size:13px;font-weight:500;
+  white-space:nowrap;
+  background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  color:var(--nui-sub)!important;border-radius:var(--nui-r)!important;
+  box-shadow:var(--nui-xs)!important}
+html:not([data-theme="dark"]) body .reviewResetRow .btn:hover,
+html[data-theme="dark"] body .reviewResetRow .btn:hover{
+  background:var(--nui-fill)!important;color:var(--nui-ink)!important}
+
+/* ── 3. 접힘 블록 → 아코디언 ─────────────────────────────────── */
+html:not([data-theme="dark"]) body details.reviewPanelFold,
+html[data-theme="dark"] body details.reviewPanelFold{
+  background:transparent!important;border:0!important;border-radius:0!important;
+  border-bottom:1px solid var(--nui-line)!important;box-shadow:none!important;
+  overflow:visible!important}
+html:not([data-theme="dark"]) body details.reviewPanelFold:last-of-type,
+html[data-theme="dark"] body details.reviewPanelFold:last-of-type{border-bottom:0!important}
+html:not([data-theme="dark"]) body details.reviewPanelFold>summary,
+html[data-theme="dark"] body details.reviewPanelFold>summary{
+  padding:14px 2px!important;border:0!important;background:transparent!important;
+  font-size:14px!important;font-weight:500!important;color:var(--nui-ink)!important;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer}
+html:not([data-theme="dark"]) body details.reviewPanelFold .reviewPanelInner,
+html[data-theme="dark"] body details.reviewPanelFold .reviewPanelInner{
+  padding:0 2px 14px!important;background:transparent!important;border:0!important;
+  border-radius:0!important;box-shadow:none!important}
+/* 접힘 제목이 안쪽에서 한 번 더 나온다 — 같은 것을 두 번 말하지 않는다 */
+html body details.reviewPanelFold .reviewHead .reviewTitle{display:none}
+html:not([data-theme="dark"]) body .reviewMeta,html[data-theme="dark"] body .reviewMeta{
+  font-size:12px!important;color:var(--nui-muted)!important}
+html:not([data-theme="dark"]) body details.reviewPanelFold .emptyState,
+html[data-theme="dark"] body details.reviewPanelFold .emptyState{
+  background:transparent!important;padding:0!important;font-size:13px;
+  color:var(--nui-muted)!important;text-align:left}
+
+/* ── 4. 위험 문구 감지 ───────────────────────────────────────── */
+html:not([data-theme="dark"]) body aside.reviewPanel,
+html[data-theme="dark"] body aside.reviewPanel{
+  border-radius:var(--nui-r-lg)!important;padding:14px!important;box-shadow:none!important}
+html:not([data-theme="dark"]) body .riskPanel,
+html[data-theme="dark"] body .riskPanel{
+  display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+  background:transparent!important;border:0!important;padding:0!important;margin-top:10px}
+html:not([data-theme="dark"]) body .riskChip,
+html[data-theme="dark"] body .riskChip{
+  max-width:100%;min-width:0;
+  display:inline-flex;align-items:center;gap:6px;padding:4px 9px;
+  background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-sm)!important;color:var(--nui-ink)!important;
+  font-size:12px;font-weight:500;line-height:1.5;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  transition:background var(--nui-dur) var(--nui-ease)}
+html:not([data-theme="dark"]) body .riskChip:hover,
+html[data-theme="dark"] body .riskChip:hover{background:var(--nui-fill)!important}
+html:not([data-theme="dark"]) body .riskChip b,
+html[data-theme="dark"] body .riskChip b{
+  flex:0 0 auto;background:var(--nui-fill)!important;color:var(--nui-muted)!important;
+  border-radius:999px!important;padding:0 6px;font-size:11px;font-weight:500}
+html:not([data-theme="dark"]) body .riskPanel .emptyState,
+html[data-theme="dark"] body .riskPanel .emptyState{
+  flex:1 1 100%;background:transparent!important;padding:0!important;
+  font-size:13px;color:var(--nui-muted)!important;text-align:left}
+
+/* ── v185 마무리 ─────────────────────────────────────────────── */
+/* 머리 안에서 제목 덩어리만 늘어나고, 배지·버튼은 줄어들지 않는다 */
+html body .sectionHead{align-items:flex-start}
+html body .sectionHead>div:first-child{flex:1 1 auto;min-width:0}
+html body .sectionHead .badge,html body .sectionHead .saveBadge{flex:0 0 auto;white-space:nowrap}
+html:not([data-theme="dark"]) body .sectionHead .btn.subtle,
+html[data-theme="dark"] body .sectionHead .btn.subtle{
+  min-height:32px;padding:0 12px;font-size:13px;
+  background:transparent!important;border-color:transparent!important;
+  color:var(--nui-muted)!important;box-shadow:none!important}
+html:not([data-theme="dark"]) body .sectionHead .btn.subtle:hover,
+html[data-theme="dark"] body .sectionHead .btn.subtle:hover{
+  background:var(--nui-fill)!important;color:var(--nui-ink)!important}
+
+/* 아코디언 덩어리를 머리에서 한 칸 떨어뜨려 층을 분명히 한다 */
+html body .reviewArea{margin-top:14px;border-top:1px solid var(--nui-line)}
+html body details.reviewPanelFold .reviewHead{margin:0!important;gap:2px}
+html:not([data-theme="dark"]) body .reviewMeta,html[data-theme="dark"] body .reviewMeta{
+  font-size:13px!important;line-height:1.55}
+
+/* 위험 문구 감지도 아코디언과 같은 결로 — 카드 안의 카드를 없앤다 */
+html:not([data-theme="dark"]) body aside.reviewPanel,
+html[data-theme="dark"] body aside.reviewPanel{
+  background:transparent!important;border:0!important;border-radius:0!important;
+  border-top:1px solid var(--nui-line)!important;padding:14px 2px 2px!important}
+html:not([data-theme="dark"]) body aside.reviewPanel .sectionTitle,
+html[data-theme="dark"] body aside.reviewPanel .sectionTitle{
+  font-size:14px!important;font-weight:500!important;letter-spacing:normal}
+
+/* 초기화 줄은 머리 안에 있지만 유령 버튼이 아니다 — 클래스를 하나 더 얹어
+   바로 위 .sectionHead .btn.subtle 규칙(같은 급, 나중에 선언)을 넘어선다 */
+html:not([data-theme="dark"]) body .sectionHead .reviewResetRow .btn.subtle,
+html[data-theme="dark"] body .sectionHead .reviewResetRow .btn.subtle,
+html:not([data-theme="dark"]) body .sectionHead .reviewResetRow .btn,
+html[data-theme="dark"] body .sectionHead .reviewResetRow .btn{
+  background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  color:var(--nui-sub)!important;box-shadow:var(--nui-xs)!important;
+  min-height:32px;padding:0 12px;font-size:13px}
+html:not([data-theme="dark"]) body .sectionHead .reviewResetRow .btn:hover,
+html[data-theme="dark"] body .sectionHead .reviewResetRow .btn:hover{
+  background:var(--nui-fill)!important;color:var(--nui-ink)!important}
+
+/* 마지막 접힘 블록과 위험 문구 감지 사이에 선이 두 줄 겹쳤다 */
+html:not([data-theme="dark"]) body details.reviewPanelFold:last-of-type,
+html[data-theme="dark"] body details.reviewPanelFold:last-of-type{
+  border-bottom:1px solid var(--nui-line)!important}
+html:not([data-theme="dark"]) body aside.reviewPanel,
+html[data-theme="dark"] body aside.reviewPanel{border-top:0!important;padding-top:14px!important}
+
+/* 긴 토큰({{command:…}})이 칩 밖으로 밀려 나갔다.
+   플렉스 컨테이너 안의 익명 텍스트에는 말줄임이 걸리지 않으므로,
+   자르는 대신 칩 안에서 줄바꿈하게 둔다 — 전체를 읽을 수 있는 편이 낫다. */
+html:not([data-theme="dark"]) body .riskChip,
+html[data-theme="dark"] body .riskChip{
+  flex:0 1 auto;white-space:normal!important;overflow:hidden!important;
+  overflow-wrap:anywhere;word-break:break-all;text-align:left}
+html:not([data-theme="dark"]) body .riskChip b,
+html[data-theme="dark"] body .riskChip b{flex:0 0 auto;align-self:center}
+
+/* ── 남은 청록 테두리 일괄 정리 ──────────────────────────────────
+      전수 검사에서 #c4e3ef 테두리가 남아 있던 자리들.
+      대부분 EPUB 편집·챕터 목록처럼 늦게 나타나는 컴포넌트라 이제야 잡혔다.
+      색 견본(.colorSwatch)과 인용 스타일 미리보기(.quoteMini)는
+      색 자체가 정보이므로 건드리지 않는다. */
+html:not([data-theme="dark"]) body .editorSizeValue,html[data-theme="dark"] body .editorSizeValue,
+html:not([data-theme="dark"]) body .sizeStepBtn,html[data-theme="dark"] body .sizeStepBtn,
+html:not([data-theme="dark"]) body .richColorControl,html[data-theme="dark"] body .richColorControl,
+html:not([data-theme="dark"]) body .quoteColorRow,html[data-theme="dark"] body .quoteColorRow,
+html:not([data-theme="dark"]) body .colorSwatchLabel,html[data-theme="dark"] body .colorSwatchLabel,
+html:not([data-theme="dark"]) body .fileControl,html[data-theme="dark"] body .fileControl,
+html:not([data-theme="dark"]) body .manualChapterIntro,html[data-theme="dark"] body .manualChapterIntro,
+html:not([data-theme="dark"]) body .manualChapterRow,html[data-theme="dark"] body .manualChapterRow,
+html:not([data-theme="dark"]) body .manualChapterEditor,html[data-theme="dark"] body .manualChapterEditor,
+html:not([data-theme="dark"]) body .chapterList,html[data-theme="dark"] body .chapterList,
+html:not([data-theme="dark"]) body .chapterPreviewItem,html[data-theme="dark"] body .chapterPreviewItem,
+html:not([data-theme="dark"]) body .unitChapterPreviewItem,html[data-theme="dark"] body .unitChapterPreviewItem,
+html:not([data-theme="dark"]) body .bookPreviewWrap,html[data-theme="dark"] body .bookPreviewWrap,
+html:not([data-theme="dark"]) body .quoteContextMenu,html[data-theme="dark"] body .quoteContextMenu,
+html:not([data-theme="dark"]) body .epubToolStack,html[data-theme="dark"] body .epubToolStack{
+  border-color:var(--nui-line)!important;border-radius:var(--nui-r)!important}
+html:not([data-theme="dark"]) body .postypeMini em,html[data-theme="dark"] body .postypeMini em,
+html:not([data-theme="dark"]) body .chapterTocRow b,html[data-theme="dark"] body .chapterTocRow b{
+  background:var(--nui-fill)!important;border-color:var(--nui-line)!important;color:var(--nui-ink)!important}
+html:not([data-theme="dark"]) body .quoteContextMenu,html[data-theme="dark"] body .quoteContextMenu{
+  border-radius:var(--nui-r-lg)!important;box-shadow:var(--nui-pop-shadow)!important}
+
+/* 화자 색상 대화상자(speaker_color_picker_v79)와 챕터 항목의 '펼치기' 표시 */
+html:not([data-theme="dark"]) body #speakerColorModalV79,
+html[data-theme="dark"] body #speakerColorModalV79{
+  background:var(--nui-overlay)!important;backdrop-filter:none!important}
+html:not([data-theme="dark"]) body #speakerColorDialogV79,
+html[data-theme="dark"] body #speakerColorDialogV79{
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;
+  border-radius:var(--nui-r-xl)!important;box-shadow:var(--nui-pop-shadow)!important;
+  color:var(--nui-ink)!important}
+html:not([data-theme="dark"]) body #speakerColorDialogV79 button,
+html[data-theme="dark"] body #speakerColorDialogV79 button{
+  border-color:var(--nui-line)!important;border-radius:var(--nui-r)!important;
+  min-height:36px;font-size:14px;font-weight:500}
+html:not([data-theme="dark"]) body .unitChapterPreviewItem>summary em,
+html[data-theme="dark"] body .unitChapterPreviewItem>summary em{
+  background:transparent!important;border-color:var(--nui-line)!important;
+  border-radius:var(--nui-r-sm)!important;color:var(--nui-muted)!important;
+  font-style:normal;font-size:12px;font-weight:500}
+html:not([data-theme="dark"]) body #speakerColorPreviewV79,
+html[data-theme="dark"] body #speakerColorPreviewV79{border-color:var(--nui-line)!important}
+
+/* ═══ v240 — 색 역할 정리 · 등록 글꼴에서의 층위 ═══════════════════
+   역할을 셋으로 못 박는다. 섞어 쓰면 무엇이 강조인지 알 수 없다.
+
+     테마색  → 누르면 무언가 일어나는 곳. 주 버튼·활성 탭·선택 상태·포커스 링
+     배경색  → 은은한 면. 보조/위험 버튼의 바탕, 안내 블록
+     회색    → 나머지 전부. 테두리·구분선·보조 글자
+
+   배경색은 설정에서 사용자가 고르는 값(--theme-background)이다.
+   위젯·하단바도 같은 값을 쓰도록 rofan_inject 쪽을 함께 고쳤다. */
+
+/* 안내·보조 면은 회색 대신 배경색으로 — 테마색과 한 계열로 묶인다 */
+html:not([data-theme="dark"]) body .rfS2Notice,
+html:not([data-theme="dark"]) body .workflowHint,
+html:not([data-theme="dark"]) body .riskChip:hover{
+  background:var(--theme-background,#eef7fb)!important;
+  border-color:color-mix(in srgb,var(--theme-accent,#5eacc8) 18%,var(--nui-line))!important;
+  color:var(--nui-ink)!important}
+html[data-theme="dark"] body .rfS2Notice,
+html[data-theme="dark"] body .workflowHint{
+  background:var(--nui-fill)!important;border-color:var(--nui-line)!important}
+
+/* ── 검토 보드 버튼 층위 ─────────────────────────────────────────
+      '전체 지문만 삭제' 같은 것이 맨 글자로 떠 있어 버튼인지 문구인지
+      구분되지 않았다. 테두리를 주고 높이를 36px 로 맞춘다.
+      주 버튼(검색)은 화면 폭을 다 먹는 덩어리였다 — 같은 높이로 낮춘다. */
+html:not([data-theme="dark"]) body #reviewBoard .btn,
+html[data-theme="dark"] body #reviewBoard .btn,
+html:not([data-theme="dark"]) body .reviewPanel .btn,
+html[data-theme="dark"] body .reviewPanel .btn{
+  min-height:36px;height:auto;padding:0 12px;font-size:13px;font-weight:500;
+  border-radius:var(--nui-r)!important;white-space:nowrap;
+  background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  color:var(--nui-sub)!important;box-shadow:var(--nui-xs)!important}
+html:not([data-theme="dark"]) body #reviewBoard .btn:hover,
+html[data-theme="dark"] body #reviewBoard .btn:hover{
+  background:var(--nui-fill)!important;color:var(--nui-ink)!important}
+html:not([data-theme="dark"]) body #reviewBoard .btn.primary,
+html[data-theme="dark"] body #reviewBoard .btn.primary,
+html:not([data-theme="dark"]) body .reviewPanel .btn.primary,
+html[data-theme="dark"] body .reviewPanel .btn.primary{
+  background:var(--theme-accent,#5eacc8)!important;
+  border-color:var(--theme-accent,#5eacc8)!important;color:#fff!important;font-weight:600}
+html:not([data-theme="dark"]) body #reviewBoard .btn.danger,
+html[data-theme="dark"] body #reviewBoard .btn.danger{
+  color:var(--nui-danger)!important;
+  border-color:color-mix(in srgb,var(--nui-danger) 30%,var(--nui-line))!important}
+/* 버튼이 여러 개면 한 줄에 억지로 밀어 넣지 않는다 */
+html body #reviewBoard .reviewActions,
+html body .reviewPanel .reviewActions,
+html body #reviewBoard .actionDock{
+  display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+
+/* ── 등록 글꼴에서도 층위가 남게 ────────────────────────────────
+      한 굵기짜리 글꼴은 400·500 차이가 안 보인다. 크기와 색으로 벌린다. */
+html body .sectionTitle{font-weight:600!important}
+html body details.foldBlock>summary,
+html body details.reviewPanelFold>summary{font-weight:600!important}
+html body .sectionDesc,html body .hint,html body .rfS2Help,html body .reviewMeta{
+  font-weight:400!important;color:var(--nui-muted)!important}
+html body .toggle,html body .miniChoiceBtn,html body .reviewChoice,
+html body .btn,html body .rfS2Button{font-weight:500!important}
+
+/* 옵션 토글이 12.5px 이었다. 명조 계열 등록 글꼴에서는 특히 작아 보인다.
+   손가락으로 누르는 항목이니 13.5px 로 올리고 높이도 함께 확보한다. */
+html:not([data-theme="dark"]) body .toggle.compactToggle,
+html[data-theme="dark"] body .toggle.compactToggle,
+html:not([data-theme="dark"]) body .optionRow .toggle,
+html[data-theme="dark"] body .optionRow .toggle{
+  font-size:13.5px!important;min-height:38px;padding:0 10px}
+
+/* ═══ v241 — 챕터 미리보기 · 여백 · 글자 크기 조절 ═════════════════ */
+
+/* ── 챕터 미리보기 줄이 뭉개지던 것 ──────────────────────────────
+      구조: <summary><b>번호</b><span><strong>제목</strong><small>정보</small></span><em>펼치기</em></summary>
+      기존 배치 규칙이 .chapterPreviewItem 에만 걸려 있어서 실제로 쓰이는
+      .unitChapterPreviewItem 은 아무 배치도 못 받았다. 그래서
+      번호·제목·정보가 한 줄로 이어 붙고 '펼치기' 가 그 위로 겹쳤다.
+      기본 ▶ 표식도 안 지워져 있었다. */
+html body .chapterPreviewItem>summary::-webkit-details-marker,
+html body .unitChapterPreviewItem>summary::-webkit-details-marker{display:none}
+html body .chapterPreviewItem>summary,
+html body .unitChapterPreviewItem>summary{
+  list-style:none;display:flex!important;align-items:flex-start;gap:10px;
+  padding:10px 12px;cursor:pointer}
+html body .chapterPreviewItem>summary>b,
+html body .unitChapterPreviewItem>summary>b{
+  flex:0 0 auto;min-width:22px;height:22px;display:inline-flex;
+  align-items:center;justify-content:center;
+  background:var(--nui-fill);border-radius:var(--nui-r-sm);
+  color:var(--nui-muted);font-size:11px;font-weight:600;line-height:1}
+html body .chapterPreviewItem>summary>span,
+html body .unitChapterPreviewItem>summary>span{
+  flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+html body .chapterPreviewItem>summary>span>strong,
+html body .unitChapterPreviewItem>summary>span>strong{
+  display:block;font-size:14px;font-weight:600;color:var(--nui-ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html body .chapterPreviewItem>summary>span>small,
+html body .unitChapterPreviewItem>summary>span>small{
+  display:block;font-size:12px;font-weight:400;color:var(--nui-muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html body .chapterPreviewItem>summary>em,
+html body .unitChapterPreviewItem>summary>em{
+  flex:0 0 auto;align-self:center;grid-column:auto!important;
+  font-style:normal;font-size:12px;font-weight:500;color:var(--nui-muted);
+  background:transparent;border:1px solid var(--nui-line);
+  border-radius:var(--nui-r-sm);padding:3px 8px;white-space:nowrap}
+html body .chapterPreviewBody,html body .chapterPreviewInner{min-width:0;padding:0 12px 12px}
+
+/* ── 보드 안 블록이 가로로 눌리던 것 ────────────────────────────
+      카드 20px + 접힘 블록 12px + 입력칸 10px 이 겹쳐 폭 392px 화면에서
+      글이 들어가는 자리가 318px 밖에 안 됐다. 좁은 화면에서만 줄인다. */
+@media (max-width:480px){
+  html:not([data-theme="dark"]) body .card,html[data-theme="dark"] body .card,
+  html:not([data-theme="dark"]) body .sideCard,html[data-theme="dark"] body .sideCard{
+    padding:14px!important}
+  html body .blockBody{padding:0 8px 10px!important}
+  html body #optionsBoard .blockBody,html body #reviewBoard .blockBody{padding:0 8px 10px!important}
+  html body .pastebox,html body .richResultBox,html body textarea{padding:10px 9px!important}
+  html body .reviewPanel{padding-left:0!important;padding-right:0!important}
+  html body details.reviewPanelFold>summary,
+  html body details.reviewPanelFold .reviewPanelInner{padding-left:0!important;padding-right:0!important}
+  html body .chapterPreviewItem>summary,
+  html body .unitChapterPreviewItem>summary{padding:9px 10px}
+}
+
+/* ── 글자 크기 조절 (editor_fontsize_v241.js) ────────────────────
+      높이 조절과 같은 모양으로 왼쪽에 선다. 둘이 한 벌로 보여야 한다. */
+html body .editorLabelWithSize{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+html body .editorLabelWithSize .editorLabelText{flex:1 1 auto;min-width:0}
+html body .editorFontControl{
+  flex:0 0 auto;display:inline-flex;align-items:center;gap:2px;
+  border:1px solid var(--nui-line);border-radius:var(--nui-r);
+  background:var(--nui-surface);overflow:hidden}
+html body .editorFontControl .editorFontBtn,
+html body .editorFontControl .editorFontValue{
+  border:0;background:transparent;color:var(--nui-sub);
+  font-size:12px;font-weight:500;line-height:1;cursor:pointer;
+  min-height:28px;padding:0 8px;
+  transition:background var(--nui-fast) var(--nui-ease),color var(--nui-fast) var(--nui-ease)}
+html body .editorFontControl .editorFontValue{
+  min-width:44px;color:var(--nui-muted);font-variant-numeric:tabular-nums;
+  border-left:1px solid var(--nui-line);border-right:1px solid var(--nui-line)}
+html body .editorFontControl button:hover{background:var(--nui-fill);color:var(--nui-ink)}
+html body .editorFontControl button:active{background:var(--nui-fill2)}
+html body .editorFontControl button:focus-visible{
+  outline:none;box-shadow:inset 0 0 0 2px var(--theme-accent,#5eacc8)}
+
+/* ═══ v250 — 보관함 목록이 눌려 겹치던 것 ═══════════════════════
+   log_library_v38_additions.css 가 목록을 그리드에서 세로 flex 로 바꿨는데,
+   항목에 flex-shrink 를 막지 않았고 min-height 를 0 으로 눌러 놨다.
+
+     .logLibraryList{display:flex!important;flex-direction:column!important}
+     .logFileItem{min-height:0!important}
+
+   목록은 높이가 정해진 스크롤 영역이다. 세로 flex 에서 항목은 기본적으로
+   줄어들 수 있으므로(flex-shrink:1), 파일이 많아지면 스크롤이 생기는 대신
+   항목들이 눌린다. 속 내용은 그대로라 글자가 아래 행으로 삐져나오고,
+   기기 글꼴이 크면 그만큼 더 심해져 행이 겹쳐 보인다.
+   (11개로 재현: 10개 행이 49px 내용에 38px 높이로 눌렸다.)
+
+   줄어들지 못하게 막으면 목록이 스크롤된다. */
+html body .logLibraryDialog .logLibraryList,
+html body .sharedLibraryDialog .logLibraryList,
+html body .logLibraryDialog .sharedLibraryList,
+html body .sharedLibraryDialog .sharedLibraryList{align-content:flex-start!important}
+html body .logLibraryDialog .logFileItem,
+html body .sharedLibraryDialog .logFileItem{flex:0 0 auto!important;height:auto!important;min-height:auto!important}
+html body .logLibraryDialog .logFileMain,
+html body .sharedLibraryDialog .logFileMain{flex:0 0 auto!important;min-height:auto!important}
+html body .logLibraryDialog .logFileInfo,
+html body .sharedLibraryDialog .logFileInfo{min-width:0!important}
+html body .logLibraryDialog .logFileActions,
+html body .sharedLibraryDialog .logFileActions{flex:0 0 auto!important;align-items:center!important}
+html body .logLibraryDialog .logFileAction,
+html body .sharedLibraryDialog .logFileAction{flex:0 0 auto!important;
+  width:32px!important;height:32px!important;min-height:32px!important;padding:0!important;
+  border-radius:var(--nui-r)!important}
+html body .logLibraryDialog .logFilePreview,
+html body .sharedLibraryDialog .logFilePreview{flex:0 0 auto!important}
+html body .logLibraryDialog .logLibraryEmpty,
+html body .sharedLibraryDialog .logLibraryEmpty{flex:0 0 auto!important}
+
+/* 이름 수정 줄 — 입력칸이 좁아지면 저장·취소가 밀린다. 좁으면 줄을 바꾼다. */
+html body .logLibraryDialog .logRenameRow,
+html body .sharedLibraryDialog .logRenameRow{flex:0 0 auto!important;flex-wrap:wrap!important;
+  gap:6px!important;padding:0 9px 9px!important}
+html body .logLibraryDialog .logRenameInput,
+html body .sharedLibraryDialog .logRenameInput{flex:1 1 160px!important;min-width:0!important;
+  height:34px!important;min-height:34px!important;border-radius:var(--nui-r)!important}
+html body .logLibraryDialog .logRenameButton,
+html body .sharedLibraryDialog .logRenameButton{flex:0 0 auto!important;min-height:34px!important;
+  padding:0 12px!important;border-radius:var(--nui-r)!important;font-size:13px;font-weight:500}
+
+/* 도구 줄 버튼이 세로로 늘어나지 않게 */
+html body .logLibraryDialog .logLibraryToolbar,
+html body .sharedLibraryDialog .logLibraryToolbar{flex-wrap:wrap!important;align-items:center!important;gap:6px}
+html body .logLibraryDialog .logLibraryImportBtn{flex:0 0 auto!important;
+  min-height:34px!important;height:34px!important;padding:0 12px!important;font-size:13px}
+html body .logLibraryDialog .logLibraryStatus,
+html body .sharedLibraryDialog .logLibraryStatus{flex:1 1 100%!important;min-width:0}

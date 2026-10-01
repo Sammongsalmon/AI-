@@ -1,0 +1,796 @@
+/* ───────────────────────────────────────────────────────────────
+   notion_ui_v170.css — 발췌기 전면 리디자인 (Notion 스타일)
+   원칙:
+   · 표면은 뜨지 않는다 — 그림자는 대화상자·토스트에만.
+   · 색은 흑백 회색 단계로, 강조색은 활성 탭 밑줄·주 버튼·포커스에만.
+   · 곡률 6–12px, 헤어라인 1px 테두리, 넉넉한 여백.
+   · 움직임은 120–220ms 한 가지 이징으로 통일. prefers-reduced-motion 존중.
+   로드 순서: shadcn_ui_v180.js 가 이 <link>와 v180 <link>를 순서대로
+   <head> 맨 끝으로 유지해, theme_v70 / dark_late_v159 의 런타임 스타일보다
+   뒤에 서게 한다. (예전 notion_ui_v170.js 가 하던 일을 v180.js 가 대신한다)
+   ─────────────────────────────────────────────────────────────── */
+
+:root{
+  --nui-bg:#ffffff;
+  --nui-surface:#ffffff;
+  --nui-fill:#f1f1ef;          /* hover·조용한 채움 */
+  --nui-fill2:#e8e8e5;         /* pressed */
+  --nui-ink:#37352f;
+  --nui-sub:#5f5e5b;
+  --nui-muted:#91918e;
+  --nui-line:#e9e9e7;
+  --nui-input:#ffffff;
+  --nui-danger:#c4554d;
+  --nui-overlay:rgba(15,15,15,.45);
+  --nui-pop-shadow:0 14px 40px rgba(15,15,15,.14),0 2px 8px rgba(15,15,15,.06);
+  --nui-r-sm:6px; --nui-r:8px; --nui-r-lg:10px; --nui-r-xl:12px;
+  --nui-fast:.12s; --nui-dur:.18s; --nui-slow:.22s;
+  --nui-ease:cubic-bezier(.2,.6,.2,1);
+}
+html[data-theme="dark"]{
+  --nui-bg:#191919;
+  --nui-surface:#202020;
+  --nui-fill:#2a2a2a;
+  --nui-fill2:#333333;
+  --nui-ink:#d4d4d4;
+  --nui-sub:#a5a5a3;
+  --nui-muted:#7a7a78;
+  --nui-line:#343434;
+  --nui-input:#1f1f1f;
+  --nui-danger:#df5452;
+  --nui-overlay:rgba(0,0,0,.55);
+  --nui-pop-shadow:0 14px 40px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.3);
+}
+
+/* ── 캔버스: 그라데이션 제거, 한 장의 흰 페이지 ─────────────── */
+html:not([data-theme="dark"]) body{background:var(--nui-bg)!important;color:var(--nui-ink)!important}
+html[data-theme="dark"] body{background:var(--nui-bg)!important;color:var(--nui-ink)!important}
+body{letter-spacing:-.011em}
+::selection{background:color-mix(in srgb,var(--theme-accent,#5eacc8) 26%,transparent)}
+.appFrame{max-width:960px;padding:14px 16px 40px;gap:14px}
+
+/* 스크롤바 */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#d3d1cb!important;border:3px solid var(--nui-bg)!important;border-radius:999px}
+::-webkit-scrollbar-track{background:transparent!important}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb{background:#3f3f3f!important}
+
+/* 포커스: 마우스 클릭엔 조용히, 키보드 이동엔 뚜렷하게 */
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--theme-accent,#5eacc8);outline-offset:2px;border-radius:var(--nui-r-sm)}
+
+/* ── 표면: 카드가 뜨지 않고 놓인다 ───────────────────────────── */
+html:not([data-theme="dark"]) .card,
+html:not([data-theme="dark"]) .sideCard{
+  background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-lg)!important;box-shadow:none!important;padding:18px;
+}
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .sideCard{
+  background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-lg)!important;box-shadow:none!important;
+}
+
+/* ── 페이지 머리: 카드가 아니라 제목 블록 ───────────────────── */
+html .card.hero{
+  background:transparent!important;border:0!important;box-shadow:none!important;
+  padding:10px 4px 0!important;border-radius:0!important;
+}
+h1{font-size:24px;font-weight:700;letter-spacing:-.02em}
+.heroText{color:var(--nui-muted)!important;font-size:13px;margin-top:6px}
+.saveBadge{background:var(--nui-fill)!important;border:0!important;color:var(--nui-muted)!important;
+  font-weight:600;font-size:11.5px;border-radius:var(--nui-r-sm);padding:5px 9px;transition:color var(--nui-fast)}
+
+/* ── 탭: 알약 → 밑줄. 활성 표시는 JS 잉크바가 미끄러진다 ───── */
+html .tabs{
+  position:relative;background:transparent!important;border:0!important;
+  border-bottom:1px solid var(--nui-line)!important;border-radius:0!important;
+  padding:0!important;gap:4px;margin-top:14px;
+}
+html .tabs .tab{
+  min-width:0;padding:10px 10px 12px;border-radius:var(--nui-r-sm) var(--nui-r-sm) 0 0;
+  background:transparent!important;color:var(--nui-sub)!important;
+  font-size:14px;font-weight:600;box-shadow:none!important;
+  transition:color var(--nui-fast) var(--nui-ease),background var(--nui-fast) var(--nui-ease);
+}
+html .tabs .tab:hover{background:var(--nui-fill)!important}
+html .tabs .tab:active{background:var(--nui-fill2)!important}
+html .tabs .tab.active{color:var(--nui-ink)!important;background:transparent!important}
+/* JS 잉크바가 없을 때의 대비책 */
+html .tabs:not(.hasInk) .tab.active{box-shadow:inset 0 -2px 0 var(--theme-accent,#5eacc8)!important}
+.nuiTabInk{position:absolute;left:0;bottom:-1px;height:2px;width:0;
+  background:var(--theme-accent,#5eacc8);border-radius:2px;pointer-events:none;
+  transition:transform var(--nui-slow) var(--nui-ease),width var(--nui-slow) var(--nui-ease)}
+
+/* ── 화면 전환: 패널이 6px 아래에서 떠오른다 ────────────────── */
+@keyframes nuiPanelIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.panel:not(.hidden){animation:nuiPanelIn var(--nui-slow) var(--nui-ease)}
+
+/* ── 결과 통계: 카드 → 속성 줄 ──────────────────────────────── */
+html #statsCard{background:transparent!important;border:0!important;padding:2px 4px!important}
+#statsCard .sectionHead{margin-bottom:8px!important}
+#statsCard .sectionTitle{font-size:12px!important;color:var(--nui-muted)!important;font-weight:600}
+#statsCard .sectionDesc{display:none}
+.statsGrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+html .stat{background:var(--nui-fill)!important;border:0!important;border-radius:var(--nui-r)!important;
+  box-shadow:none!important;padding:10px 12px}
+.stat strong{font-size:16px;font-weight:700;color:var(--nui-ink)!important;font-variant-numeric:tabular-nums}
+.stat span{color:var(--nui-muted)!important;font-size:11px;margin-top:4px}
+
+/* ── 섹션 타이포 ─────────────────────────────────────────────── */
+.sectionTitle{font-size:15px!important;font-weight:700!important}
+.sectionDesc,.hint,.miniHelp{color:var(--nui-muted)!important;font-size:12px}
+html .badge{background:var(--nui-fill)!important;border:0!important;color:var(--nui-sub)!important;
+  font-weight:600;border-radius:var(--nui-r-sm)}
+.editorLabel{color:var(--nui-sub)!important;font-size:12px;font-weight:600}
+.editorLabel span:last-child{color:var(--nui-muted)!important;font-weight:500}
+
+/* ── 입력면: 종이 한 장, 포커스 때만 강조 ──────────────────── */
+html textarea,html .pastebox,html .richResultBox,html .epubRichEditor{
+  background:var(--nui-input)!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-lg)!important;box-shadow:none!important;color:var(--nui-ink)!important;
+  transition:border-color var(--nui-fast) var(--nui-ease),box-shadow var(--nui-fast) var(--nui-ease);
+}
+html textarea:focus,html .pastebox:focus,html .richResultBox:focus,html .epubRichEditor:focus{
+  border-color:var(--theme-accent,#5eacc8)!important;
+  box-shadow:0 0 0 3px var(--focusRing,rgba(94,172,200,.22))!important;outline:none;
+}
+textarea[readonly]{background:var(--nui-fill)!important}
+.pastebox:empty:before,.richResultBox:empty:before,.epubRichEditor:empty:before{color:var(--nui-muted)!important}
+html .control input,html .control select,html .control textarea,
+html .resultFindBar input[type="search"],html .rfS2Input,html .rfS2Select,
+html .logRenameInput,html input[type="text"],html input[type="search"],html input[type="number"],html select{
+  background:var(--nui-input)!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r)!important;color:var(--nui-ink)!important;box-shadow:none!important;
+  transition:border-color var(--nui-fast) var(--nui-ease),box-shadow var(--nui-fast) var(--nui-ease);
+}
+html .control input:focus,html .control select:focus,html .resultFindBar input[type="search"]:focus,
+html .rfS2Input:focus,html .rfS2Select:focus,html .logRenameInput:focus,
+html input[type="text"]:focus,html input[type="search"]:focus,html input[type="number"]:focus,html select:focus{
+  border-color:var(--theme-accent,#5eacc8)!important;
+  box-shadow:0 0 0 3px var(--focusRing,rgba(94,172,200,.22))!important;outline:none;
+}
+input[type="checkbox"],input[type="radio"]{accent-color:var(--theme-accent,#5eacc8)}
+
+/* ── 파일 불러오기: 점선 상자 → 조용한 행 ──────────────────── */
+html .filePicker{background:transparent!important;border:1px solid var(--nui-line)!important;
+  border-style:solid!important;border-radius:var(--nui-r-lg)!important;box-shadow:none!important;
+  transition:background var(--nui-fast) var(--nui-ease)}
+html .filePicker summary{cursor:pointer;border-radius:var(--nui-r);transition:background var(--nui-fast)}
+html .filePicker summary:hover{background:var(--nui-fill)}
+.prettyFile .fileButtonText{display:inline-flex;align-items:center;background:var(--nui-fill);
+  border:1px solid var(--nui-line);border-radius:var(--nui-r);padding:7px 11px;font-weight:600;font-size:12.5px;
+  color:var(--nui-ink);transition:background var(--nui-fast) var(--nui-ease)}
+.prettyFile:hover .fileButtonText{background:var(--nui-fill2)}
+.fileNameText{color:var(--nui-muted)!important}
+
+/* ── 버튼: 유령 → 채움 → 강조, 세 단계만 ───────────────────── */
+html .btn{
+  border:1px solid var(--nui-line)!important;background:var(--nui-surface)!important;
+  color:var(--nui-ink)!important;border-radius:var(--nui-r)!important;font-weight:600;
+  box-shadow:none!important;
+  transition:background var(--nui-fast) var(--nui-ease),border-color var(--nui-fast) var(--nui-ease),
+             transform .1s var(--nui-ease);
+}
+html .btn:hover{background:var(--nui-fill)!important;transform:none!important}
+html .btn:active{background:var(--nui-fill2)!important;transform:scale(.98)!important}
+html .btn.subtle{background:transparent!important;border-color:transparent!important;color:var(--nui-sub)!important}
+html .btn.subtle:hover{background:var(--nui-fill)!important;color:var(--nui-ink)!important}
+html .btn.subtle:active{background:var(--nui-fill2)!important}
+html .btn.primary{background:var(--theme-accent,#5eacc8)!important;border-color:var(--theme-accent,#5eacc8)!important;
+  color:#fff!important}
+html .btn.primary:hover{filter:brightness(.96);background:var(--theme-accent,#5eacc8)!important}
+html .btn.primary:active{transform:scale(.98)!important}
+html .btn.danger,html .btn[data-danger]{color:var(--nui-danger)!important}
+.actionDock{border-top:1px solid var(--nui-line)!important;gap:8px}
+
+/* 아이콘 버튼: 상단바·보관함·테마 전환 */
+html .navIconBtn,html .themeIconButton,html .logLibraryIconBtn{
+  border:0!important;background:transparent!important;border-radius:var(--nui-r)!important;
+  color:var(--nui-sub)!important;box-shadow:none!important;
+  transition:background var(--nui-fast) var(--nui-ease),transform .1s var(--nui-ease);
+}
+html .navIconBtn:hover,html .themeIconButton:hover,html .logLibraryIconBtn:hover{background:var(--nui-fill)!important}
+html .navIconBtn:active,html .themeIconButton:active,html .logLibraryIconBtn:active{
+  background:var(--nui-fill2)!important;transform:scale(.94)}
+
+/* 선택 버튼 무리 */
+html .toggle,html .miniChoiceBtn,html .reviewChoice{
+  border:1px solid var(--nui-line)!important;border-radius:var(--nui-r)!important;
+  font-weight:600;box-shadow:none!important;
+  transition:background var(--nui-fast) var(--nui-ease),border-color var(--nui-fast) var(--nui-ease);
+}
+html .toggle:not(:has(input:checked)),html .miniChoiceBtn:not(.active),html .reviewChoice:not(.active){
+  background:var(--nui-surface)!important;color:var(--nui-sub)!important}
+html .toggle:not(:has(input:checked)):hover,html .miniChoiceBtn:not(.active):hover{background:var(--nui-fill)!important}
+
+/* ── 접힘 블록: 회전하는 화살표, 부드럽게 열리는 본문 ──────── */
+html details.foldBlock{background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-lg)!important;box-shadow:none!important}
+details.foldBlock>summary{list-style:none;cursor:pointer;font-weight:600;color:var(--nui-ink);
+  display:flex;align-items:center;gap:8px;border-radius:var(--nui-r-lg);
+  transition:background var(--nui-fast) var(--nui-ease)}
+details.foldBlock>summary::-webkit-details-marker{display:none}
+/* ::before 는 앱이 옵션 카드 번호(01·02…)를 넣는 자리다. 회전시키지 않고
+   작은 번호 배지로 둔다. 펼침 표시는 ::after 의 ⌄ 하나로 통일한다. */
+details.foldBlock>summary::before{transform:none!important;flex:0 0 auto;
+  width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;letter-spacing:0;
+  background:var(--nui-fill)!important;border:0!important;border-radius:var(--nui-r-sm)!important;
+  color:var(--nui-muted)!important}
+details.foldBlock>summary::after{transition:transform var(--nui-dur) var(--nui-ease);
+  color:var(--nui-muted)!important}
+details.foldBlock[open]>summary::after{transform:rotate(180deg)}
+details.foldBlock>summary:hover{background:var(--nui-fill)}
+@keyframes nuiFoldIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+details.foldBlock[open]>.blockBody{animation:nuiFoldIn var(--nui-dur) var(--nui-ease)}
+html .blockBody{background:transparent!important;box-shadow:none!important}
+
+/* ── 옵션·검토 보드 ─────────────────────────────────────────── */
+html #optionsBoard,html #reviewBoard{background:var(--nui-surface)!important;
+  border:1px solid var(--nui-line)!important;border-radius:var(--nui-r-lg)!important;box-shadow:none!important}
+html .reviewPanel,html .reviewBlock,html .dupeCard,html .containsKeywordGroup,
+html .containsRow,html .riskPanel,html .nextPromptFold{
+  background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-lg)!important;box-shadow:none!important}
+html .workflowHint,html .emptyState{background:var(--nui-fill)!important;border:0!important;
+  border-radius:var(--nui-r)!important;color:var(--nui-muted)!important}
+
+/* ── EPUB 도구·미리보기 ─────────────────────────────────────── */
+html .chapterList,html .bookPreviewWrap,html .manualChapterEditor,
+html .chapterPreviewItem,html .unitChapterPreviewItem,html .quotePresetBtn{
+  background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-lg)!important;box-shadow:none!important}
+html .quotePresetBtn{transition:background var(--nui-fast) var(--nui-ease)}
+html .quotePresetBtn:hover{background:var(--nui-fill)!important}
+html .quotePresetBtn:active{transform:scale(.985)}
+
+/* ── 결과 찾기 바 ────────────────────────────────────────────── */
+html .resultFindBar{background:var(--nui-fill);border-radius:var(--nui-r);padding:6px;gap:6px}
+.resultFindStatus{color:var(--nui-muted)!important;font-variant-numeric:tabular-nums}
+
+/* ── 상단바 ─────────────────────────────────────────────────── */
+html #aiLogLocalTopbarV70{background:var(--nui-surface)!important;color:var(--nui-ink)!important;
+  border-bottom:1px solid var(--nui-line)!important;box-shadow:none!important}
+#aiLogLocalTopbarV70 .title{font-weight:700;font-size:13px}
+#aiLogLocalTopbarV70 button{border-radius:var(--nui-r)!important;
+  transition:background var(--nui-fast) var(--nui-ease),transform .1s var(--nui-ease)}
+#aiLogLocalTopbarV70 button:active{background:var(--nui-fill2)!important;transform:scale(.92)}
+
+/* ── 보관함: 카드 목록 → 한 줄 리스트 ───────────────────────── */
+@keyframes nuiPop{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
+@keyframes nuiFade{from{opacity:0}to{opacity:1}}
+html .logLibraryModal{background:var(--nui-overlay)!important;animation:nuiFade .15s ease}
+html .logLibraryDialog{background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-xl)!important;box-shadow:var(--nui-pop-shadow)!important;
+  animation:nuiPop var(--nui-dur) var(--nui-ease)}
+html .logLibraryHead{border-bottom:1px solid var(--nui-line)}
+.logLibraryTitle{font-weight:700}
+.logLibraryPath,.logLibraryStatus,.logFileMeta,.logFileMetaRow{color:var(--nui-muted)!important}
+html .logLibraryList{background:transparent!important;box-shadow:none!important}
+html .logFileItem{background:transparent!important;border:0!important;border-bottom:1px solid var(--nui-line)!important;
+  border-radius:0!important;box-shadow:none!important;
+  transition:background var(--nui-fast) var(--nui-ease)}
+html .logFileItem:hover{background:var(--nui-fill)!important}
+html .logFileItem:active{background:var(--nui-fill2)!important}
+html .logFileItem:last-child{border-bottom:0!important}
+html .logFilePreview{background:var(--nui-fill)!important;border:0!important;border-radius:var(--nui-r)!important;
+  box-shadow:none!important}
+html .logLibraryImportBtn{box-shadow:none!important;border-radius:var(--nui-r)!important}
+
+/* ── 설정(rfS2) 대화상자 ────────────────────────────────────── */
+html .rfS2Modal{background:var(--nui-overlay)!important;animation:nuiFade .15s ease}
+html .rfS2Dialog{background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-xl)!important;box-shadow:var(--nui-pop-shadow)!important;
+  animation:nuiPop var(--nui-dur) var(--nui-ease)}
+html .rfS2Section{background:transparent!important;border:1px solid var(--nui-line)!important;
+  border-radius:var(--nui-r-lg)!important;box-shadow:none!important}
+.rfS2SectionTitle{font-weight:700}
+.rfS2Help,.rfS2Sub,.rfS2Status{color:var(--nui-muted)!important}
+html .rfS2Button:not(.primary){background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  color:var(--nui-ink)!important;border-radius:var(--nui-r)!important;font-weight:600;box-shadow:none!important;
+  transition:background var(--nui-fast) var(--nui-ease),transform .1s var(--nui-ease)}
+html .rfS2Button:not(.primary):hover{background:var(--nui-fill)!important}
+html .rfS2Button:active{transform:scale(.98)}
+html .rfS2Close{background:transparent!important;border:0!important;color:var(--nui-sub)!important;
+  border-radius:var(--nui-r)!important;box-shadow:none!important}
+html .rfS2Close:hover{background:var(--nui-fill)!important}
+html .rfS2FontMenu,html .rfS2FontPicker,html .rfS2FontGroup{border-radius:var(--nui-r-lg)!important;
+  border-color:var(--nui-line)!important;box-shadow:none!important}
+html .rfS2FontOption{border-radius:var(--nui-r-sm)!important;transition:background var(--nui-fast)}
+
+/* ── 토스트: 알약 → 잉크색 사각 ─────────────────────────────── */
+html #toast{background:#37352f!important;color:#fff!important;border-radius:var(--nui-r)!important;
+  font-size:13px;box-shadow:var(--nui-pop-shadow)!important;padding:9px 14px;
+  transition:opacity var(--nui-slow) var(--nui-ease)}
+html[data-theme="dark"] #toast{background:#efefec!important;color:#191919!important}
+
+/* ── 다크: dark_late 의 청회색(#232a30)을 중립 회색으로 교정 ── */
+html[data-theme="dark"] .card,html[data-theme="dark"] .panel,html[data-theme="dark"] details.foldBlock,
+html[data-theme="dark"] .blockBody,html[data-theme="dark"] .epubToolStack,html[data-theme="dark"] .epubEditMain,
+html[data-theme="dark"] .epubEditGrid,html[data-theme="dark"] .optionRow,html[data-theme="dark"] .formatButtonRow,
+html[data-theme="dark"] .filePicker,html[data-theme="dark"] .prettyFile,
+html[data-theme="dark"] details,html[data-theme="dark"] summary{
+  background:var(--nui-surface)!important;color:var(--nui-ink)!important;border-color:var(--nui-line)!important}
+html[data-theme="dark"] .panel,html[data-theme="dark"] .blockBody,html[data-theme="dark"] .epubToolStack,
+html[data-theme="dark"] .epubEditMain,html[data-theme="dark"] .epubEditGrid,
+html[data-theme="dark"] .optionRow,html[data-theme="dark"] .formatButtonRow{background:transparent!important;border:0!important}
+html[data-theme="dark"] .pastebox,html[data-theme="dark"] .richResultBox,html[data-theme="dark"] .epubRichEditor,
+html[data-theme="dark"] textarea,html[data-theme="dark"] input[type="text"],
+html[data-theme="dark"] input[type="number"],html[data-theme="dark"] input[type="search"],
+html[data-theme="dark"] select{
+  background:var(--nui-input)!important;color:var(--nui-ink)!important;border-color:var(--nui-line)!important}
+html[data-theme="dark"] textarea[readonly]{background:var(--nui-fill)!important}
+html[data-theme="dark"] #aiLogLocalTopbarV70{background:var(--nui-surface)!important;color:var(--nui-ink)!important;
+  border-color:var(--nui-line)!important}
+html[data-theme="dark"] .hint,html[data-theme="dark"] .fileNameText{color:var(--nui-muted)!important}
+html[data-theme="dark"] .btn{background:var(--nui-surface)!important;border-color:var(--nui-line)!important;
+  color:var(--nui-ink)!important}
+html[data-theme="dark"] .btn:hover{background:var(--nui-fill)!important}
+html[data-theme="dark"] .btn.primary{background:var(--theme-accent,#5eacc8)!important;
+  border-color:var(--theme-accent,#5eacc8)!important;color:#101418!important}
+
+/* ── 움직임을 줄여 달라는 기기 설정 존중 ────────────────────── */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .nuiTabInk{transition:none!important}
+}
+
+/* ═══ v170.1 보정 ═══════════════════════════════════════════════ */
+
+/* 탭은 모든 폭에서 가로 한 줄. (기존 860px 세로 스택·640px 3열 그리드 무효화) */
+html .tabs{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;
+  width:100%!important;grid-template-columns:none!important;overflow-x:auto;overscroll-behavior-x:contain}
+html .tabs .tab{width:auto!important;flex:0 0 auto;min-height:44px;
+  font-size:13.5px!important;padding:10px 12px 12px!important;
+  border-radius:var(--nui-r-sm) var(--nui-r-sm) 0 0!important;min-width:0!important}
+
+/* 모바일 축소 규칙이 지나치게 줄인 타이포 복원 */
+html .hero h1{font-size:22px!important}
+html .heroText{font-size:13px!important}
+html .btn{font-size:12.5px!important;min-height:36px}
+html .toggle,html .miniChoiceBtn{font-size:12.5px!important}
+
+/* 결과 크기 조절(− 80% +)과 파일 선택 라벨: 조용한 회색으로 */
+html .editorSizeControl{background:var(--nui-fill)!important;border:0!important;
+  border-radius:var(--nui-r)!important;box-shadow:none!important}
+html .editorSizeBtn{border:0!important;background:transparent!important;
+  border-radius:var(--nui-r-sm)!important;color:var(--nui-sub)!important;box-shadow:none!important;
+  transition:background var(--nui-fast) var(--nui-ease)}
+html .editorSizeBtn:active{background:var(--nui-fill2)!important}
+html .editorSizeValue{color:var(--nui-muted)!important}
+html .prettyFile{background:transparent!important;border-color:var(--nui-line)!important;box-shadow:none!important}
+html .logEncodingSelect{border-color:var(--nui-line)!important}
+
+/* ── 다크 미러: theme_v70 의 (0,2,x) 다크 규칙보다 뒤·같은 급으로 ── */
+html[data-theme="dark"] .tabs{background:transparent!important;border:0!important;
+  border-bottom:1px solid var(--nui-line)!important;border-radius:0!important}
+html[data-theme="dark"] .tabs .tab{background:transparent!important;color:var(--nui-sub)!important;box-shadow:none!important}
+html[data-theme="dark"] .tabs .tab:hover{background:var(--nui-fill)!important}
+html[data-theme="dark"] .tabs .tab:active{background:var(--nui-fill2)!important}
+html[data-theme="dark"] .tabs .tab.active{background:transparent!important;color:var(--nui-ink)!important}
+html[data-theme="dark"] .tabs:not(.hasInk) .tab.active{box-shadow:inset 0 -2px 0 var(--theme-accent,#5eacc8)!important}
+
+html[data-theme="dark"] .stat{background:var(--nui-fill)!important;border:0!important;box-shadow:none!important}
+html[data-theme="dark"] .stat strong{color:var(--nui-ink)!important}
+html[data-theme="dark"] .stat span{color:var(--nui-muted)!important}
+html[data-theme="dark"] #statsCard{background:transparent!important;border:0!important}
+
+html[data-theme="dark"] .badge,html[data-theme="dark"] .saveBadge{
+  background:var(--nui-fill)!important;border:0!important;color:var(--nui-sub)!important}
+html[data-theme="dark"] .workflowHint,html[data-theme="dark"] .emptyState{
+  background:var(--nui-fill)!important;border:0!important;color:var(--nui-muted)!important}
+html[data-theme="dark"] .toggle:not(:has(input:checked)),
+html[data-theme="dark"] .miniChoiceBtn:not(.active),
+html[data-theme="dark"] .reviewChoice:not(.active){
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;color:var(--nui-sub)!important}
+html[data-theme="dark"] .toggle:not(:has(input:checked)):hover,
+html[data-theme="dark"] .miniChoiceBtn:not(.active):hover{background:var(--nui-fill)!important}
+html[data-theme="dark"] .filePicker{background:transparent!important;border-color:var(--nui-line)!important}
+html[data-theme="dark"] .prettyFile{background:transparent!important;border-color:var(--nui-line)!important}
+html[data-theme="dark"] .prettyFile .fileButtonText{background:var(--nui-fill);border-color:var(--nui-line);color:var(--nui-ink)}
+html[data-theme="dark"] .btn.subtle{background:transparent!important;border-color:transparent!important;color:var(--nui-sub)!important}
+html[data-theme="dark"] .btn.subtle:hover{background:var(--nui-fill)!important;color:var(--nui-ink)!important}
+html[data-theme="dark"] .editorSizeControl{background:var(--nui-fill)!important;border:0!important}
+html[data-theme="dark"] .editorSizeBtn{background:transparent!important;color:var(--nui-sub)!important}
+html[data-theme="dark"] .resultFindBar{background:var(--nui-fill)!important}
+
+html[data-theme="dark"] #optionsBoard,html[data-theme="dark"] #reviewBoard{
+  background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important}
+html[data-theme="dark"] .reviewPanel,html[data-theme="dark"] .reviewBlock,html[data-theme="dark"] .dupeCard,
+html[data-theme="dark"] .containsKeywordGroup,html[data-theme="dark"] .containsRow,
+html[data-theme="dark"] .riskPanel,html[data-theme="dark"] .nextPromptFold,
+html[data-theme="dark"] .chapterList,html[data-theme="dark"] .bookPreviewWrap,
+html[data-theme="dark"] .manualChapterEditor,html[data-theme="dark"] .chapterPreviewItem,
+html[data-theme="dark"] .unitChapterPreviewItem,html[data-theme="dark"] .quotePresetBtn{
+  background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;box-shadow:none!important}
+html[data-theme="dark"] .quotePresetBtn:hover{background:var(--nui-fill)!important}
+
+html[data-theme="dark"] .logLibraryModal{background:var(--nui-overlay)!important}
+html[data-theme="dark"] .logLibraryDialog{background:var(--nui-surface)!important;
+  border-color:var(--nui-line)!important;box-shadow:var(--nui-pop-shadow)!important}
+html[data-theme="dark"] .logLibraryList{background:transparent!important}
+html[data-theme="dark"] .logFileItem{background:transparent!important;border:0!important;
+  border-bottom:1px solid var(--nui-line)!important;border-radius:0!important}
+html[data-theme="dark"] .logFileItem:hover{background:var(--nui-fill)!important}
+html[data-theme="dark"] .logFileItem:last-child{border-bottom:0!important}
+html[data-theme="dark"] .logFilePreview{background:var(--nui-fill)!important;border:0!important}
+html[data-theme="dark"] .logLibraryIconBtn{background:transparent!important;color:var(--nui-sub)!important}
+html[data-theme="dark"] .logLibraryIconBtn:hover{background:var(--nui-fill)!important}
+
+html[data-theme="dark"] .rfS2Modal{background:var(--nui-overlay)!important}
+html[data-theme="dark"] .rfS2Dialog{background:var(--nui-surface)!important;
+  border-color:var(--nui-line)!important;box-shadow:var(--nui-pop-shadow)!important}
+html[data-theme="dark"] .rfS2Section{background:transparent!important;border-color:var(--nui-line)!important}
+html[data-theme="dark"] .rfS2Button:not(.primary){background:var(--nui-surface)!important;
+  border-color:var(--nui-line)!important;color:var(--nui-ink)!important}
+html[data-theme="dark"] .rfS2Button:not(.primary):hover{background:var(--nui-fill)!important}
+html[data-theme="dark"] .rfS2Close{background:transparent!important;color:var(--nui-sub)!important}
+html[data-theme="dark"] .rfS2FontMenu,html[data-theme="dark"] .rfS2FontPicker,
+html[data-theme="dark"] .rfS2FontGroup,html[data-theme="dark"] .rfS2FontOption,
+html[data-theme="dark"] .rfS2FontChoiceButton{background:var(--nui-surface)!important;border-color:var(--nui-line)!important}
+html[data-theme="dark"] .rfS2FontOption:hover,html[data-theme="dark"] .rfS2FontOption[aria-selected="true"]{
+  background:var(--nui-fill)!important}
+
+/* ── 라이트 미러: theme_v79_overrides 의 html:not(dark) (0,2,x) 규칙과
+      같은 급으로 맞추고, 뒤에 서서 이긴다 ───────────────────────── */
+html:not([data-theme="dark"]) textarea,
+html:not([data-theme="dark"]) select,
+html:not([data-theme="dark"]) input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+html:not([data-theme="dark"]) .pastebox,
+html:not([data-theme="dark"]) .richResultBox,
+html:not([data-theme="dark"]) .epubRichEditor,
+html:not([data-theme="dark"]) .control input,
+html:not([data-theme="dark"]) .control select,
+html:not([data-theme="dark"]) .control textarea,
+html:not([data-theme="dark"]) .rfS2Input,
+html:not([data-theme="dark"]) .rfS2Select,
+html:not([data-theme="dark"]) .resultFindBar input,
+html:not([data-theme="dark"]) .logRenameInput{
+  background:var(--nui-input)!important;border-color:var(--nui-line)!important;color:var(--nui-ink)!important}
+html:not([data-theme="dark"]) textarea[readonly]{background:var(--nui-fill)!important}
+html:not([data-theme="dark"]) textarea:focus,
+html:not([data-theme="dark"]) .pastebox:focus,
+html:not([data-theme="dark"]) .richResultBox:focus,
+html:not([data-theme="dark"]) .epubRichEditor:focus,
+html:not([data-theme="dark"]) input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):focus,
+html:not([data-theme="dark"]) select:focus{
+  border-color:var(--theme-accent,#5eacc8)!important;
+  box-shadow:0 0 0 3px var(--focusRing,rgba(94,172,200,.22))!important}
+
+html:not([data-theme="dark"]) .tabs{background:transparent!important;border:0!important;
+  border-bottom:1px solid var(--nui-line)!important;border-radius:0!important}
+html:not([data-theme="dark"]) .tabs .tab{background:transparent!important;color:var(--nui-sub)!important}
+html:not([data-theme="dark"]) .tabs .tab:hover{background:var(--nui-fill)!important}
+html:not([data-theme="dark"]) .tabs .tab.active{background:transparent!important;color:var(--nui-ink)!important}
+
+html:not([data-theme="dark"]) .stat{background:var(--nui-fill)!important;border:0!important}
+html:not([data-theme="dark"]) .badge,
+html:not([data-theme="dark"]) .saveBadge{background:var(--nui-fill)!important;border:0!important;color:var(--nui-sub)!important}
+html:not([data-theme="dark"]) .workflowHint,
+html:not([data-theme="dark"]) .emptyState{background:var(--nui-fill)!important;border:0!important;color:var(--nui-muted)!important}
+html:not([data-theme="dark"]) .filePicker{background:transparent!important;border-color:var(--nui-line)!important}
+html:not([data-theme="dark"]) .prettyFile{background:transparent!important;border-color:var(--nui-line)!important}
+
+html:not([data-theme="dark"]) .btn:not(.primary),
+html:not([data-theme="dark"]) .resultFindBar button{
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;color:var(--nui-ink)!important}
+html:not([data-theme="dark"]) .btn:not(.primary):hover{background:var(--nui-fill)!important}
+html:not([data-theme="dark"]) .btn.subtle{background:transparent!important;border-color:transparent!important;color:var(--nui-sub)!important}
+html:not([data-theme="dark"]) .btn.subtle:hover{background:var(--nui-fill)!important;color:var(--nui-ink)!important}
+html:not([data-theme="dark"]) .toggle:not(:has(input:checked)){
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;color:var(--nui-sub)!important}
+html:not([data-theme="dark"]) .toggle:not(:has(input:checked)):hover{background:var(--nui-fill)!important}
+html:not([data-theme="dark"]) .navIconBtn,
+html:not([data-theme="dark"]) .themeIconButton,
+html:not([data-theme="dark"]) .logLibraryIconBtn{
+  background:transparent!important;border-color:transparent!important;color:var(--nui-sub)!important}
+html:not([data-theme="dark"]) .navIconBtn:hover,
+html:not([data-theme="dark"]) .themeIconButton:hover,
+html:not([data-theme="dark"]) .logLibraryIconBtn:hover{background:var(--nui-fill)!important}
+html:not([data-theme="dark"]) .logLibraryImportBtn{
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;color:var(--nui-ink)!important}
+
+html:not([data-theme="dark"]) .rfS2Button:not(.primary):not(.save),
+html:not([data-theme="dark"]) .rfS2Close,
+html:not([data-theme="dark"]) .rfS2FontChoiceButton,
+html:not([data-theme="dark"]) .rfS2FontMenu,
+html:not([data-theme="dark"]) .rfS2FontOption{
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;color:var(--nui-ink)!important}
+html:not([data-theme="dark"]) .rfS2Button:not(.primary):not(.save):hover,
+html:not([data-theme="dark"]) .rfS2FontOption:hover{background:var(--nui-fill)!important}
+html:not([data-theme="dark"]) .rfS2Close{background:transparent!important;border-color:transparent!important;color:var(--nui-sub)!important}
+html:not([data-theme="dark"]) .aiThemeV70Picker{background:var(--nui-fill)!important;border-color:var(--nui-line)!important}
+
+html:not([data-theme="dark"]) .logLibraryDialog,
+html:not([data-theme="dark"]) .sharedLibraryDialog{
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important}
+html:not([data-theme="dark"]) .logLibraryList{background:transparent!important;border-color:var(--nui-line)!important}
+html:not([data-theme="dark"]) .logFileItem{background:transparent!important;border:0!important;
+  border-bottom:1px solid var(--nui-line)!important;border-radius:0!important}
+html:not([data-theme="dark"]) .logFileItem:hover{background:var(--nui-fill)!important}
+html:not([data-theme="dark"]) .logFileItem:last-child{border-bottom:0!important}
+html:not([data-theme="dark"]) .logFilePreview{background:var(--nui-fill)!important;border:0!important}
+
+/* ── 그림자 정리: 표면은 뜨지 않는다 ─────────────────────────────
+      원본 테마가 카드·탭·배지·토글에 남겨 둔 (0 1px 3px) 미세 그림자를
+      걷어낸다. 이 그림자 때문에 밑줄 탭 주위에 상자 윤곽이 남아 있었다.
+      대화상자·팝오버·토스트의 그림자와, 색상 견본·활성 탭 밑줄처럼
+      기능을 하는 inset 그림자는 건드리지 않는다.
+      theme_v70 / theme_v79_overrides 가 (0,2,x) + !important 로 걸므로
+      같은 급의 선택자로 맞춰 뒤에 선다. ─────────────────────────── */
+html:not([data-theme="dark"]) body,html[data-theme="dark"] body,
+html:not([data-theme="dark"]) .tabs,html[data-theme="dark"] .tabs,
+html:not([data-theme="dark"]) .card,html[data-theme="dark"] .card,
+html:not([data-theme="dark"]) .editorBox,html[data-theme="dark"] .editorBox,
+html:not([data-theme="dark"]) .blockBody,html[data-theme="dark"] .blockBody,
+html:not([data-theme="dark"]) .badge,html[data-theme="dark"] .badge,
+html:not([data-theme="dark"]) .saveBadge,html[data-theme="dark"] .saveBadge,
+html:not([data-theme="dark"]) .emptyState,html[data-theme="dark"] .emptyState,
+html:not([data-theme="dark"]) .workflowHint,html[data-theme="dark"] .workflowHint,
+html:not([data-theme="dark"]) .filePicker,html[data-theme="dark"] .filePicker,
+html:not([data-theme="dark"]) .prettyFile,html[data-theme="dark"] .prettyFile,
+html:not([data-theme="dark"]) .fileControl,html[data-theme="dark"] .fileControl,
+html:not([data-theme="dark"]) .toggle,html[data-theme="dark"] .toggle,
+html:not([data-theme="dark"]) .compactToggle,html[data-theme="dark"] .compactToggle,
+html:not([data-theme="dark"]) .miniChoiceBtn,html[data-theme="dark"] .miniChoiceBtn,
+html:not([data-theme="dark"]) .reviewChoice,html[data-theme="dark"] .reviewChoice,
+html:not([data-theme="dark"]) .reviewPanelFold,html[data-theme="dark"] .reviewPanelFold,
+html:not([data-theme="dark"]) .colorSwatchLabel,html[data-theme="dark"] .colorSwatchLabel,
+html:not([data-theme="dark"]) .aiThemeV70Picker,html[data-theme="dark"] .aiThemeV70Picker,
+html:not([data-theme="dark"]) .aiThemeV70Swatch,html[data-theme="dark"] .aiThemeV70Swatch,
+html:not([data-theme="dark"]) .themeIconButton,html[data-theme="dark"] .themeIconButton,
+html:not([data-theme="dark"]) .navIconBtn,html[data-theme="dark"] .navIconBtn,
+html:not([data-theme="dark"]) .logLibraryIconBtn,html[data-theme="dark"] .logLibraryIconBtn,
+html:not([data-theme="dark"]) .btn,html[data-theme="dark"] .btn,
+html:not([data-theme="dark"]) .rfS2Button,html[data-theme="dark"] .rfS2Button,
+html:not([data-theme="dark"]) .logFileItem,html[data-theme="dark"] .logFileItem{
+  box-shadow:none!important}
+
+/* 포커스 링은 그림자로 그리므로 위 규칙 뒤에 다시 세운다 */
+html:not([data-theme="dark"]) .btn:focus-visible,html[data-theme="dark"] .btn:focus-visible,
+html:not([data-theme="dark"]) .toggle:focus-within,html[data-theme="dark"] .toggle:focus-within{
+  box-shadow:0 0 0 3px var(--focusRing,rgba(94,172,200,.22))!important}
+
+/* ── 접힘 헤더 한 줄 정렬: 제목 · 상태 · 펼치기 ──────────────────
+      제목이 길면 두 줄로 접혀 "펼치기"가 밀려 내려갔다.
+      제목은 줄바꿈하지 않고, 가운데 상태 문구만 말줄임으로 줄어든다. */
+html .filePicker>summary{flex-wrap:nowrap!important;align-items:center;min-height:40px;gap:10px}
+html .filePicker>summary>span:first-child{flex:0 0 auto;white-space:nowrap;font-weight:600;color:var(--nui-ink)}
+html .filePicker>summary .fileNameText{flex:1 1 auto;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;text-align:right}
+html .prettyFile{flex-wrap:nowrap!important;align-items:center}
+html .prettyFile .fileNameText{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html .prettyFile .fileButtonText{flex:0 0 auto}
+html .filePicker>summary::after{flex:0 0 auto;white-space:nowrap}
+
+/* ── 본문 위/아래 이동 패드 ──────────────────────────────────────
+      원본은 청회색 테두리(#d7e2e8)를 쓴다. 회색 계열로 맞추고
+      누를 때만 살짝 들어가게 한다. */
+html .aiJumpPad button{width:32px;height:32px;border-radius:var(--nui-r)!important;
+  background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  color:var(--nui-sub)!important;box-shadow:none!important;
+  transition:background var(--nui-fast) var(--nui-ease),transform .1s var(--nui-ease)}
+html .aiJumpPad button:hover{background:var(--nui-fill)!important}
+html .aiJumpPad button:active{background:var(--nui-fill2)!important;transform:scale(.94)}
+html[data-theme="dark"] .aiJumpPad button{background:var(--nui-surface)!important;
+  border-color:var(--nui-line)!important;color:var(--nui-sub)!important}
+
+/* ── 다크 최종: dark_late_v159 보다 한 급 위에서 마무리 ──────────
+      dark_late 는 (0,2,1) + !important 규칙을 1.7~6.4초에 걸쳐 <head> 끝으로
+      다시 붙인다. 순서 싸움에 기대지 않도록 body 를 끼워 (0,2,2) 로 올린다.
+      청회색(#232a30·#20262b·#3a444c)을 중립 회색으로 바꾸는 것이 목적이고,
+      다크에서 흰 표면이 남지 않게 하려는 원래 의도는 그대로 지킨다. */
+html[data-theme="dark"] body .card,
+html[data-theme="dark"] body .panel,
+html[data-theme="dark"] body .foldBlock,
+html[data-theme="dark"] body .epubToolStack,
+html[data-theme="dark"] body .epubEditMain,
+html[data-theme="dark"] body .epubEditGrid,
+html[data-theme="dark"] body .optionRow,
+html[data-theme="dark"] body .formatButtonRow,
+html[data-theme="dark"] body .filePicker,
+html[data-theme="dark"] body .prettyFile,
+html[data-theme="dark"] body .chapterPreviewItem,
+html[data-theme="dark"] body .unitChapterPreviewItem{
+  background:var(--nui-surface)!important;color:var(--nui-ink)!important;
+  border-color:var(--nui-line)!important}
+html[data-theme="dark"] body .card.hero,
+html[data-theme="dark"] body .blockBody,
+html[data-theme="dark"] body details,
+html[data-theme="dark"] body summary,
+html[data-theme="dark"] body #statsCard{
+  background:transparent!important;color:var(--nui-ink)!important;border-color:var(--nui-line)!important}
+html[data-theme="dark"] body .filePicker,
+html[data-theme="dark"] body details.foldBlock{background:var(--nui-surface)!important}
+html[data-theme="dark"] body .pastebox,
+html[data-theme="dark"] body .richResultBox,
+html[data-theme="dark"] body .epubRichEditor,
+html[data-theme="dark"] body textarea,
+html[data-theme="dark"] body input[type="text"],
+html[data-theme="dark"] body input[type="number"],
+html[data-theme="dark"] body input[type="search"],
+html[data-theme="dark"] body select{
+  background:var(--nui-input)!important;color:var(--nui-ink)!important;border-color:var(--nui-line)!important}
+html[data-theme="dark"] body .hint,
+html[data-theme="dark"] body .fileNameText{color:var(--nui-muted)!important;background:transparent!important}
+html[data-theme="dark"] body #aiLogLocalTopbarV70{
+  background:var(--nui-bg)!important;border-color:var(--nui-line)!important}
+
+/* ── 옵션·검토 화면 마무리 ───────────────────────────────────────
+      flat_white_v107 / theme_v79_overrides 가 이 영역에 청록 계열
+      (#c4e3ef 테두리·#7b8a90 글자·#e1f3fa 바탕)을 (0,2,x) 로 걸어 둔다.
+      body 를 끼워 한 급 올려, 순서와 무관하게 회색 팔레트로 맞춘다. */
+html:not([data-theme="dark"]) body{background:var(--nui-bg)!important}
+html{background:var(--nui-bg)!important}
+html[data-theme="dark"]{background:var(--nui-bg)!important}
+
+html:not([data-theme="dark"]) body details.foldBlock,
+html:not([data-theme="dark"]) body .blockBody,
+html:not([data-theme="dark"]) body .control,
+html:not([data-theme="dark"]) body .compactControl,
+html:not([data-theme="dark"]) body .miniColorControl,
+html:not([data-theme="dark"]) body .optionRow,
+html:not([data-theme="dark"]) body .reviewPanel,
+html:not([data-theme="dark"]) body .reviewBlock,
+html:not([data-theme="dark"]) body .dupeCard{
+  border-color:var(--nui-line)!important;color:var(--nui-ink)!important}
+html:not([data-theme="dark"]) body details.foldBlock,
+html:not([data-theme="dark"]) body .control,
+html:not([data-theme="dark"]) body .compactControl,
+html:not([data-theme="dark"]) body .miniColorControl{
+  background:var(--nui-surface)!important;border-radius:var(--nui-r)!important}
+html:not([data-theme="dark"]) body .blockBody,
+html:not([data-theme="dark"]) body .optionRow{background:transparent!important}
+html:not([data-theme="dark"]) body .sectionHead,
+html:not([data-theme="dark"]) body .hint,
+html:not([data-theme="dark"]) body .fileNameText{color:var(--nui-muted)!important;background:transparent!important}
+
+html[data-theme="dark"] body details.foldBlock,
+html[data-theme="dark"] body .control,
+html[data-theme="dark"] body .compactControl,
+html[data-theme="dark"] body .miniColorControl{
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;
+  color:var(--nui-ink)!important;border-radius:var(--nui-r)!important}
+html[data-theme="dark"] body .blockBody,
+html[data-theme="dark"] body .optionRow{background:transparent!important;border-color:var(--nui-line)!important}
+html[data-theme="dark"] body .sectionHead{color:var(--nui-muted)!important;background:transparent!important}
+
+/* 선택 상태: 테두리만 파랗던 것을 옅은 강조 바탕 + 강조 테두리로 */
+html:not([data-theme="dark"]) body .toggle:has(input:checked),
+html[data-theme="dark"] body .toggle:has(input:checked),
+html:not([data-theme="dark"]) body .miniChoiceBtn.active,
+html[data-theme="dark"] body .miniChoiceBtn.active,
+html:not([data-theme="dark"]) body .reviewChoice.active,
+html[data-theme="dark"] body .reviewChoice.active{
+  background:color-mix(in srgb,var(--theme-accent,#5eacc8) 12%,transparent)!important;
+  border-color:var(--theme-accent,#5eacc8)!important;color:var(--nui-ink)!important}
+html:not([data-theme="dark"]) body .toggle:not(:has(input:checked)),
+html[data-theme="dark"] body .toggle:not(:has(input:checked)){
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;color:var(--nui-sub)!important}
+html body .toggle{border-radius:var(--nui-r)!important;box-shadow:none!important;
+  transition:background var(--nui-fast) var(--nui-ease),border-color var(--nui-fast) var(--nui-ease)}
+
+/* ── 보관함·공유 보관함 대화상자 ─────────────────────────────────
+      본문 탭과 같은 규칙을 대화상자 안에도 적용한다.
+      채운 알약 탭 → 밑줄 탭, 파란 점선 빈 상자 → 조용한 회색 면.
+      변수만 쓰므로 라이트·다크 한 벌로 끝난다. */
+html body .logLibraryModal,html body .sharedLibraryModal{
+  background:var(--nui-overlay)!important;backdrop-filter:none!important}
+html body .logLibraryDialog{
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;
+  color:var(--nui-ink)!important;border-radius:var(--nui-r-xl)!important;
+  box-shadow:var(--nui-pop-shadow)!important}
+html body .logLibraryDialog .logLibraryTitle{color:var(--nui-ink)!important;font-weight:700;letter-spacing:-.015em}
+html body .logLibraryDialog .logLibraryPath,
+html body .logLibraryDialog .logLibraryStatus,
+html body .logLibraryDialog .logLibraryFoot{color:var(--nui-muted)!important}
+html body .logLibraryDialog .logLibraryHead,
+html body .logLibraryDialog .logLibraryToolbar{
+  background:transparent!important;border-bottom:1px solid var(--nui-line)!important}
+html body .logLibraryDialog .logLibraryFoot{
+  background:transparent!important;border-top:1px solid var(--nui-line)!important}
+
+html body .logLibraryDialog .logLibraryTabs{
+  background:transparent!important;border:0!important;
+  border-bottom:1px solid var(--nui-line)!important;gap:4px}
+html body .logLibraryDialog .logLibraryTab{
+  background:transparent!important;border:0!important;border-radius:0!important;
+  color:var(--nui-sub)!important;font-weight:600;box-shadow:none!important;padding:11px 12px;
+  transition:color var(--nui-fast) var(--nui-ease),background var(--nui-fast) var(--nui-ease)}
+html body .logLibraryDialog .logLibraryTab:hover{background:var(--nui-fill)!important;color:var(--nui-ink)!important}
+html body .logLibraryDialog .logLibraryTab.active{
+  background:transparent!important;color:var(--nui-ink)!important;
+  box-shadow:inset 0 -2px 0 var(--theme-accent,#5eacc8)!important}
+
+html body .logLibraryDialog .logLibraryEmpty{
+  background:var(--nui-fill)!important;border:0!important;border-radius:var(--nui-r-lg)!important;
+  color:var(--nui-muted)!important;font-size:13px}
+html body .logLibraryDialog .logLibraryImportBtn{
+  background:var(--nui-surface)!important;border:1px solid var(--nui-line)!important;
+  color:var(--nui-ink)!important;border-radius:var(--nui-r)!important;font-weight:600;
+  transition:background var(--nui-fast) var(--nui-ease),transform .1s var(--nui-ease)}
+html body .logLibraryDialog .logLibraryImportBtn:hover{background:var(--nui-fill)!important}
+html body .logLibraryDialog .logLibraryImportBtn:active{background:var(--nui-fill2)!important;transform:scale(.98)}
+html body .logLibraryDialog .logLibraryList{background:transparent!important;border:0!important}
+
+/* 대화상자 등장: 아래에서 밀려 올라오는 시트 */
+@keyframes nuiSheetIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes nuiScrimIn{from{opacity:0}to{opacity:1}}
+html body .logLibraryModal:not([hidden]){animation:nuiScrimIn .15s ease}
+html body .logLibraryModal:not([hidden]) .logLibraryDialog{animation:nuiSheetIn var(--nui-slow) var(--nui-ease)}
+@media (prefers-reduced-motion:reduce){
+  html body .logLibraryModal:not([hidden]),
+  html body .logLibraryModal:not([hidden]) .logLibraryDialog{animation:none!important}
+}
+
+/* ── 로판AI 전용 뷰 설정 대화상자 ────────────────────────────────
+      섹션 상자·안내문에 남은 청록(#c4e3ef 테두리·#64767c 글자)을 회색으로.
+      스크림의 흐림(blur 3px)은 걷어낸다 — 뒤가 반쯤 읽히면 초점이 흩어진다. */
+html:not([data-theme="dark"]) body .rfS2Modal,
+html[data-theme="dark"] body .rfS2Modal{background:var(--nui-overlay)!important;backdrop-filter:none!important}
+html:not([data-theme="dark"]) body .rfS2Dialog,
+html[data-theme="dark"] body .rfS2Dialog{background:var(--nui-surface)!important;border-color:var(--nui-line)!important;
+  color:var(--nui-ink)!important;border-radius:var(--nui-r-xl)!important;box-shadow:var(--nui-pop-shadow)!important}
+html:not([data-theme="dark"]) body .rfS2Section,
+html[data-theme="dark"] body .rfS2Section,
+html:not([data-theme="dark"]) body .rfS2Notice,
+html[data-theme="dark"] body .rfS2Notice,
+html:not([data-theme="dark"]) body .rfCamouflagePreview,
+html[data-theme="dark"] body .rfCamouflagePreview{
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;
+  border-radius:var(--nui-r-lg)!important;color:var(--nui-ink)!important;box-shadow:none!important}
+html:not([data-theme="dark"]) body .rfS2Notice,
+html[data-theme="dark"] body .rfS2Notice{background:var(--nui-fill)!important;border:0!important}
+html:not([data-theme="dark"]) body .rfS2Sub,html body .rfS2Help,html body .rfS2Status,
+html[data-theme="dark"] body .rfS2Sub,html body .rfS2Help,html body .rfS2Status,
+html:not([data-theme="dark"]) body .rfS2Toggle,html body .aiThemeV70Auto,
+html[data-theme="dark"] body .rfS2Toggle,html body .aiThemeV70Auto,
+html:not([data-theme="dark"]) body .rfCamouflagePhotoName,
+html[data-theme="dark"] body .rfCamouflagePhotoName{color:var(--nui-muted)!important}
+html:not([data-theme="dark"]) body .rfS2FontOption[aria-selected="true"],
+html[data-theme="dark"] body .rfS2FontOption[aria-selected="true"],
+html:not([data-theme="dark"]) body .rfS2FontOption:hover,
+html[data-theme="dark"] body .rfS2FontOption:hover{background:var(--nui-fill)!important}
+html:not([data-theme="dark"]) body .rfS2FontOption,
+html[data-theme="dark"] body .rfS2FontOption{background:transparent!important;color:var(--nui-ink)!important;border-radius:var(--nui-r)!important}
+html:not([data-theme="dark"]) body .rfS2FontMenu,html body .rfS2FontPicker,html body .rfS2FontChoiceButton,
+html[data-theme="dark"] body .rfS2FontMenu,html body .rfS2FontPicker,html body .rfS2FontChoiceButton{
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;
+  border-radius:var(--nui-r)!important;color:var(--nui-ink)!important}
+html:not([data-theme="dark"]) body .aiThemeV70Swatch,
+html[data-theme="dark"] body .aiThemeV70Swatch{border-color:var(--nui-line)!important;border-radius:var(--nui-r)!important}
+html:not([data-theme="dark"]) body .rfS2Button.danger,
+html[data-theme="dark"] body .rfS2Button.danger{color:var(--nui-danger)!important;border-color:var(--nui-line)!important}
+html:not([data-theme="dark"]) body .rfS2Button.save,html body .rfS2Button.primary,
+html[data-theme="dark"] body .rfS2Button.save,html body .rfS2Button.primary{
+  background:var(--theme-accent,#5eacc8)!important;border-color:var(--theme-accent,#5eacc8)!important;
+  color:#fff!important;border-radius:var(--nui-r)!important}
+html:not([data-theme="dark"]) body .rfS2Button,
+html[data-theme="dark"] body .rfS2Button{border-radius:var(--nui-r)!important;font-weight:600;
+  transition:background var(--nui-fast) var(--nui-ease),transform .1s var(--nui-ease)}
+html:not([data-theme="dark"]) body .rfS2Button:active,
+html[data-theme="dark"] body .rfS2Button:active{transform:scale(.98)}
+html:not([data-theme="dark"]) body .rfS2Modal:not([hidden]),
+html[data-theme="dark"] body .rfS2Modal:not([hidden]){animation:nuiScrimIn .15s ease}
+html:not([data-theme="dark"]) body .rfS2Modal:not([hidden]) .rfS2Dialog,
+html[data-theme="dark"] body .rfS2Modal:not([hidden]) .rfS2Dialog{animation:nuiSheetIn var(--nui-slow) var(--nui-ease)}
+@media (prefers-reduced-motion:reduce){
+html:not([data-theme="dark"]) body .rfS2Modal:not([hidden]),
+html[data-theme="dark"] body .rfS2Modal:not([hidden]),
+html:not([data-theme="dark"]) body .rfS2Modal:not([hidden]) .rfS2Dialog,
+html[data-theme="dark"] body .rfS2Modal:not([hidden]) .rfS2Dialog{animation:none!important}
+}
+
+/* 위 묶음에서 접두사가 빠진 선택자 보정 */
+html:not([data-theme="dark"]) body .rfS2Help,html[data-theme="dark"] body .rfS2Help,
+html:not([data-theme="dark"]) body .rfS2Status,html[data-theme="dark"] body .rfS2Status,
+html:not([data-theme="dark"]) body .aiThemeV70Auto,html[data-theme="dark"] body .aiThemeV70Auto{
+  color:var(--nui-muted)!important}
+html:not([data-theme="dark"]) body .rfS2FontPicker,html[data-theme="dark"] body .rfS2FontPicker,
+html:not([data-theme="dark"]) body .rfS2FontChoiceButton,html[data-theme="dark"] body .rfS2FontChoiceButton{
+  background:var(--nui-surface)!important;border-color:var(--nui-line)!important;
+  border-radius:var(--nui-r)!important;color:var(--nui-ink)!important}
+html:not([data-theme="dark"]) body .rfS2Button.primary,html[data-theme="dark"] body .rfS2Button.primary{
+  background:var(--theme-accent,#5eacc8)!important;border-color:var(--theme-accent,#5eacc8)!important;
+  color:#fff!important}

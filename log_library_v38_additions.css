@@ -1,0 +1,67 @@
+/* v38 shared Download/로그 발췌기 library tabs */
+.logLibraryTabs{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:5px;
+  padding:8px 10px 0;
+  background:var(--paper2);
+}
+.logLibraryTab{
+  min-width:0;
+  min-height:31px;
+  padding:6px 7px;
+  border:1px solid var(--line);
+  border-radius:9px 9px 0 0;
+  background:var(--paper);
+  color:var(--muted);
+  font:inherit;
+  font-size:10.5px;
+  font-weight:700;
+  white-space:nowrap;
+  cursor:pointer;
+}
+.logLibraryTab.active{
+  border-color:var(--accent);
+  background:var(--accent-soft);
+  color:var(--ink);
+  box-shadow:inset 0 -2px 0 var(--accent);
+}
+.sharedLibraryDialog .logLibraryToolbar{min-height:48px;}
+.sharedLibraryDialog .logLibraryImportBtn[hidden]{display:none!important;}
+.sharedLibraryDialog .logFileMetaRow{display:block;}
+.sharedLibraryDialog .logFilePreview{display:block!important;}
+@media(max-width:560px){
+  .logLibraryTabs{padding:7px 8px 0;gap:3px;}
+  .logLibraryTab{font-size:9.5px;padding:5px 3px;}
+}
+
+/* v150: editing a name must not compress or wrap the file card. */
+.sharedLibraryDialog .logFileItem{display:block;min-width:0;overflow:hidden}
+.sharedLibraryDialog .logFileMain{width:100%;min-width:0}
+.sharedLibraryDialog .logFileInfo,.sharedLibraryDialog .logFileName,.sharedLibraryDialog .logFileMetaRow{min-width:0}
+.sharedLibraryDialog .logFileActions{flex:0 0 auto;white-space:nowrap}
+.sharedLibraryDialog .logRenameRow{
+  width:100%;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  align-items:center;
+  padding:0 9px 9px;
+  box-sizing:border-box;
+}
+.sharedLibraryDialog .logRenameInput{min-width:0;width:100%}
+.sharedLibraryDialog .logFilePreview{width:100%;min-width:0;box-sizing:border-box}
+@media(max-width:420px){
+  .sharedLibraryDialog .logFileMain{grid-template-columns:minmax(0,1fr) auto;gap:5px}
+  .sharedLibraryDialog .logRenameRow{grid-template-columns:minmax(0,1fr) 42px 42px;gap:4px}
+  .sharedLibraryDialog .logRenameButton{min-width:0;padding:0 4px}
+}
+
+/* v153: 이름 수정·미리보기에서 행이 압축돼 깨지던 문제 — 어떤 이전 규칙이 남아 있어도
+   눌리도록 기하(높이·배치)를 명시적으로 못박는다. */
+.sharedLibraryDialog #logLibraryList{display:flex!important;flex-direction:column!important;gap:10px!important}
+.sharedLibraryDialog .logFileItem{display:flex!important;flex-direction:column!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
+.sharedLibraryDialog .logFileMain{display:flex!important;align-items:center!important;gap:8px!important;width:100%!important;height:auto!important}
+.sharedLibraryDialog .logFileInfo{flex:1 1 auto!important;min-width:0!important}
+.sharedLibraryDialog .logFileActions{display:flex!important;gap:6px!important;flex:0 0 auto!important}
+.sharedLibraryDialog .logRenameRow{display:flex!important;gap:6px!important;width:100%!important;align-items:center!important;height:auto!important}
+.sharedLibraryDialog .logRenameInput{flex:1 1 auto!important;min-width:0!important;height:auto!important}
+.sharedLibraryDialog .logFilePreview{display:block!important;width:100%!important;height:auto!important;max-height:42vh!important;overflow:auto!important;white-space:pre-wrap}

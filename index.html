@@ -1,9 +1,30 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-theme="light" class="theme-light">
 <head>
+<script src="./error_probe.js"></script>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#eef5f8" />
 <title>로그 다듬기 · EPUB 제작</title>
+<script>
+(() => {
+  const key = "ai-log-epub-ui-theme";
+  let theme = "light";
+  try { theme = localStorage.getItem(key) === "dark" ? "dark" : "light"; } catch (_) {}
+  const root = document.documentElement;
+  root.dataset.theme = theme;
+  root.classList.toggle("theme-light", theme === "light");
+  root.classList.toggle("theme-dark", theme === "dark");
+  root.style.colorScheme = theme;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = theme === "light" ? "#eef5f8" : "#121a20";
+  addEventListener("DOMContentLoaded", () => {
+    document.body.classList.toggle("theme-light", theme === "light");
+    document.body.classList.toggle("theme-dark", theme === "dark");
+  }, { once: true });
+})();
+</script>
 <style>
 
 :root{
@@ -194,7 +215,7 @@ details.foldBlock[open] summary:after{transform:rotate(180deg);}
 .bookPreview p{margin:0 0 1em;}
 .mutedText{color:var(--muted);}
 .exportDock{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
-#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:rgba(35,49,58,.94);color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .25s ease;pointer-events:none;z-index:9999;box-shadow:0 12px 35px rgba(35,49,58,.20);}
+#toast{position:fixed;left:50%;bottom:calc(26px + var(--ailog-bottom, 0px));transform:translateX(-50%);background:rgba(35,49,58,.94);color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .25s ease;pointer-events:none;z-index:9999;box-shadow:0 12px 35px rgba(35,49,58,.20);}
 
 /* 작은 화면/브라우저 배율에서 카드 내용이 잘리지 않도록 내부 스크롤을 제공합니다. */
 .blockBody::-webkit-scrollbar,.chapterList::-webkit-scrollbar,.bookPreviewWrap::-webkit-scrollbar,.bookPreview::-webkit-scrollbar,.previewText::-webkit-scrollbar,textarea::-webkit-scrollbar,.pastebox::-webkit-scrollbar{width:10px;height:10px;}
@@ -333,6 +354,7 @@ details.foldBlock[open] summary:after{transform:rotate(180deg);}
 .candidateToolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding:10px 12px;border:1px solid var(--line2);border-radius:14px;background:var(--paper2);}
 .choiceRow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px;}
 .threeChoices{grid-template-columns:repeat(3,minmax(0,1fr));}
+.fourChoices{grid-template-columns:repeat(4,minmax(0,1fr));}
 .bulkButtons{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;}
 .reviewChoice{border:1px solid var(--line);border-radius:14px;background:#fff;padding:11px 12px;display:flex;gap:8px;align-items:center;color:var(--sub);}
 .reviewChoice input{accent-color:var(--accent);}
@@ -351,7 +373,7 @@ strong,b,.brandTitle,.sectionTitle,.reviewTitle,h1,.tab,.btn,.toggle,details.fol
   .reviewSearchBar{grid-template-columns:1fr 88px;}
   .reviewSearchBar .btn{min-height:34px;}
   .dupeCompareGrid{grid-template-columns:repeat(2,minmax(260px,1fr));}
-  .choiceRow,.threeChoices{grid-template-columns:1fr;}
+  .choiceRow,.threeChoices,.fourChoices{grid-template-columns:1fr;}
 }
 @media(max-width:720px){
   .appFrame{padding:10px;gap:12px;}
@@ -688,7 +710,588 @@ aside.sidebar{display:none!important;}
 .editorBox.resultBox{align-self:start!important;min-height:0!important;height:auto!important;}
 .editorBox.resultBox .richResultBox{height:var(--synced-result-height,520px)!important;min-height:0!important;max-height:var(--synced-result-height,520px)!important;overflow:auto!important;}
 
+
+
+/* Film-style compact layout + persistent light/dark theme */
+:root{
+  color-scheme:light;
+  --inputBg:#ffffff;
+  --headerBg:rgba(255,255,255,.88);
+  --stageBg:#edf5f8;
+  --focusRing:rgba(79,138,164,.16);
+}
+html[data-theme="dark"],html.theme-dark{
+  color-scheme:dark;
+  --bg:#0c0f0e;
+  --paper:#111514;
+  --paper2:#171c1a;
+  --ink:#edf2f0;
+  --sub:#b0bdb8;
+  --muted:#81908a;
+  --line:#2c3733;
+  --line2:#202925;
+  --accent:#78b5d1;
+  --accentSoft:rgba(120,181,209,.13);
+  --green:#8daf99;
+  --red:#e19999;
+  --shadow:0 18px 55px rgba(0,0,0,.28);
+  --softShadow:0 8px 28px rgba(0,0,0,.20);
+  --inputBg:#0e1211;
+  --headerBg:rgba(12,15,14,.90);
+  --stageBg:#090c0b;
+  --focusRing:rgba(120,181,209,.17);
+}
+html{min-width:320px;background:var(--bg);}
+body{
+  min-height:100vh;
+  font-size:13px;
+  background:
+    radial-gradient(circle at 12% 0%,rgba(120,181,209,.07),transparent 30rem),
+    var(--bg);
+  transition:background-color .18s ease,color .18s ease;
+}
+.appFrame{max-width:1720px;padding:12px;gap:12px;}
+.canvas{gap:12px;}
+.card,.sideCard{border-radius:16px;padding:14px;background:var(--paper);border-color:var(--line);box-shadow:var(--softShadow);}
+.hero{padding:14px;gap:10px;align-items:start;background:var(--headerBg);backdrop-filter:blur(16px);}
+.hero>div:first-child{min-width:0;}
+.hero h1{font-size:22px;line-height:1.12;letter-spacing:-.035em;}
+.heroText{margin-top:5px;font-size:11.5px;line-height:1.45;}
+.heroTools{align-items:center;gap:6px;}
+.hero .tabs{grid-column:1/-1;}
+.saveBadge{min-height:30px;padding:6px 9px;font-size:10.5px;background:var(--paper2);color:var(--sub);}
+.themeIconButton{
+  display:grid;place-items:center;flex:0 0 auto;
+  width:32px;height:32px;padding:0;
+  border:1px solid var(--line);border-radius:9px;
+  background:var(--paper);color:var(--ink);
+  font-size:16px;line-height:1;cursor:pointer;
+  box-shadow:0 4px 14px rgba(0,0,0,.10);
+}
+.themeIconButton:hover{border-color:var(--accent);background:var(--paper2);}
+.themeIconButton:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.tabs{gap:5px;padding:5px;border-radius:12px;background:var(--paper2);}
+.tab{min-width:0;min-height:30px;padding:6px 10px;border-radius:8px;font-size:11.5px;font-weight:650;}
+.tab.active{box-shadow:0 0 0 3px var(--focusRing);}
+.statsCard{padding:10px 12px;}
+.statsCard .sectionHead{margin-bottom:7px!important;}
+.statsGrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;}
+.stat{padding:8px;border-radius:10px;background:var(--paper);}
+.stat strong{font-size:15px;}
+.stat span{margin-top:3px;font-size:9.5px;}
+.sectionHead{gap:10px;margin-bottom:10px;}
+.sectionTitle{font-size:15px;}
+.sectionDesc{margin-top:3px;font-size:10.5px;line-height:1.45;}
+.badge{padding:5px 8px;font-size:10px;background:var(--paper);}
+.editorGrid{gap:10px;}
+.editorBox{gap:6px;}
+.editorLabel{font-size:10.5px;}
+textarea,.pastebox,.richResultBox{height:440px;min-height:330px;padding:12px;border-radius:12px;font-size:12.5px;line-height:1.68;background:var(--inputBg);color:var(--ink);}
+.editorBox.resultBox .richResultBox{height:var(--synced-result-height,440px)!important;max-height:var(--synced-result-height,440px)!important;}
+.filePicker{padding:9px;margin-bottom:7px;border-radius:11px;background:var(--paper2);}
+.fileExtractFold>summary{padding:9px 11px;font-size:11px;}
+.fileExtractBody{padding:9px 10px 10px;}
+.actionDock,.exportDock{gap:6px;margin-top:10px;padding-top:10px;}
+.downloadNameControl{max-width:300px!important;}
+.downloadNameControl input{width:180px!important;}
+.btn{min-height:31px;padding:6px 9px;border-radius:9px;font-size:11px;font-weight:650;background:var(--paper);color:var(--ink);}
+.btn:hover{background:var(--paper2);}
+.controlsGrid{gap:10px;}
+#optionsBoard .controlsGrid{grid-template-columns:repeat(2,minmax(0,1fr));counter-reset:option-card;}
+#optionsBoard details.foldBlock{counter-increment:option-card;}
+details.foldBlock{border-radius:13px;background:var(--paper);border-color:var(--line);box-shadow:none;}
+details.foldBlock>summary{position:relative;justify-content:flex-start;padding:10px 12px;font-size:12px;font-weight:650;color:var(--ink);}
+#optionsBoard details.foldBlock>summary::before{
+  content:counter(option-card,decimal-leading-zero);
+  display:grid;place-items:center;flex:0 0 auto;
+  width:25px;height:25px;border:1px solid var(--line);border-radius:7px;
+  color:var(--accent);font-size:9px;font-weight:800;background:var(--paper2);
+}
+details.foldBlock>summary::after{margin-left:auto;}
+.blockBody{padding:0 12px 12px;max-height:430px;border-color:var(--line2);}
+.optionRow{gap:6px;margin-top:9px;}
+#optionsBoard .optionRow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;overflow:visible;}
+#optionsBoard .speakerColorGrid{grid-column:1/-1;}
+#optionsBoard .toggle,#optionsBoard .control{width:100%;}
+.toggle{justify-content:flex-start;min-height:31px;padding:6px 9px;border-radius:9px;font-size:11px;font-weight:650;background:var(--paper);color:var(--sub);}
+.toggle:has(input:checked){box-shadow:0 0 0 3px var(--focusRing);}
+.control{min-height:31px;padding:5px 7px;border-radius:9px;font-size:11px;font-weight:600;background:var(--paper);color:var(--sub);}
+.control input[type="text"],.control input[type="number"],.control input[type="search"],.control select,.control textarea,.control input[type="file"]{
+  min-height:27px;padding:4px 6px;border-radius:7px;background:var(--inputBg);color:var(--ink);border-color:var(--line2);font-size:11px;
+}
+.control textarea{height:74px;min-height:74px;}
+.basicOptionsRow{overflow:visible;padding-bottom:0;}
+.basicOptionsRow .compactToggle,.basicOptionsRow .compactControl{min-height:31px;padding:6px 9px;border-radius:9px;font-size:11px;}
+.basicOptionsRow .compactControl input{width:100%;min-height:27px;border-radius:7px;font-size:11px;}
+.formGrid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));min-width:0;gap:8px;margin-top:9px;}
+.formGrid .control{min-width:0;}
+.epubGrid{gap:10px;}
+.epubPreviewGrid{gap:10px;margin-top:10px;}
+.chapterList,.bookPreviewWrap{padding:12px;border-radius:13px;background:var(--paper);}
+.bookPreview{padding:13px;border-radius:10px;background:var(--inputBg);color:var(--ink);font-size:13px;line-height:1.7;}
+.reviewBoard{gap:10px;}
+.reviewPanel{padding:12px;border-radius:13px;background:var(--paper);}
+.reviewBlock,.reviewChoice,.dupeCard,.containsKeywordGroup,.containsRow,.foldReview>summary,.nextPromptFold,.epubRichEditor,.richResultBox,.miniColorControl,.resultFindBar input[type="search"]{background:var(--paper);color:var(--ink);border-color:var(--line);}
+.previewText{font-size:12px;line-height:1.68;}
+.resultFindBar{gap:5px;}
+.resultFindBar input[type="search"]{min-height:31px;padding:6px 8px;border-radius:9px;font-size:11px;}
+.epubRichEditor{min-height:460px;padding:15px;border-radius:13px;font-size:13px;line-height:1.72;}
+
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .sideCard,
+html[data-theme="dark"] details.foldBlock,
+html[data-theme="dark"] .reviewPanel,
+html[data-theme="dark"] .reviewBlock,
+html[data-theme="dark"] .reviewChoice,
+html[data-theme="dark"] .dupeCard,
+html[data-theme="dark"] .containsKeywordGroup,
+html[data-theme="dark"] .containsRow,
+html[data-theme="dark"] .foldReview>summary,
+html[data-theme="dark"] .nextPromptFold,
+html[data-theme="dark"] .chapterList,
+html[data-theme="dark"] .bookPreviewWrap,
+html[data-theme="dark"] .flowItem,
+html[data-theme="dark"] .stat,
+html[data-theme="dark"] .badge,
+html[data-theme="dark"] .btn,
+html[data-theme="dark"] .toggle,
+html[data-theme="dark"] .control,
+html[data-theme="dark"] .miniColorControl,
+html[data-theme="dark"] .inlineChoice label,
+html[data-theme="dark"] .containsRow .reviewBlock{background:var(--paper)!important;color:var(--ink);border-color:var(--line)!important;}
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] .pastebox,
+html[data-theme="dark"] .richResultBox,
+html[data-theme="dark"] .epubRichEditor,
+html[data-theme="dark"] .bookPreview,
+html[data-theme="dark"] .resultFindBar input[type="search"]{background:var(--inputBg)!important;color:var(--ink)!important;border-color:var(--line)!important;}
+html[data-theme="dark"] .tabs,
+html[data-theme="dark"] .filePicker,
+html[data-theme="dark"] .emptyState,
+html[data-theme="dark"] .dupeToolbar,
+html[data-theme="dark"] .containsRows,
+html[data-theme="dark"] .quoteBox,
+html[data-theme="dark"] .quotePostype,
+html[data-theme="dark"] .quoteSoft{background:var(--paper2)!important;color:var(--sub)!important;border-color:var(--line)!important;}
+html[data-theme="dark"] .btn.primary,
+html[data-theme="dark"] .tab.active,
+html[data-theme="dark"] .toggle:has(input:checked){background:var(--accent)!important;color:#07110f!important;border-color:var(--accent)!important;}
+html[data-theme="dark"] .btn.subtle{background:var(--paper2)!important;color:var(--sub)!important;}
+html[data-theme="dark"] strong,
+html[data-theme="dark"] b,
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] .sectionTitle,
+html[data-theme="dark"] .reviewTitle,
+html[data-theme="dark"] details.foldBlock summary,
+html[data-theme="dark"] .brandTitle{color:var(--ink)!important;}
+html[data-theme="dark"] .sectionDesc,
+html[data-theme="dark"] .hint,
+html[data-theme="dark"] .miniHelp,
+html[data-theme="dark"] .reviewMeta,
+html[data-theme="dark"] .smallMuted,
+html[data-theme="dark"] .keywordMeta,
+html[data-theme="dark"] .fileNameText,
+html[data-theme="dark"] .downloadHint,
+html[data-theme="dark"] .heroText,
+html[data-theme="dark"] .editorLabel,
+html[data-theme="dark"] .saveBadge{color:var(--muted)!important;}
+html[data-theme="dark"] .keywordTitle,
+html[data-theme="dark"] .containsPreview,
+html[data-theme="dark"] .miniToolHead,
+html[data-theme="dark"] .miniToolHead strong{color:var(--sub)!important;}
+html[data-theme="dark"] textarea[readonly]{background:#0b0f0e!important;}
+html[data-theme="dark"] #toast{background:rgba(237,242,240,.94);color:#111514;}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb{background:#3d4b46!important;border-color:#151b18!important;}
+html[data-theme="dark"] ::-webkit-scrollbar-track{background:#111714!important;}
+
+@media(max-width:900px){
+  .appFrame{padding:9px;}
+  .hero{grid-template-columns:1fr auto;}
+  .heroTools{justify-content:flex-end;}
+  #optionsBoard .controlsGrid{grid-template-columns:1fr;}
+  .epubGrid,.reviewBoard,.epubPreviewGrid{grid-template-columns:1fr;}
+  .formGrid{grid-template-columns:repeat(2,minmax(0,1fr));min-width:0;}
+}
+@media(max-width:640px){
+  body{font-size:12.5px;}
+  .canvas{padding:0;}
+  .card{padding:11px;border-radius:13px;}
+  .hero{padding:11px;}
+  .hero h1{font-size:19px;}
+  .heroText{font-size:10.5px;}
+  .themeIconButton{width:30px;height:30px;}
+  .saveBadge{display:none;}
+  .tabs{width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));}
+  .tab{width:100%;padding:6px 4px;font-size:10px;}
+  .statsGrid{grid-template-columns:repeat(4,minmax(0,1fr));}
+  .stat{padding:6px 4px;text-align:center;}
+  .sectionTitle{font-size:14px;}
+  .btn,.toggle,.control{font-size:10.5px;}
+  #optionsBoard .optionRow{grid-template-columns:1fr;}
+  #optionsBoard .speakerColorGrid{grid-column:auto;}
+  .formGrid{grid-template-columns:1fr;}
+  textarea,.pastebox,.richResultBox{height:360px;min-height:300px;font-size:11.5px;padding:10px;}
+  .editorBox.resultBox .richResultBox{height:var(--synced-result-height,360px)!important;max-height:var(--synced-result-height,360px)!important;}
+  .downloadNameControl{max-width:100%!important;flex:1 1 100%!important;}
+  .downloadNameControl input{width:100%!important;}
+}
+
+/* Review board reset controls: always one compact row. */
+#reviewBoard .reviewSectionHead{align-items:center;flex-wrap:nowrap;}
+#reviewBoard .reviewResetRow{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  flex:1 1 520px;max-width:620px;gap:5px;margin-left:auto;
+}
+#reviewBoard .reviewResetRow .btn{
+  width:100%;min-width:0;min-height:30px;padding:5px 7px;
+  font-size:10.5px;letter-spacing:-.035em;white-space:nowrap;
+}
+@media(max-width:640px){
+  #reviewBoard .reviewSectionHead{display:block;}
+  #reviewBoard .reviewResetRow{width:100%;max-width:none;margin:8px 0 0;gap:4px;}
+  #reviewBoard .reviewResetRow .btn{min-height:28px;padding:4px 3px;font-size:9.5px;}
+}
+
 </style>
+
+<!-- COMPACT_OPTIONS_V2_START -->
+<style id="compact-options-v2">
+/* Compact option matrix: dense without wrapping or horizontal overflow. */
+#optionsBoard{
+  padding:12px;
+}
+#optionsBoard .sectionHead{
+  margin-bottom:8px;
+}
+#optionsBoard .controlsGrid{
+  gap:8px;
+}
+#optionsBoard details.foldBlock{
+  border-radius:12px;
+  overflow:hidden;
+}
+#optionsBoard details.foldBlock > summary{
+  min-height:36px;
+  padding:7px 9px;
+  gap:8px;
+  white-space:nowrap;
+}
+#optionsBoard details.foldBlock > summary::before{
+  width:22px;
+  height:22px;
+  border-radius:6px;
+  font-size:8.5px;
+}
+#optionsBoard .blockBody{
+  padding:0 9px 9px;
+  max-height:none;
+  overflow:visible;
+}
+#optionsBoard .optionRow,
+#optionsBoard .basicOptionsRow{
+  display:grid !important;
+  grid-template-columns:repeat(12,minmax(0,1fr)) !important;
+  gap:5px !important;
+  margin-top:7px;
+  align-items:stretch;
+  overflow:visible;
+}
+#optionsBoard .toggle,
+#optionsBoard .control,
+#optionsBoard .btn,
+#optionsBoard .miniColorControl{
+  width:100%;
+  min-width:0;
+  min-height:27px;
+  height:27px;
+  margin:0;
+  padding:4px 7px;
+  border-radius:8px;
+  font-size:10px;
+  line-height:1;
+  font-weight:650;
+  white-space:nowrap;
+  word-break:keep-all;
+  overflow:visible;
+}
+#optionsBoard .toggle{
+  position:relative;
+  justify-content:center;
+  gap:5px;
+  text-align:center;
+}
+#optionsBoard .toggle::before{
+  content:"";
+  flex:0 0 auto;
+  width:6px;
+  height:6px;
+  border:1px solid currentColor;
+  border-radius:999px;
+  opacity:.55;
+}
+#optionsBoard .toggle:has(input:checked)::before{
+  background:currentColor;
+  opacity:1;
+  box-shadow:0 0 0 2px rgba(255,255,255,.32);
+}
+#optionsBoard .control{
+  justify-content:flex-start;
+  gap:5px;
+}
+#optionsBoard .control > input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+#optionsBoard .control > select{
+  flex:1 1 0;
+  width:0;
+  min-width:0;
+  max-width:none;
+  height:21px;
+  min-height:21px;
+  padding:2px 5px;
+  border-radius:6px;
+  font-size:9.7px;
+  line-height:1.1;
+}
+#optionsBoard .control > select{
+  padding-right:19px;
+}
+#optionsBoard .btn{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+}
+#optionsBoard .hint{
+  margin-top:6px;
+  font-size:9.5px;
+  line-height:1.45;
+}
+
+/* 01 기본 정리: three chips per row on roomy screens, two on phones. */
+#optionsBoard .controlsGrid > details:nth-child(1) .toggle{
+  grid-column:span 4;
+}
+#optionsBoard .controlsGrid > details:nth-child(1) .control{
+  grid-column:1 / -1;
+}
+
+/* 02 출력 형식: option pair + three preset actions in one row. */
+#optionsBoard .controlsGrid > details:nth-child(2) .control{
+  grid-column:span 7;
+}
+#optionsBoard .controlsGrid > details:nth-child(2) .toggle{
+  grid-column:span 5;
+}
+#optionsBoard .controlsGrid > details:nth-child(2) .btn{
+  grid-column:span 4;
+}
+
+/* 03 검토 규칙: deliberately packed into three rows. */
+#optionsBoard #chatOptions .optionRow > :nth-child(1){grid-column:1 / 7;grid-row:1;}
+#optionsBoard #chatOptions .optionRow > :nth-child(7){grid-column:7 / 13;grid-row:1;}
+#optionsBoard #chatOptions .optionRow > :nth-child(2){grid-column:1 / 8;grid-row:2;}
+#optionsBoard #chatOptions .optionRow > :nth-child(3){grid-column:8 / 13;grid-row:2;}
+#optionsBoard #chatOptions .optionRow > :nth-child(4){grid-column:1 / 5;grid-row:3;}
+#optionsBoard #chatOptions .optionRow > :nth-child(5){grid-column:5 / 9;grid-row:3;}
+#optionsBoard #chatOptions .optionRow > :nth-child(6){grid-column:9 / 13;grid-row:3;}
+
+/* 04 서식 설정: paired controls, no wasted full-width rows. */
+#optionsBoard .controlsGrid > details:nth-child(4) .optionRow > :nth-child(1){grid-column:1 / 5;grid-row:1;}
+#optionsBoard .controlsGrid > details:nth-child(4) .optionRow > :nth-child(8){grid-column:5 / 13;grid-row:1;}
+#optionsBoard .controlsGrid > details:nth-child(4) .optionRow > :nth-child(2){grid-column:1 / 7;grid-row:2;}
+#optionsBoard .controlsGrid > details:nth-child(4) .optionRow > :nth-child(3){grid-column:7 / 13;grid-row:2;}
+#optionsBoard .controlsGrid > details:nth-child(4) .optionRow > :nth-child(4){grid-column:1 / 7;grid-row:3;}
+#optionsBoard .controlsGrid > details:nth-child(4) .optionRow > :nth-child(5){grid-column:7 / 13;grid-row:3;}
+#optionsBoard .controlsGrid > details:nth-child(4) .optionRow > :nth-child(6){grid-column:1 / 5;grid-row:4;}
+#optionsBoard .controlsGrid > details:nth-child(4) .optionRow > :nth-child(7){grid-column:5 / 13;grid-row:4;}
+#optionsBoard .speakerColorGrid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:5px;
+  min-width:0;
+}
+#optionsBoard .miniColorControl{
+  justify-content:space-between;
+  gap:4px;
+}
+#optionsBoard .miniColorControl i{
+  width:18px;
+  height:18px;
+  flex:0 0 18px;
+}
+#optionsBoard #speakerMarkerCustom{
+  width:0 !important;
+  min-width:0 !important;
+  max-width:none !important;
+}
+
+@media (max-width:900px){
+  #optionsBoard .controlsGrid{
+    grid-template-columns:1fr !important;
+  }
+  #optionsBoard .controlsGrid > details:nth-child(1) .toggle{
+    grid-column:span 4;
+  }
+}
+@media (max-width:560px){
+  #optionsBoard{
+    padding:9px;
+  }
+  #optionsBoard .sectionDesc{
+    margin-top:2px;
+  }
+  #optionsBoard details.foldBlock > summary{
+    min-height:34px;
+    padding:6px 8px;
+    font-size:11px;
+  }
+  #optionsBoard .blockBody{
+    padding:0 7px 7px;
+  }
+  #optionsBoard .optionRow,
+  #optionsBoard .basicOptionsRow{
+    gap:4px !important;
+    margin-top:6px;
+  }
+  #optionsBoard .toggle,
+  #optionsBoard .control,
+  #optionsBoard .btn,
+  #optionsBoard .miniColorControl{
+    min-height:26px;
+    height:26px;
+    padding:3px 5px;
+    border-radius:7px;
+    font-size:9.7px;
+    gap:4px;
+  }
+  #optionsBoard .control > input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+  #optionsBoard .control > select{
+    height:20px;
+    min-height:20px;
+    padding:1px 4px;
+    font-size:9.4px;
+  }
+  #optionsBoard .controlsGrid > details:nth-child(1) .toggle{
+    grid-column:span 6;
+  }
+  #optionsBoard .controlsGrid > details:nth-child(2) .control{
+    grid-column:span 7;
+  }
+  #optionsBoard .controlsGrid > details:nth-child(2) .toggle{
+    grid-column:span 5;
+  }
+  #optionsBoard .controlsGrid > details:nth-child(2) .btn{
+    grid-column:span 4;
+  }
+}
+@media (max-width:360px){
+  #optionsBoard .toggle,
+  #optionsBoard .control,
+  #optionsBoard .btn,
+  #optionsBoard .miniColorControl{
+    padding-left:4px;
+    padding-right:4px;
+    font-size:9.2px;
+  }
+  #optionsBoard .toggle::before{
+    width:5px;
+    height:5px;
+  }
+  #optionsBoard .control > input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+  #optionsBoard .control > select{
+    font-size:9px;
+  }
+}
+</style>
+<!-- COMPACT_OPTIONS_V2_END -->
+
+
+<!-- SYSTEM_FONT_PATCH_V3_START -->
+<style id="system-font-patch-v3">
+/* Follow the Android phone's selected UI font instead of naming a web font. */
+:root{
+  --app-system-font:sans-serif;
+}
+html,
+body{
+  font-family:var(--app-system-font) !important;
+}
+button,
+input,
+select,
+textarea,
+option,
+optgroup{
+  font-family:inherit !important;
+}
+/* Remove the remaining component-level font overrides in the visible UI. */
+.flowItem,
+.bookPreview,
+.customQuoteBox textarea,
+.pastebox,
+.richResultBox,
+.previewText,
+.quoteContextMenu button,
+input[type="file"]::file-selector-button{
+  font-family:inherit !important;
+}
+/* A font explicitly selected for EPUB editing still wins through its inline style. */
+.epubRichEditor:not([style*="font-family"]){
+  font-family:inherit;
+}
+</style>
+<!-- SYSTEM_FONT_PATCH_V3_END -->
+
+<!-- SYSTEM_FONT_PATCH_V6_START -->
+<style id="system-font-patch-v6">
+/* 앱 UI 폰트를 기기 시스템 폰트로 돌린다.
+   기존 CHOSUN_FONT_PATCH_V5 자리를 대신한다. 조선일보명조를 심는 @font-face 두 개와,
+   런타임에 FontFace 로 심은 뒤 <html> 인라인 스타일로 변수를 덮어쓰던 로더를 걷어냈다.
+   (로더가 인라인으로 걸면 어떤 스타일시트로도 되돌릴 수 없다.)
+
+   적용 범위와 !important 는 그대로 둔다 — 문서 곳곳에 흩어진 개별 font-family 선언을
+   눌러 주는 장치가 이 규칙이었다. 가리키는 값만 시스템 폰트로 바꿨다.
+
+   assets/fonts/ 의 글꼴 파일은 지우지 않았다. 되돌리려면 이 블록만 교체하면 된다.
+   로판AI 전용 뷰의 '글꼴 등록' 기능은 별개이며 그대로 동작한다.
+
+   값은 `sans-serif` 하나뿐이다. 이유가 둘 있다.
+
+   1) 실제 글꼴 이름(Roboto·Noto Sans KR 등)을 넣으면 안 된다.
+      기기에 설치돼 있어서 반드시 매칭되고, 그 순간 기기 설정 글꼴이 무시된 채
+      고딕으로 고정된다. v234 가 그렇게 깨졌다.
+   2) `system-ui` 도 넣으면 안 된다.
+      WebView(Chromium)는 이 키워드를 자기 기본 글꼴로 직접 해석하는데, 그 경로는
+      삼성 One UI 의 글꼴 교체가 반영되지 않는다. 앞자리에 있으면 늘 이쪽이 이겨
+      역시 고딕으로 고정된다. v235 가 그렇게 깨졌다.
+
+   네이티브 상단바는 Typeface.create("sans-serif") 로 기기 글꼴을 잘 따라간다.
+   같은 이름을 같은 방식으로 쓰는 것이 가장 확실하다. */
+:root{
+  --app-ui-font:sans-serif;
+  --app-system-font:var(--app-ui-font);
+}
+html,
+body,
+body *{
+  font-family:var(--app-ui-font) !important;
+  font-synthesis:weight style;
+}
+/* EPUB 편집기에서 사용자가 직접 고른 글꼴은 인라인 스타일로 계속 이긴다. */
+.epubRichEditor[style*="font-family"] *{
+  font-family:inherit !important;
+}
+</style>
+<!-- SYSTEM_FONT_PATCH_V6_END -->
+
+<link rel="stylesheet" href="./log_library_v6.css" />
+<link rel="stylesheet" href="./log_library_v38_additions.css" />
+<link rel="stylesheet" href="./review_polish_v150.css" />
+<link rel="stylesheet" href="./notion_ui_v170.css" id="notionUiV170" />
+<link rel="stylesheet" href="./shadcn_ui_v180.css" id="shadcnUiV180" />
 </head>
 <body>
 <div class="appFrame">
@@ -699,7 +1302,7 @@ aside.sidebar{display:none!important;}
         <h1>채팅 로그 정리 · EPUB 제작</h1>
         <p class="heroText">서식을 읽어 지문과 대사를 나누고, 검토 후 원하는 형식으로 저장합니다.</p>
       </div>
-      <div class="heroTools"><span id="autosaveStatus" class="saveBadge">자동 저장 대기</span></div>
+      <div class="heroTools"><span id="autosaveStatus" class="saveBadge">자동 저장 대기</span><button class="themeIconButton" id="themeToggleButton" type="button" aria-label="다크 모드로 전환" title="다크 모드로 전환"><span id="themeToggleIcon" aria-hidden="true">☾</span></button></div>
       <div class="tabs" role="tablist" aria-label="다듬기 모드">
         <button type="button" class="tab active" data-tab="classic" role="tab" aria-selected="true">로그 다듬기</button>
         <button type="button" class="tab" data-tab="chat" role="tab" aria-selected="false">채팅방 전체 백업</button>
@@ -836,6 +1439,9 @@ aside.sidebar{display:none!important;}
           <summary>출력 형식</summary>
           <div class="blockBody"><div class="optionRow">
             <span class="control">따옴표 <select id="quoteStyle"><option value="none">넣지 않음</option><option value="straight">&quot; &quot;</option><option value="doubleCurly" selected>“ ”</option><option value="singleCurly">‘ ’</option></select></span>
+            <span class="control">따옴표 제외 <select id="quoteSkipEmoji"><option value="none" selected>없음</option><option value="only">이모지만 있는 줄</option><option value="any">이모지 섞인 줄</option></select></span>
+            <label class="toggle compactToggle"><input type="checkbox" id="quoteSkipTags">HTML 태그 빼고</label>
+            <label class="toggle compactToggle"><input type="checkbox" id="quoteSkipSymbols">기호 섞인 줄 빼고</label>
             <label class="toggle compactToggle"><input type="checkbox" id="indentOutput">들여쓰기</label>
             <button type="button" class="btn subtle" onclick="saveCurrentPreset()">프리셋 저장</button>
             <button type="button" class="btn subtle" onclick="loadSavedPreset()">프리셋 불러오기</button>
@@ -850,10 +1456,10 @@ aside.sidebar{display:none!important;}
             <span class="control">키워드 <input id="deleteContainsToken" type="text" placeholder="예: OOC, 시스템, 기록지"></span>
             <span class="control">처리 <select id="deleteContainsMode"><option value="auto" selected>바로 삭제</option><option value="review">확인 후 선택</option></select></span>
             <label class="toggle"><input type="checkbox" id="removeTables">블록/표 제거</label>
-            <label class="toggle"><input type="checkbox" id="reviewDuplicates">중복 답변 검토</label>
-            <label class="toggle"><input type="checkbox" id="reviewOocPairs">OOC 응답 검토</label>
+            <label class="toggle"><input type="checkbox" id="reviewDuplicates" checked>중복 답변 검토</label>
+            <label class="toggle"><input type="checkbox" id="reviewOocPairs" checked>OOC 응답 검토</label>
             <span class="control">OOC 범위 <select id="oocCascadeMode"><option value="next" selected>바로 다음 응답</option><option value="cascade">이어지는 응답까지</option></select></span>
-          </div><div class="hint">영어 키워드는 대소문자를 구분하지 않습니다. OOC 검토는 문단만 삭제, 유저 지문 전체 삭제, 응답까지 삭제 중 선택합니다.</div></div>
+          </div><div class="hint">영어 키워드는 대소문자를 구분하지 않습니다. OOC 검토는 남김, 문단만 삭제, 유저 지문 전체 삭제, 응답까지 삭제 중 선택합니다.</div></div>
         </details>
 
         <details class="foldBlock speakerOnly" open>
@@ -876,7 +1482,7 @@ aside.sidebar{display:none!important;}
     </section>
 
     <section class="card" id="reviewBoard">
-      <div class="sectionHead"><div><h2 class="sectionTitle">검토 보드</h2><p class="sectionDesc">삭제 후보와 중복 답변을 확인합니다.</p></div><div class="optionRow" style="margin-top:0"><button type="button" class="btn subtle" onclick="resetReviewOnly()">검토 선택 초기화</button><button type="button" class="btn subtle" onclick="resetDuplicateChoices()">중복만 초기화</button><button type="button" class="btn subtle" onclick="resetContainsChoices()">키워드만 초기화</button></div></div>
+      <div class="sectionHead reviewSectionHead"><div><h2 class="sectionTitle">검토 보드</h2><p class="sectionDesc">삭제 후보와 중복 답변을 확인합니다.</p></div><div class="reviewResetRow"><button type="button" class="btn subtle" onclick="resetReviewOnly()">검토 초기화</button><button type="button" class="btn subtle" onclick="resetDuplicateChoices()">중복 초기화</button><button type="button" class="btn subtle" onclick="resetContainsChoices()">키워드 초기화</button></div></div>
       <div class="reviewBoard">
         <div class="reviewArea"><div id="duplicateReviewPanel" class="reviewPanel hidden"></div><div id="oocReviewPanel" class="reviewPanel hidden"></div><div id="containsReviewPanel" class="reviewPanel hidden"></div></div>
         <aside class="reviewPanel"><div class="reviewTitle">위험 문구 감지</div><div class="reviewMeta">정리할 만한 문구를 표시합니다.</div><div id="riskPanel" class="riskPanel" style="margin-top:12px"><div class="emptyState">결과가 생기면 표시됩니다.</div></div></aside>
@@ -931,7 +1537,7 @@ aside.sidebar{display:none!important;}
       </div>
 
       <div class="epubPreviewGrid">
-        <div class="chapterList"><div class="reviewTitle">챕터 미리보기</div><div id="chapterPreview" style="margin-top:10px"><div class="emptyState">결과가 생기면 표시됩니다.</div></div></div>
+        <div class="chapterList"><div class="reviewTitle" style="display:flex;align-items:center;gap:10px">챕터 미리보기<button type="button" class="btn subtle" style="margin-left:auto" onclick="window.__aiEpubPreviewNow&&window.__aiEpubPreviewNow()">미리보기 생성</button></div><div id="chapterPreview" style="margin-top:10px"><div class="emptyState">결과가 생기면 표시됩니다.</div></div></div>
         <div class="bookPreviewWrap"><div class="reviewTitle">본문 미리보기</div><div id="epubPreview" style="margin-top:10px"><div class="emptyState">첫 챕터 일부를 미리 봅니다.</div></div></div>
       </div>
     </section>
@@ -941,6 +1547,7 @@ aside.sidebar{display:none!important;}
 <div id="toast">복사되었습니다.</div>
 <div id="quoteContextMenu" class="quoteContextMenu" hidden><button type="button" id="quoteUnwrapBtn">인용 해제</button></div>
 <script>
+
 const input = document.getElementById("inputText");
 const output = document.getElementById("outputText");
 const outputPreview = document.getElementById("outputTextPreview");
@@ -982,6 +1589,9 @@ const removeDecorEl = document.getElementById("removeDecor");
 const protectEnabledEl = document.getElementById("protectEnabled");
 const protectTokenEl = document.getElementById("protectToken");
 const quoteStyleEl = document.getElementById("quoteStyle");
+const quoteSkipEmojiEl = document.getElementById("quoteSkipEmoji");
+const quoteSkipTagsEl = document.getElementById("quoteSkipTags");
+const quoteSkipSymbolsEl = document.getElementById("quoteSkipSymbols");
 const indentOutputEl = document.getElementById("indentOutput");
 const deleteContainsEnabledEl = document.getElementById("deleteContainsEnabled");
 const deleteContainsTokenEl = document.getElementById("deleteContainsToken");
@@ -1070,6 +1680,9 @@ let isApplyingClassicExcerpt = false;
 let cachedEpubEditFileName = "";
 let cachedEpubFontAsset = null;
 let downloadFileBaseName = "";
+/* [v373] '파일 이름' 칸에 지금 든 것이 우리가 불러온 파일에서 채운 것인가.
+   사용자가 직접 적은 이름은 절대 갈아 끼우지 않기 위해 구분해 둔다. */
+let downloadFileNameFromLoad = false;
 let quoteLongPressTimer = null;
 let quoteLongPressMeta = null;
 let currentQuoteMenuTarget = null;
@@ -1131,7 +1744,10 @@ function syncColorFromRgb(colorInput, rEl, gEl, bEl){
 function setupColorWidget(colorInput, rEl, gEl, bEl){
   if(!colorInput) return;
   colorInput.addEventListener("input", () => { syncRgbFromColor(colorInput, rEl, gEl, bEl); scheduleAutosave(); });
+  /* 범위 밖 값(999, -5)을 넣으면 색은 0~255 로 잘려 적용되는데 숫자칸에는 그대로 남아
+     "칸에 적힌 값"과 "실제 색"이 어긋났다. 입력이 끝나면 칸도 실제 값으로 되돌린다. */
   [rEl,gEl,bEl].forEach(el => { if(el) el.addEventListener("input", () => { syncColorFromRgb(colorInput, rEl, gEl, bEl); scheduleAutosave(); }); });
+  [rEl,gEl,bEl].forEach(el => { if(el) el.addEventListener("change", () => { syncRgbFromColor(colorInput, rEl, gEl, bEl); }); });
   syncRgbFromColor(colorInput, rEl, gEl, bEl);
 }
 function updateQuoteColorPreview(){
@@ -1139,23 +1755,48 @@ function updateQuoteColorPreview(){
   document.querySelectorAll(".quotePresetList").forEach(el => el.style.setProperty("--quote-color", color));
 }
 setupColorWidget(epubEditTextColorEl, epubEditTextColorREl, epubEditTextColorGEl, epubEditTextColorBEl);
+/* 크기 칸도 색 칸과 같은 시점에 보정한다. 예전에는 "선택/전체 적용"을 누른 뒤에야
+   999 → 72 로 바뀌어, 그 전까지 칸의 숫자와 실제 크기가 달랐다. */
+if(epubEditFontSizeEl) epubEditFontSizeEl.addEventListener("change", () => {
+  const raw = parseInt(epubEditFontSizeEl.value, 10);
+  const size = Math.max(8, Math.min(72, isNaN(raw) ? 15 : raw));
+  if(String(epubEditFontSizeEl.value) !== String(size)) epubEditFontSizeEl.value = String(size);
+});
 setupColorWidget(epubQuoteColorEl, epubQuoteColorREl, epubQuoteColorGEl, epubQuoteColorBEl);
 [speakerUserColorEl, speakerCharacterColorEl].forEach(el => {
   if(!el) return;
-  el.addEventListener("input", () => { updateColorSwatch(el); transformText(); scheduleAutosave(); });
+  /* 색 고르개는 끄는 동안 input 이 계속 터진다. 견본은 바로 바꾸되
+     결과 재생성은 손을 뗀 뒤로 미룬다. */
+  el.addEventListener("input", () => { updateColorSwatch(el); scheduleTransform(); });
+  el.addEventListener("change", flushTransform);
   updateColorSwatch(el);
 });
 
-input.addEventListener("input", () => {
+wireIdleTransform(input, () => {
   if(!isApplyingClassicExcerpt) classicActiveChunks = null;
-  transformText();
-  scheduleAutosave();
 });
 if(classicFileInput) classicFileInput.addEventListener("change", e => { updateFileNameLabel(classicFileInput, classicFileNameEl); loadClassicFile(); });
 if(epubCoverInputEl) epubCoverInputEl.addEventListener("change", e => { updateFileNameLabel(epubCoverInputEl, epubCoverFileNameEl, "선택 없음"); });
 [excerptStartTextEl, excerptEndTextEl].forEach(el => { if(el) el.addEventListener("input", scheduleAutosave); });
-if(epubEditEditor) epubEditEditor.addEventListener("input", () => { updateResultStats([], [], getActiveOutputValue()); updateEpubPreview(); scheduleAutosave(); });
-if(epubEditEditor) epubEditEditor.addEventListener("scroll", () => scheduleAutosave(), {passive:true});
+/* EPUB 편집기도 같은 이유로 미룬다. 미리보기 재생성이 무겁다. */
+let epubPreviewIdleTimer = 0;
+if(epubEditEditor) epubEditEditor.addEventListener("input", () => {
+  clearTimeout(epubPreviewIdleTimer);
+  epubPreviewIdleTimer = setTimeout(() => {
+    epubPreviewIdleTimer = 0;
+    updateResultStats([], [], getActiveOutputValue());
+    updateEpubPreview();
+    scheduleAutosave();
+  }, 300);
+});
+if(epubEditEditor) epubEditEditor.addEventListener("blur", () => {
+  if(!epubPreviewIdleTimer) return;
+  clearTimeout(epubPreviewIdleTimer); epubPreviewIdleTimer = 0;
+  updateResultStats([], [], getActiveOutputValue());
+  updateEpubPreview();
+  scheduleAutosave();
+});
+if(epubEditEditor) epubEditEditor.addEventListener("scroll", () => schedulePosSave(), {passive:true});
 if(epubEditFileInput) epubEditFileInput.addEventListener("change", e => { updateFileNameLabel(epubEditFileInput, epubEditFileNameEl); loadEpubEditFile(); });
 if(epubEditEditor){
   ["mouseup","keyup","touchend","pointerup"].forEach(ev => epubEditEditor.addEventListener(ev, rememberEditorSelection));
@@ -1176,21 +1817,42 @@ if(epubFontInputEl) epubFontInputEl.addEventListener("change", e => { updateFile
 downloadFileNameEls.forEach(el => {
   el.addEventListener("input", () => {
     downloadFileBaseName = el.value || "";
+    downloadFileNameFromLoad = false;          // 직접 적은 이름은 지켜 준다
     syncDownloadFileNameInputs(el);
     scheduleAutosave();
   });
 });
+/* 키 입력마다 문서 전체를 재파싱(색 학습·중복 그룹·OOC·렌더까지)하던 낭비.
+   타이핑이 잠시 멈춘 뒤 한 번만 돌린다. 긴 로그에서 입력이 굼뜨던 원인. */
+let chatInputTimer = 0;
 chatPaste.addEventListener("input", () => {
-  resetReviewDecisions();
-  transformText();
-  scheduleAutosave();
+  clearTimeout(chatInputTimer);
+  chatInputTimer = setTimeout(() => {
+    resetReviewDecisions();
+    transformText();
+    scheduleAutosave();
+  }, 220);
 });
 chatPaste.addEventListener("paste", handleRichPaste);
+/* 스크롤이 멎을 때마다 작업 전체(1MB 안팎)를 직렬화해 DB 에 쓰던 것이
+   발췌기가 무겁게 느껴지던 숨은 비용이다. 스크롤은 좌표 두 개만 저장한다. */
+let scrollPosTimer = 0;
+function schedulePosSave(){
+  clearTimeout(scrollPosTimer);
+  scrollPosTimer = setTimeout(() => {
+    try{
+      localStorage.setItem("ai-log-scroll-pos", JSON.stringify({
+        o: output ? output.scrollTop : 0,
+        c: chatOutput ? chatOutput.scrollTop : 0
+      }));
+    }catch(_e){}
+  }, 600);
+}
 [output, chatOutput].forEach(el => {
   if(!el) return;
-  el.addEventListener("scroll", () => scheduleAutosave(), {passive:true});
+  el.addEventListener("scroll", () => schedulePosSave(), {passive:true});
   const preview = resultPreviewFor(el);
-  if(preview) preview.addEventListener("scroll", () => scheduleAutosave(), {passive:true});
+  if(preview) preview.addEventListener("scroll", () => schedulePosSave(), {passive:true});
 });
 
 [
@@ -1201,6 +1863,9 @@ chatPaste.addEventListener("paste", handleRichPaste);
   removeDecorEl,
   protectEnabledEl,
   quoteStyleEl,
+  quoteSkipEmojiEl,
+  quoteSkipTagsEl,
+  quoteSkipSymbolsEl,
   indentOutputEl,
   deleteContainsEnabledEl,
   deleteContainsModeEl,
@@ -1213,12 +1878,44 @@ chatPaste.addEventListener("paste", handleRichPaste);
   speakerColorTargetEl
 ].forEach(el => el.addEventListener("change", transformText));
 
-protectTokenEl.addEventListener("input", transformText);
-deleteContainsTokenEl.addEventListener("input", transformText);
-userNameEl.addEventListener("input", transformText);
-characterNameEl.addEventListener("input", transformText);
-speakerMarkerCustomEl.addEventListener("input", transformText);
-if(speakerLabelColorEl) speakerLabelColorEl.addEventListener("input", transformText);
+/* 타이핑 중에는 결과를 다시 만들지 않는다.
+   한 글자마다 문서 전체를 재파싱(색 학습·중복 그룹·OOC·렌더)하던 것이
+   긴 로그에서 입력이 굼뜨던 원인이다. 채팅 입력칸은 이미 이렇게 돌고 있었고
+   원본 로그·이름·기호·색 칸만 빠져 있었다.
+
+   입력이 멎으면 한 번 돌린다. 다만 칸을 떠날 때(change·blur)는 기다리지 않고
+   즉시 돌린다 — 타이핑 직후 버튼을 누르면 그 버튼이 먼저 blur 를 일으키므로,
+   이 규칙이 없으면 옛 결과가 저장될 수 있다. */
+const TRANSFORM_IDLE_MS = 260;
+let transformIdleTimer = 0;
+function scheduleTransform(){
+  clearTimeout(transformIdleTimer);
+  transformIdleTimer = setTimeout(() => {
+    transformIdleTimer = 0;
+    transformText();
+    scheduleAutosave();
+  }, TRANSFORM_IDLE_MS);
+}
+function flushTransform(){
+  if(!transformIdleTimer) return;
+  clearTimeout(transformIdleTimer);
+  transformIdleTimer = 0;
+  transformText();
+  scheduleAutosave();
+}
+function wireIdleTransform(el, before){
+  if(!el) return;
+  el.addEventListener("input", () => { if(before) before(); scheduleTransform(); });
+  el.addEventListener("change", flushTransform);
+  el.addEventListener("blur", flushTransform);
+}
+
+wireIdleTransform(protectTokenEl);
+wireIdleTransform(deleteContainsTokenEl);
+wireIdleTransform(userNameEl);
+wireIdleTransform(characterNameEl);
+wireIdleTransform(speakerMarkerCustomEl);
+wireIdleTransform(speakerLabelColorEl);
 if(speakerLabelModeEl) speakerLabelModeEl.addEventListener("change", transformText);
 [
   epubTitleEl, epubSubtitleEl, epubAuthorEl, epubSeriesEl, epubVolumeEl,
@@ -1260,7 +1957,10 @@ oocReviewPanel.addEventListener("keydown", handleOocReviewKeydown);
 
 function updateModeVisibility(){
   const showSpeakerOptions = true;
-  speakerOnlyEls.forEach(el => el.classList.toggle("hidden", !showSpeakerOptions));
+  speakerOnlyEls.forEach(el => {
+    if(el.querySelector && el.querySelector("#reviewBoard")){ el.classList.remove("hidden"); return; }
+    el.classList.toggle("hidden", !showSpeakerOptions);
+  });
 }
 
 
@@ -1325,6 +2025,7 @@ function collectWorkValues(){
     cachedEpubEditFileName,
     cachedEpubFontAsset,
     downloadFileBaseName,
+    downloadFileNameFromLoad,
     classicOutput: output ? output.value : "",
     classicOutputScroll: output ? getResultOutputScroll(output) : 0,
     chatHTML: chatPaste ? chatPaste.innerHTML : "",
@@ -1349,7 +2050,9 @@ function collectWorkValues(){
   };
 }
 function applyActiveModeFromState(mode){
-  activeMode = mode === "chat" || mode === "epubedit" ? mode : "classic";
+  /* classic 탭은 은퇴(감춤) 상태다. 예전 저장 상태나 빈 값이 classic 을 가리키면
+     보이지 않는 탭에 착지해 어느 탭도 선택돼 보이지 않았다. 살아 있는 chat 으로 보낸다. */
+  activeMode = mode === "epubedit" ? "epubedit" : "chat";
   document.querySelectorAll(".tab").forEach(t => {
     const on = t.dataset.tab === activeMode;
     t.classList.toggle("active", on);
@@ -1366,12 +2069,12 @@ async function saveWorkNow(){
   const state = collectWorkValues();
   try{
     await idbPut(WORK_STATE_KEY, state);
-    safeLocalStorageSet(WORK_META_KEY, JSON.stringify({savedAt: state.savedAt, fileName: cachedChatFileName || "", mode: activeMode}));
+    localStorage.setItem(WORK_META_KEY, JSON.stringify({savedAt: state.savedAt, fileName: cachedChatFileName || "", mode: activeMode}));
     updateAutosaveBadge("자동 저장됨");
   }catch(err){
     try{
-      safeLocalStorageSet(WORK_FALLBACK_KEY, JSON.stringify(state));
-      safeLocalStorageSet(WORK_META_KEY, JSON.stringify({savedAt: state.savedAt, fileName: cachedChatFileName || "", mode: activeMode, fallback:true}));
+      localStorage.setItem(WORK_FALLBACK_KEY, JSON.stringify(state));
+      localStorage.setItem(WORK_META_KEY, JSON.stringify({savedAt: state.savedAt, fileName: cachedChatFileName || "", mode: activeMode, fallback:true}));
       updateAutosaveBadge("자동 저장됨");
     }catch(err2){
       console.warn("autosave failed", err, err2);
@@ -1381,7 +2084,7 @@ async function saveWorkNow(){
 }
 function scheduleAutosave(){
   if(isRestoringWork) return;
-  try{ updateAutosaveBadge("저장 중…"); }catch(_err){}
+  updateAutosaveBadge("저장 중…");
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(saveWorkNow, 500);
 }
@@ -1389,7 +2092,7 @@ function updateAutosaveBadge(text){
   const el = document.getElementById("autosaveStatus");
   if(!el) return;
   let suffix = "";
-  const raw = safeLocalStorageGet(WORK_META_KEY);
+  const raw = localStorage.getItem(WORK_META_KEY);
   if(raw){
     try{
       const meta = JSON.parse(raw);
@@ -1415,7 +2118,7 @@ async function restoreSavedWork(){
   let state = null;
   try{ state = await idbGet(WORK_STATE_KEY); }catch(_err){}
   if(!state){
-    const fallback = safeLocalStorageGet(WORK_FALLBACK_KEY);
+    const fallback = localStorage.getItem(WORK_FALLBACK_KEY);
     if(fallback){
       try{ state = JSON.parse(fallback); }catch(_err){}
     }
@@ -1436,6 +2139,7 @@ async function restoreSavedWork(){
       cachedEpubEditFileName = state.cachedEpubEditFileName || "";
       cachedEpubFontAsset = state.cachedEpubFontAsset || null;
       downloadFileBaseName = state.downloadFileBaseName || "";
+      downloadFileNameFromLoad = !!state.downloadFileNameFromLoad;
       syncDownloadFileNameInputs();
       if(cachedEpubFontAsset) applyCachedEpubFont();
       if(chatPaste) chatPaste.innerHTML = state.chatHTML || "";
@@ -1457,6 +2161,7 @@ async function restoreSavedWork(){
       if(chapterKeywordInputEl) chapterKeywordInputEl.value = chapterKeywordQuery;
       if(chapterOrderInputEl) chapterOrderInputEl.value = chapterOrderQuery;
       applyActiveModeFromState(state.activeMode || activeMode);
+      try{ transformText(); }catch(_tErr){}
       updateAutosaveBadge("복원됨");
       showToast(cachedChatFileName ? `저장된 작업을 불러왔습니다: ${cachedChatFileName}` : "저장된 작업을 불러왔습니다.");
     }catch(err){
@@ -1482,8 +2187,8 @@ async function restoreSavedWork(){
 async function clearSavedWork(){
   if(!window.confirm("저장된 작업 캐시를 삭제하시겠습니까? 새로고침 복원 데이터도 함께 지워집니다.")) return;
   try{ await idbDelete(WORK_STATE_KEY); }catch(_err){}
-  safeLocalStorageRemove(WORK_META_KEY);
-  safeLocalStorageRemove(WORK_FALLBACK_KEY);
+  localStorage.removeItem(WORK_META_KEY);
+  localStorage.removeItem(WORK_FALLBACK_KEY);
   cachedChatFileName = "";
   cachedCoverAsset = null;
   updateAutosaveBadge("캐시 삭제됨");
@@ -1599,12 +2304,46 @@ function isProtectedChapterSeparatorLine(line, preserveSet){
   const s = (line || "").trim();
   return !!(s && preserveSet && preserveSet.has(s));
 }
+/* 이모티콘은 구분선이 아니다.
+   기호 판정이 넓어서 "^^" · ":)" · "-_-" · ">_<" 같은 줄이 통째로 지워졌다
+   (v264 이전부터 그랬다). 감정 표현은 문장의 일부이므로 먼저 걸러 낸다. */
+function isEmoticonLine(value){
+  const t = String(value || "").replace(/\s+/g, "");
+  if(!t) return false;
+  if(t.length <= 2) return true;                                   // ^^  :)  ;;  TT  ㅜㅜ
+  /* 같은 기호만 3개 이상 이어지면 그건 구분선이다("---", "***", "~~~~").
+     이 줄이 없으면 "---" 가 아래 '눈-입-눈' 꼴에 걸려 이모티콘으로 오인된다. */
+  if(/^(.)\1+$/.test(t)) return false;
+  if(t.length > 8) return false;
+  if(/^(.)[-_~.·ㅡ,;'"^]{1,2}\1[;,]?$/.test(t)) return true;        // ^_^  -_-  T_T  @_@  ^ㅡ^  ^^;
+  if(/^[:;=8xX][-~'^]?[)(\[\]dDpPoO03cC<>|\\/]{1,3}$/.test(t)) return true;   // :)  ;-D  =3  :'(
+  if(/^[)(\[\]dDpP<>]{1,3}[-~'^]?[:;=8]$/.test(t)) return true;    // (:  D-;
+  if(/^[\^><\-~][_\-.ㅡ~,;]?[\^><\-~][;,]?$/.test(t)) return true;  // >_<  ^-^  ~_~
+  if(/^[(\[].{1,5}[)\]]$/.test(t) && /[\^_·ㅡ~><'"]/.test(t)) return true;   // (^_^)  (_ _)
+  return false;
+}
 function isDecorOnlyLine(line, preserveSet){
   const s=(line||"").trim();
   if(!s) return false;
   if(isProtectedChapterSeparatorLine(s, preserveSet)) return false;
+  if(isEmoticonLine(s)) return false;
+  /* 문장부호만 있는 줄은 구분선이 아니라 대사다.
+     "…" "!!!" "?!" "……" "," 같은 줄은 인물의 말이므로 지우지도, 따옴표를 빼지도 않는다.
+     (아래 목록에서 . , ! ? ; : ' " · 을 뺀 이유. 예전에는 !!! 과 ;;; 이 구분선으로 지워졌다) */
+  if(/^[.,!?;:'"·…‥、。！？，；：]+$/.test(s)) return false;
   if(/^[-*_—–]{3,}$/.test(s)) return true;
-  if(/^[<>\[\]\(\){}|\\/·•….,:;'"`~!@#$%^&+=-]+$/.test(s)) return true;
+  if(/^[<>\[\]\(\){}|\\/•`~@#$%^&+=-]+$/.test(s)) return true;
+  /* 여기까지는 아스키 대시 계열만 잡았다. 실제 로그에서 훨씬 자주 쓰이는
+     ─ ━ ═ ― ┈ ▬ 같은 괘선·전각 기호와, 사이에 공백을 둔 "- - -" · "★ ★ ★" 꼴은
+     그대로 남아 "구분선 제거"를 켜도 지워지지 않았다.
+     기준은 그대로다 — 그 줄이 '기호와 공백뿐'이고 기호가 3개 이상일 때만.
+     온점·말줄임표(. … ‥)는 v150 합의대로 여전히 제외한다(문장으로 오인 삭제 방지). */
+  const symbols = "─━═―⎯﹘﹣－＿＝＊～〜⁓┄┈┉╌╍▬▭▮▯■□▪▫◆◇◈●○◎★☆✦✧✱✲❋※＃＠＄％＾＆＋";
+  const symbolOnly = new RegExp("^[" + symbols + "\\-*_—–~=+#·•|/\\\\<>\\[\\](){}\\s]+$");
+  if(symbolOnly.test(s)){
+    const marks = s.replace(/\s+/g, "");
+    if(marks.length >= 3) return true;
+  }
   return false;
 }
 function isDecorOnlyParagraph(p, preserveSet){
@@ -1629,8 +2368,7 @@ function normalizeBlankLinesInsideCell(text){
 function isTableLikeText(t){
   const s = (t || "").trim();
   if (!s) return false;
-  const pipeCount = (s.match(/\|/g) || []).length;
-  if (pipeCount >= 2) return true;
+  if (/^\|.*\|$/.test(s)) return true;
   if (/^[\s|:.-]{3,}$/.test(s) && s.includes("|")) return true;
   return false;
 }
@@ -1807,6 +2545,73 @@ function getQuotes(style){
   if(style==="singleCurly") return ['‘', '’'];
   return ["",""];
 }
+/* [v375] 따옴표가 대사가 아닌 줄에도 붙던 것.
+   사용자: "대사에 따옴표 넣는 거 이모지 하나 들어간 문장이나 html 태그 앞뒤로도
+   붙어서 불편하거든, 이거 거를 수 있는 옵션도 넣어주라"
+
+   이모지는 '이모지만 있는 줄' 과 '이모지가 섞인 줄' 을 고를 수 있게 했다 —
+   대사에 이모지를 자주 쓰는 사람과 아닌 사람이 원하는 게 서로 반대라서다.
+   태그는 두 가지가 같이 걸린다. 태그뿐인 줄(<br> 같은)은 아예 따옴표를 빼고,
+   대사에 태그가 감겨 있으면 따옴표를 글자 쪽으로 들여보낸다. */
+const EMOJI_RE = /\p{Extended_Pictographic}/u;
+function stripEmojiChars(s){
+  /* 이모지 본체와 그에 딸린 것들(이어붙임·표현선택자·피부색)만 걷어 낸다.
+     Emoji_Component 를 통째로 쓰면 숫자·# 까지 딸려 와 "123" 이 이모지 줄이 된다. */
+  return String(s || "")
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .replace(/[\u200D\uFE0E\uFE0F\u20E3]/g, "")
+    .replace(/[\u{1F3FB}-\u{1F3FF}]/gu, "");
+}
+function isEmojiOnlyLine(line){
+  const t = String(line || "").trim();
+  if(!t || !EMOJI_RE.test(t)) return false;
+  return !stripEmojiChars(t).trim();
+}
+/* [v380] 기호로 표시해 둔 줄에는 따옴표를 붙이지 않는다.
+   사용자: "기호 표시된 문장(글자+문장부호 제외)에는 따옴표 안 붙이게 하는 옵션"
+   ※ 안내 · 【상태창】 · ★ 알림 처럼 기호를 달아 둔 줄은 대사가 아니다.
+   글자와 흔한 문장부호는 기호로 치지 않는다 — 그러면 보통 문장이 전부 걸린다.
+   이모지도 치지 않는다. 그쪽은 바로 위 '따옴표 제외' 선택지가 맡는다.
+   (기호만 있는 줄은 예전부터 '구분선' 으로 따로 걸러져 왔다. 이 선택지는 글자와
+    섞여 있는 경우를 맡는다 — 그래서 '섞인 줄' 이다.) */
+const QUOTE_MARK_CHARS = "─━═―⎯﹘﹣－＿＝＊～〜⁓┄┈┉╌╍▬▭▮▯■□▪▫◆◇◈●○◎★☆✦✧✱✲❋※"
+  + "【】〖〗〘〙〔〕◀▶▲▼◁▷△▽▣▤▥▦▧▨▩✓✔✗✘＃＠＄％＾＆＋";
+function hasQuoteMarkSymbol(text){
+  const t = String(text || "");
+  for(const ch of t){
+    if(EMOJI_RE.test(ch)) continue;                  // 이모지는 다른 선택지가 맡는다
+    if(QUOTE_MARK_CHARS.indexOf(ch) >= 0) return true;
+    try{ if(/\p{S}/u.test(ch)) return true; }catch(_){}   // 수학·통화·기타 기호
+  }
+  return false;
+}
+function isTagOnlyLine(line){
+  const t = String(line || "").trim();
+  if(!t || t.indexOf("<") < 0) return false;
+  return !t.replace(/<[^<>]*>/g, "").trim();
+}
+function everyTextLine(text, fn){
+  const lines = String(text || "").split("\n").map(l => l.trim()).filter(Boolean);
+  return lines.length ? lines.every(fn) : false;
+}
+/* 이 문단에 따옴표를 붙이지 말아야 하는가 */
+function shouldSkipQuote(text){
+  const mode = quoteSkipEmojiEl ? quoteSkipEmojiEl.value : "none";
+  if(mode === "any" && EMOJI_RE.test(String(text || ""))) return true;
+  if(mode === "only" && everyTextLine(text, isEmojiOnlyLine)) return true;
+  if(quoteSkipTagsEl && quoteSkipTagsEl.checked && everyTextLine(text, isTagOnlyLine)) return true;
+  if(quoteSkipSymbolsEl && quoteSkipSymbolsEl.checked && hasQuoteMarkSymbol(text)) return true;
+  return false;
+}
+/* 앞뒤에 감긴 태그는 따옴표 밖에 둔다: <b>안녕</b> → <b>"안녕"</b> */
+function wrapWithQuotes(text, openQ, closeQ){
+  const t = String(text == null ? "" : text);
+  if(!(quoteSkipTagsEl && quoteSkipTagsEl.checked)) return openQ + t + closeQ;
+  const m = t.match(/^((?:\s*<[^<>]+>)*\s*)([\s\S]*?)(\s*(?:<[^<>]+>\s*)*)$/);
+  if(!m) return openQ + t + closeQ;
+  if(!m[2].trim()) return t;                 // 글자가 없으면 붙일 이유가 없다
+  return m[1] + openQ + m[2] + closeQ + m[3];
+}
 function isAlreadyQuoted(t){
   const pairs=[['"','"'],['“','”'],['‘','’']];
   return pairs.some(([o,c])=>t.startsWith(o) && t.endsWith(c) && t.length>=2);
@@ -1840,12 +2645,15 @@ function makeSpeakerLabel(chunk){
   const marker = getSpeakerMarker();
   const colorTarget = speakerColorTargetEl ? speakerColorTargetEl.value : "none";
   const color = speakerColorForOwner(chunk.owner);
+  const nameHtml = "<strong>" + escapeHTML(name) + "</strong>";
   if(colorTarget === "marker" && marker){
-    return wrapColorHTML(marker, color) + name;
+    return wrapColorHTML(marker, color) + nameHtml;
   }
-  const label = marker + name;
-  if(colorTarget === "all") return wrapColorHTML(label, color);
-  return label;
+  if(colorTarget === "all"){
+    const safeColor = /^#[0-9a-f]{6}$/i.test(color || "") ? color : "#17181c";
+    return `<span style="color:${safeColor}">${escapeHTML(marker)}${nameHtml}</span>`;
+  }
+  return escapeHTML(marker) + nameHtml;
 }
 function labelChunk(text, chunk, shouldLabel){
   if(!shouldLabel) return text;
@@ -1896,64 +2704,73 @@ function decodeBytesSmart(bytes){
   }
   return text.replace(/^\uFEFF/, "");
 }
-async function loadChatFile(){
-  const file = chatFileInput.files && chatFileInput.files[0];
-  if(!file) return;
+async function loadChatFileObject(file, options = {}){
+  if(!file) return false;
+  const sourceInput = options.sourceInput || null;
+  const buffer = await readFileAsArrayBuffer(file);
+  const bytes = new Uint8Array(buffer);
+  const lowerName = (file.name || "").toLowerCase();
 
+  if(isZipBytes(bytes) || /\.zip$/i.test(lowerName)){
+    if(sourceInput) sourceInput.value = "";
+    showToast("ZIP 파일은 변환 대상이 아닙니다. MHT/HTML/Markdown/TXT 파일을 선택해 주세요.");
+    return false;
+  }
+
+  const raw = decodeBytesSmart(bytes);
+  const looksMHT = /\.(mht|mhtml)$/i.test(lowerName) || /MIME-Version:\s*1\.0/i.test(raw) || /Content-Type:\s*multipart\/related/i.test(raw);
+  const looksHTML = /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span|details)\b/i.test(raw);
+  const looksStructuredMarkdown = /<!--\s*rofan:/i.test(raw) || /\.(md|markdown)$/i.test(lowerName);
+  const allowedExt = /\.(mht|mhtml|html|htm|md|markdown|txt)$/i.test(lowerName);
+
+  if(!allowedExt && !looksMHT && !looksHTML && !looksStructuredMarkdown){
+    if(sourceInput) sourceInput.value = "";
+    showToast("지원하지 않는 파일입니다. .mht/.html/.md/.txt 파일을 선택해 주세요.");
+    return false;
+  }
+
+  let sanitized = "";
+  if(looksStructuredMarkdown){
+    sanitized = structuredMarkdownToHtml(raw) || plainTextToHtml(raw);
+  }else if(looksMHT || looksHTML){
+    const html = looksMHT ? extractHTMLFromMHT(raw) : raw;
+    if(!html || !looksLikeHTML(html)){
+      showToast("파일 안에서 HTML 채팅 내용을 찾지 못했습니다.");
+      return false;
+    }
+    sanitized = sanitizePastedHTML(extractLikelyChatHTML(html));
+  }else{
+    sanitized = plainTextToHtml(raw);
+  }
+  if(!htmlToPlainText(sanitized)){
+    showToast("불러온 파일에서 변환할 텍스트를 찾지 못했습니다.");
+    return false;
+  }
+
+  activateChatTab();
+  resetReviewDecisions();
+  chatPaste.innerHTML = sanitized;
+  try{ openAllFolds(chatPaste); }catch(foldErr){ console.warn("접힘 펴기 실패(로드는 계속)", foldErr); }
+  cachedChatFileName = file.name || "저장 파일";
+  adoptLoadedFileName(file);
+  transformText();
+  updateChapterDividerPanel();
+  scheduleAutosave();
+  if(!options.silentSuccess) showToast("파일을 불러왔습니다.");
+  return true;
+}
+async function loadChatFile(fileArg){
+  const file = fileArg || (chatFileInput && chatFileInput.files && chatFileInput.files[0]);
+  if(!file) return false;
   try{
-    const buffer = await readFileAsArrayBuffer(file);
-    const bytes = new Uint8Array(buffer);
-    const lowerName = (file.name || "").toLowerCase();
-
-    if(isZipBytes(bytes) || /\.zip$/i.test(lowerName)){
-      chatFileInput.value = "";
-      showToast("ZIP 파일은 변환 대상이 아닙니다. MHT/HTML/Markdown/TXT 파일을 선택해 주세요.");
-      return;
-    }
-
-    const raw = decodeBytesSmart(bytes);
-    const looksMHT = /\.(mht|mhtml)$/i.test(lowerName) || /MIME-Version:\s*1\.0/i.test(raw) || /Content-Type:\s*multipart\/related/i.test(raw);
-    const looksHTML = /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span)\b/i.test(raw);
-    const looksStructuredMarkdown = /<!--\s*rofan:/i.test(raw) || /\.(md|markdown)$/i.test(lowerName);
-    const allowedExt = /\.(mht|mhtml|html|htm|md|markdown|txt)$/i.test(lowerName);
-
-    if(!allowedExt && !looksMHT && !looksHTML && !looksStructuredMarkdown){
-      chatFileInput.value = "";
-      showToast("지원하지 않는 파일입니다. .mht/.html/.md/.txt 파일을 선택해 주세요.");
-      return;
-    }
-
-    let sanitized = "";
-    if(looksStructuredMarkdown){
-      sanitized = structuredMarkdownToHtml(raw) || plainTextToHtml(raw);
-    }else if(looksMHT || looksHTML){
-      const html = looksMHT ? extractHTMLFromMHT(raw) : raw;
-      if(!html || !looksLikeHTML(html)){
-        showToast("파일 안에서 HTML 채팅 내용을 찾지 못했습니다.");
-        return;
-      }
-      sanitized = sanitizePastedHTML(extractLikelyChatHTML(html));
-    }else{
-      sanitized = plainTextToHtml(raw);
-    }
-    if(!htmlToPlainText(sanitized)){
-      showToast("불러온 파일에서 변환할 텍스트를 찾지 못했습니다.");
-      return;
-    }
-
-    activateChatTab();
-    resetReviewDecisions();
-    chatPaste.innerHTML = sanitized;
-    cachedChatFileName = file.name || "저장 파일";
-    transformText();
-    updateChapterDividerPanel();
-    scheduleAutosave();
-    showToast("파일을 불러왔습니다.");
+    await loadChatFileObject(file, {sourceInput:chatFileInput});
   }catch(err){
     console.error(err);
-    showToast("파일을 읽지 못했습니다.");
+    showToast("파일을 읽지 못했습니다: " + String(err && err.message || err).slice(0, 90));
+    return false;
   }
 }
+window.loadChatFileObject = loadChatFileObject;
 function looksLikeHTML(text){
   return /<!doctype\s+html\b|<html\b|<body\b|<(div|p|span|br|i|em|details|table)\b/i.test(String(text || ""));
 }
@@ -2023,6 +2840,10 @@ function decodeQuotedPrintableUTF8(str){
 function extractLikelyChatHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
   markDetailsElements(doc.body || doc);
+  try{
+    const marked = doc.querySelector('[data-rofan-export]');
+    if(marked && marked.innerHTML && marked.innerHTML.trim()) return marked.outerHTML;
+  }catch(_markErr){}
   const scoreContainer = (el) => {
     if(!el) return 0;
     const textLen = (el.innerText || el.textContent || "").length;
@@ -2080,6 +2901,47 @@ function handleRichPaste(e){
     transformText();
   }
 }
+function openAllFolds(root){
+  if(!root || !root.querySelectorAll) return;
+  try{
+    root.querySelectorAll("details").forEach(d => { d.open = true; d.setAttribute("open",""); });
+    root.querySelectorAll("[hidden]").forEach(d => d.removeAttribute("hidden"));
+    root.querySelectorAll('[aria-hidden="true"]').forEach(d => d.removeAttribute("aria-hidden"));
+    root.querySelectorAll('[style*="display"],[style*="visibility"]').forEach(d => {
+      const v = String(d.getAttribute("style") || "")
+        .replace(/display\s*:\s*none\s*;?/gi, "")
+        .replace(/visibility\s*:\s*hidden\s*;?/gi, "");
+      if(v.trim()) d.setAttribute("style", v); else d.removeAttribute("style");
+    });
+    root.querySelectorAll("[class]").forEach(d => {
+      const kept = String(d.getAttribute("class") || "").split(/\s+/)
+        .filter(c => c && !/^(hidden|invisible)$/.test(c));
+      if(kept.length) d.setAttribute("class", kept.join(" ")); else d.removeAttribute("class");
+    });
+    let guard = 0;
+    const deepest = () => {
+      for(const d of root.querySelectorAll("details")) if(!d.querySelector("details")) return d;
+      return null;
+    };
+    let d;
+    while((d = deepest()) && guard++ < 200){
+      const sum = d.querySelector(":scope > summary");
+      const sumText = sum ? (sum.innerText || sum.textContent || "").trim() : "";
+      if(sum) sum.remove();
+      const inner = (d.innerText || d.textContent || "");
+      const lines = ["<details>"];
+      if(sumText) lines.push("<summary>" + sumText + "</summary>");
+      inner.split(/\n/).forEach(l => { const t = l.replace(/\s+$/,""); if(t.trim()) lines.push(t); });
+      lines.push("</details>");
+      const box = document.createElement("div");
+      lines.forEach((l, i) => {
+        if(i) box.appendChild(document.createElement("br"));
+        box.appendChild(document.createTextNode(l));
+      });
+      d.replaceWith(box);
+    }
+  }catch(_err){}
+}
 function sanitizePastedHTML(html){
   const doc = new DOMParser().parseFromString(html || "", "text/html");
   markDetailsElements(doc.body || doc);
@@ -2111,6 +2973,7 @@ function insertHtmlAtCursor(html){
     lastNode = frag.appendChild(node);
   }
   range.insertNode(frag);
+  try{ openAllFolds(chatPaste); }catch(foldErr){ console.warn("접힘 펴기 실패", foldErr); }
   if(lastNode){
     range.setStartAfter(lastNode);
     range.collapse(true);
@@ -2133,7 +2996,18 @@ function htmlFromResultText(text){
   const escaped = escapeHTML(text || "");
   // 결과창은 안전하게 escape한 뒤, 이 앱이 만든 제한적인 span 색상 태그만 다시 렌더링합니다.
   // HTML/Markdown/EPUB 내보내기에는 raw 값이 그대로 쓰입니다.
-  return escaped.replace(/&lt;span\b([\s\S]*?)&gt;([\s\S]*?)&lt;\/span&gt;/gi, (match, rawAttrs, inner) => {
+  /* 여태 <strong> 하나만 되살려서 <b>·<em>·<u> 같은 것이 글자로 보였다.
+     EPUB 과 같은 목록을 쓴다(EPUB_INLINE_TAGS). HTML 은 XML 처럼 엄격하지 않아
+     짝 검사까지는 하지 않는다 — 브라우저가 알아서 바로잡는다. */
+  const restoreInline = html => String(html || "")
+    .replace(/&lt;br\s*\/?\s*&gt;/gi, "<br/>")
+    .replace(/&lt;(\/?)([a-zA-Z]+)(?:\s(?:(?!&gt;)[\s\S])*?)?\s*\/?&gt;/g, (whole, slash, name) => {
+      const tag = (typeof EPUB_INLINE_TAGS === "object" && EPUB_INLINE_TAGS)
+        ? EPUB_INLINE_TAGS[String(name).toLowerCase()] : (String(name).toLowerCase() === "strong" ? "strong" : "");
+      return tag ? "<" + slash + tag + ">" : whole;
+    });
+  return restoreInline(escaped)
+    .replace(/&lt;span\b([\s\S]*?)&gt;([\s\S]*?)&lt;\/span&gt;/gi, (match, rawAttrs, inner) => {
     const attrs = String(rawAttrs || "");
     const colorMatch = attrs.match(/color\s*:\s*(#[0-9a-fA-F]{6})/i);
     const color = colorMatch ? colorMatch[1] : "";
@@ -2155,11 +3029,18 @@ function resultPreviewFor(el){
 function syncResultPreview(el){
   const preview = resultPreviewFor(el);
   if(!preview || !el) return;
+  /* 다시 그리기 전에 끝에 있었다면 끝에 고정한다. 높이가 몇 줄 달라져도
+     끝을 보던 사람이 위로 튕겨 올라가지 않는다. */
+  const nearBottom = preview.scrollTop + preview.clientHeight >= preview.scrollHeight - 8;
   const oldScroll = preview.scrollTop;
   preview.innerHTML = htmlFromResultText(el.value || "");
   preview.dataset.placeholder = el.getAttribute("placeholder") || "변환 결과";
-  preview.scrollTop = oldScroll;
-  if(typeof refreshResultFindForOutput === "function") refreshResultFindForOutput(el, false);
+  if(nearBottom){
+    preview.scrollTop = preview.scrollHeight;
+    requestAnimationFrame(() => { preview.scrollTop = preview.scrollHeight; });
+  }else{
+    preview.scrollTop = oldScroll;
+  }
 }
 function setResultOutput(el, value){
   if(!el) return;
@@ -2187,13 +3068,35 @@ function syncActiveResultHeight(){
   const preview = resultBox ? resultBox.querySelector(".richResultBox") : null;
   const label = resultBox ? resultBox.querySelector(".editorLabel") : null;
   if(!grid || !left || !resultBox || !preview) return;
+  /* 되먹임 차단.
+     결과칸 높이를 정하면 그리드 행이 늘고, 그러면 왼쪽 입력칸 높이가 바뀌고,
+     그걸 관찰하던 콜백이 다시 이 함수를 부른다. 높이가 두 값 사이를 오가며
+     출력창 길이가 왔다갔다 하던 원인이다. 세 겹으로 끊는다.
+       ① 우리가 쓰는 동안 들어온 호출은 무시  ② 3px 미만 변화는 무시
+       ③ 짧은 시간에 너무 자주 바뀌면 잠시 멈춘다 */
+  if(window.__syncHeightBusy) return;
+  const now = Date.now();
+  const st = window.__syncHeightState || (window.__syncHeightState = {last:0, hits:0, until:0});
+  if(now < st.until) return;
   const leftRect = left.getBoundingClientRect();
   const labelHeight = label ? Math.ceil(label.getBoundingClientRect().height) : 0;
   const target = Math.max(320, Math.round(leftRect.height) - labelHeight - 9);
+  const prev = Number(preview.dataset.syncedH || 0);
+  if(Math.abs(prev - target) < 3) return;
+  if(now - st.last < 400){
+    if(++st.hits >= 4){ st.hits = 0; st.until = now + 1200; return; }
+  }else st.hits = 0;
+  st.last = now;
+
+  window.__syncHeightBusy = true;
+  const wasBottom = preview.scrollTop + preview.clientHeight >= preview.scrollHeight - 8;
   resultBox.style.minHeight = Math.round(leftRect.height) + "px";
   preview.style.setProperty("--synced-result-height", target + "px");
   preview.style.height = target + "px";
   preview.style.maxHeight = target + "px";
+  preview.dataset.syncedH = String(target);
+  if(wasBottom) preview.scrollTop = preview.scrollHeight;
+  requestAnimationFrame(() => { window.__syncHeightBusy = false; });
 }
 function isItalicElement(el){
   if(!el || el.nodeType !== 1) return false;
@@ -2310,14 +3213,19 @@ function getInlineColor(el){
   if(/\btext-neutral-200\b|\btext-zinc-200\b/.test(cls)) return "#E5E5E5";
   return "";
 }
-function ownerFromColor(color, className){
-  const c = normalizeColorValue(color || "");
-  const cls = String(className || "").toLowerCase();
-  if(["#818CF8", "#A3A3A3", "#A5B4FC", "#6366F1"].includes(c)) return "user";
-  if(["#FFFFFF", "#FFC200", "#FACC15", "#EAB308", "#FEF08A", "#E5E5E5"].includes(c)) return "character";
+/* 화자는 HTML 구조로 가른다(data-owner·정렬·태그 구조).
+   예전에는 문서에서 색을 '배워' 화자를 정하는 층이 있었는데,
+   같은 색이 문서마다 다른 화자일 수 있어 로그를 연달아 붙여 넣으면 화자가 뒤집혔다.
+   그 층은 걷어냈고, 색은 아래 고정 팔레트(옛 MHT 저장본용)만 마지막 보루로 쓴다. */
+function ownerFromColorFixed(c, cls){
+  if(["#818CF8", "#A5B4FC", "#6366F1"].includes(c)) return "user";
+  if(["#FFC200", "#FACC15", "#EAB308", "#FEF08A"].includes(c)) return "character";
   if(/\btext-indigo-/.test(cls)) return "user";
-  if(/\btext-white\b|\btext-yellow-|\btext-amber-/.test(cls)) return "character";
+  if(/\btext-yellow-|\btext-amber-/.test(cls)) return "character";
   return "";
+}
+function ownerFromColor(color, className){
+  return ownerFromColorFixed(normalizeColorValue(color || ""), String(className || "").toLowerCase());
 }
 function ownerLabel(owner){
   if(owner === "user") return getSpeakerName("user");
@@ -2336,7 +3244,12 @@ function getElementBlockId(el){
   return (el.getAttribute("data-block-id") || el.getAttribute("data-block") || "").trim();
 }
 
+/* 화자 판정이 '표시를 읽어서' 나온 것인지, '추측'인지 구분한다.
+   마지막 판정이 추측이었으면 true. 아래 선행 블록 보정이 이 값만 보고 움직인다.
+   (추측이 아닌 판정을 뒤집으면 유저 지문이 캐릭터 것으로 넘어간다 — 절대 안 된다) */
+let lastOwnerHintWeak = false;
 function getElementOwnerHint(el, color){
+  lastOwnerHintWeak = false;
   if(!el || el.nodeType !== 1) return "";
   const dataOwner = String(el.getAttribute("data-owner") || "").toLowerCase();
   if(/user|human|me|내|유저/.test(dataOwner)) return "user";
@@ -2345,14 +3258,50 @@ function getElementOwnerHint(el, color){
   if(/user|human|me|내|유저/.test(author)) return "user";
   if(/assistant|ai|character|bot|캐릭터/.test(author)) return "character";
   const className = String(el.className || "");
-  if(/(^|\s)mt-1(\s|$)/.test(className)) return "character";
 
-  // 로판Ai 저장본은 같은 p 태그 안에서도 글자색으로 유저/캐릭터 시점이 갈립니다.
-  // 그래서 p 태그를 무조건 유저로 보지 않고, 색상 단서를 먼저 믿습니다.
-  const byColor = ownerFromColor(color, className);
+  /* ① 조상의 화자 표시. 깊이 제한이 4단이라 래퍼가 3겹만 넘어도 못 찾고
+        아래 "p 태그면 유저" 추측으로 떨어졌다 — 실제 서비스 말풍선은
+        행 > 정렬 > 최대폭 > 버블 > 본문 처럼 대여섯 겹이 예사다.
+        문서 끝까지 올라가되 body 에서 멈춘다(전역 표시는 화자가 아니다). */
+  for(let anc = el.parentElement, d = 0; anc && d < 24 && anc !== document.body; anc = anc.parentElement, d++){
+    const ancOwner = String(anc.getAttribute("data-owner") || anc.getAttribute("data-author") || anc.getAttribute("data-message-author") || anc.getAttribute("data-role") || "").toLowerCase();
+    if(/user|human|me|내|유저/.test(ancOwner)) return "user";
+    if(/assistant|ai|character|bot|캐릭터/.test(ancOwner)) return "character";
+  }
+
+  /* ② 정렬 클래스. 좌우를 대칭으로 본다 —
+        예전에는 오른쪽(유저)만 5종을 받고 왼쪽(캐릭터)은 3종뿐이라
+        items-start·text-left 로 그린 캐릭터 말풍선이 유저로 흡수됐다. */
+  let sawStart = false;   // 상대편(왼쪽 정렬) 표시를 봤는가
+  /* 정렬 클래스가 '이 메시지'의 것인지 '전체를 감싼 레이아웃 상자'의 것인지 가른다.
+     그 조상이 반대편 표시(왼쪽 정렬·mt-1 등)도 함께 품고 있으면 메시지 표시가 아니라
+     컨테이너 스타일이다 — 그걸 믿으면 상자 하나가 안의 캐릭터 말풍선까지 유저로 덮는다. */
+  const OTHER_SIDE = {
+    user: ".justify-start,.self-start,.items-start,.mr-auto,.text-left,.text-start,.mt-1",
+    character: ".justify-end,.self-end,.items-end,.ml-auto,.text-right,.text-end"
+  };
+  const isMessageLevel = (anc, side) => {
+    try { return !anc.querySelector(OTHER_SIDE[side]); } catch(_){ return true; }
+  };
+  for(let anc = el, d = 0; anc && d < 24 && anc !== document.body; anc = anc.parentElement, d++){
+    const c = " " + String(anc.className || "") + " ";
+    if(/[\s](justify-end|self-end|items-end|ml-auto|text-right|text-end)[\s]/.test(c) && isMessageLevel(anc, "user")) return "user";
+    if(/[\s](justify-start|self-start|items-start|mr-auto|text-left|text-start)[\s]/.test(c) && isMessageLevel(anc, "character")){ sawStart = true; break; }
+  }
+
+  /* 왼쪽 정렬(상대편) 표시를 봤다면 유저일 수 없다. */
+  if(sawStart) return "character";
+
+  /* ③ 마지막 보루로만 색을 본다 — 그것도 로판Ai 고정 팔레트뿐이다.
+        HTML 에 화자 표시가 아예 없는 옛 MHT 저장본을 위한 것이고,
+        구조로 판정이 되면 여기까지 오지 않는다.
+        (문서에서 색을 '배워' 화자를 정하던 방식은 걷어냈다 — 같은 색이 문서마다
+         다른 화자일 수 있어서 로그를 연달아 붙여 넣으면 화자가 뒤집혔다.) */
+  const byColor = ownerFromColorFixed(normalizeColorValue(color || ""), className.toLowerCase());
   if(byColor) return byColor;
-
-  if(el.tagName === "P") return "user";
+  /* 여기부터는 근거가 아니라 추측이다. 선행 블록 보정만 이 값을 뒤집을 수 있다. */
+  if(/(^|\s)mt-1(\s|$)/.test(className)){ lastOwnerHintWeak = true; return "character"; }
+  if(el.tagName === "P"){ lastOwnerHintWeak = true; return "user"; }
   return "";
 }
 function isUiOnlyText(text){
@@ -2370,30 +3319,40 @@ function hasSkippableAncestor(el, root){
   }
   return false;
 }
+function looksLikeUserPrompt(text){
+  const t = String(text || "");
+  if(!t.trim()) return false;
+  const braces = t.match(/\{\{\s*[^}]{1,120}?\s*\}\}/g);
+  if(braces && braces.some(x => !/^\{\{\s*(char|user|캐릭터|유저)\s*\}\}$/i.test(x))) return true;
+  if(/^\s*[\[\(]?\s*ooc\b/i.test(t)) return true;
+  return /(^|[\s\[\(>*＊\-–—·•])ooc\s*[:：\)\]]/i.test(t);
+}
 function collectRofanContentBlocks(root){
   const blocks = [];
   // 기본 대화는 p / div.mt-1로 잡히지만, MHT 저장본의 첫 캐릭터 메시지는
   // p로 감싸지지 않고 색상 span만 있는 경우가 있어 함께 후보에 넣습니다.
   // 부모 p가 이미 잡힌 span은 아래 contains 검사로 중복 제거됩니다.
   const candidates = Array.from(root.querySelectorAll('[data-owner][data-kind], .rofan-block, p, div.mt-1, span[style*="color"], div[style*="color"]'));
+  // 예전에는 후보마다 '이미 담은 모든 블록'과 contains 검사를 했다(블록 n개 × 후보 n개).
+  // 긴 로그(수천 문단)에서는 이 n² 비교가 페이지를 통째로 세워 버렸다.
+  // querySelectorAll 은 문서 순서를 보장하므로 조상은 언제나 자손보다 먼저 온다.
+  // 그래서 '아직 안이 안 끝난, 담아 둔 블록'만 스택으로 들고 있으면
+  // 지금 후보가 어떤 블록 안에 있는지 스택 꼭대기만 보고 알 수 있다.
+  // (반대 방향 — 나중 후보가 앞서 담은 조각을 포함하는 일 — 은 문서 순서상 없다)
+  const openBlocks = [];   // 조상 사슬. 후보가 이 안에 있으면 이미 담은 블록의 내부다.
   candidates.forEach((el, index) => {
-    if(blocks.some(b => b.el.contains(el))) return;
+    while(openBlocks.length && !openBlocks[openBlocks.length - 1].contains(el)) openBlocks.pop();
+    if(openBlocks.length) return;
     if(isSkippableElement(el) || hasSkippableAncestor(el, root)) return;
     const text = normalizeParagraphText(el.innerText || el.textContent || "");
     if(isUiOnlyText(text)) return;
     const color = getInlineColor(el);
-    const owner = getElementOwnerHint(el, color);
+    let owner = getElementOwnerHint(el, color);
+    let ownerWeak = lastOwnerHintWeak;
     if(!owner) return;
-
-    // 같은 색상 span 안에 실제 문단 전체가 있고, 그 안에 장식용 작은 span이 다시 들어가는 구조가 많습니다.
-    // 이미 선택된 더 큰 메시지 후보 안의 요소는 건너뛰고, 반대로 현재 요소가 앞서 잡은 작은 조각을 포함하면
-    // 큰 메시지를 남기도록 작은 조각을 제거합니다.
-    for(let i=blocks.length-1; i>=0; i--){
-      if(el.contains(blocks[i].el)){
-        blocks.splice(i, 1);
-      }
-    }
-    blocks.push({el, owner, index});
+    if(looksLikeUserPrompt(text)){ owner = "user"; ownerWeak = false; }   // 유저 프롬프트 형태는 확실한 근거다
+    blocks.push({el, owner, ownerWeak, index});
+    openBlocks.push(el);
   });
   return blocks;
 }
@@ -2403,7 +3362,7 @@ function parseRofanChatChunks(root){
   let chunkSeq = 0;
   let blockSeq = 0;
 
-  const pushChunksFromElement = (el, baseOwner) => {
+  const pushChunksFromElement = (el, baseOwner, baseOwnerWeak) => {
     const blockId = getElementBlockId(el) || ("b" + (blockSeq++));
     const baseKind = getElementKindHint(el);
     const baseFromDetails = isInsideDetailsElement(el);
@@ -2503,7 +3462,7 @@ function parseRofanChatChunks(root){
 
     const blockText = chunks.slice(start).map(c => c.text).join("\n\n").trim();
     if(blockText){
-      blocks.push({id:blockId, owner:baseOwner || "", text:blockText, startChunk:start, endChunk:chunks.length});
+      blocks.push({id:blockId, owner:baseOwner || "", ownerWeak: !!baseOwnerWeak, text:blockText, startChunk:start, endChunk:chunks.length});
     }else{
       chunks.splice(start);
     }
@@ -2511,9 +3470,9 @@ function parseRofanChatChunks(root){
 
   const semanticBlocks = collectRofanContentBlocks(root);
   if(semanticBlocks.length){
-    semanticBlocks.forEach(block => pushChunksFromElement(block.el, block.owner));
+    semanticBlocks.forEach(block => pushChunksFromElement(block.el, block.owner, block.ownerWeak));
   }else{
-    pushChunksFromElement(root, "");
+    pushChunksFromElement(root, "", true);
   }
 
   const mergedBlocks = mergeRofanBlocksById(blocks, chunks);
@@ -2532,23 +3491,34 @@ function mergeRofanBlocksById(blocks, chunks){
     const id = block && block.id;
     if(!id) return;
     if(!map.has(id)){
-      map.set(id, {id, owner:block.owner || "", text:"", startChunk:block.startChunk, endChunk:block.endChunk});
+      map.set(id, {id, owner:block.owner || "", ownerWeak: block.ownerWeak !== false, text:"", startChunk:block.startChunk, endChunk:block.endChunk});
       order.push(id);
     }else{
       const cur = map.get(id);
       if(!cur.owner && block.owner) cur.owner = block.owner;
+      if(block.ownerWeak === false) cur.ownerWeak = false;   // 근거 있는 판정이 하나라도 있으면 확실한 것으로 본다
       cur.startChunk = Math.min(cur.startChunk, block.startChunk);
       cur.endChunk = Math.max(cur.endChunk, block.endChunk);
     }
   });
+  /* 예전에는 블록마다 chunks 전체를 filter + indexOf 로 다시 훑었다(블록 × 조각 n²).
+     긴 로그에서 불러오기를 세우던 병목 중 하나다. 조각을 blockId 별로 한 번만
+     묶어 두면(자리 번호도 그때 같이) 블록 쪽은 꺼내 쓰기만 하면 된다. */
+  const relatedById = new Map();   // blockId → {list:[조각], positions:[자리]}
+  (chunks || []).forEach((c, pos) => {
+    if(!c || !c.blockId) return;
+    if(!relatedById.has(c.blockId)) relatedById.set(c.blockId, {list:[], positions:[]});
+    const entry = relatedById.get(c.blockId);
+    entry.list.push(c); entry.positions.push(pos);
+  });
   return order.map(id => {
     const b = map.get(id);
-    const related = (chunks || []).filter(c => c.blockId === id);
-    if(related.length){
-      b.owner = b.owner || (related.find(c => c.owner) || {}).owner || "";
-      b.text = related.map(c => c.text).filter(Boolean).join("\n\n").trim();
-      const positions = related.map(c => (chunks || []).indexOf(c)).filter(i => i >= 0);
-      if(positions.length){ b.startChunk = Math.min(...positions); b.endChunk = Math.max(...positions) + 1; }
+    const entry = relatedById.get(id);
+    if(entry && entry.list.length){
+      b.owner = b.owner || (entry.list.find(c => c.owner) || {}).owner || "";
+      b.text = entry.list.map(c => c.text).filter(Boolean).join("\n\n").trim();
+      b.startChunk = Math.min(...entry.positions);
+      b.endChunk = Math.max(...entry.positions) + 1;
     }
     return b;
   }).filter(b => b.text);
@@ -2565,8 +3535,23 @@ function preserveLeadingCharacterBlocks(blocks, chunks){
     if(block.owner !== "user") continue;
     const slice = chunks.slice(block.startChunk, block.endChunk);
     const hasCharacterColor = slice.some(c => ownerFromColor(c.color, "") === "character");
+    /* 예전에는 '지문만 있는 블록'도 캐릭터로 넘겼다(allScene).
+       그런데 유저가 상황 묘사로 대화를 여는 로그가 흔하다 — 그 첫 지문이 통째로
+       캐릭터 것이 되어 다음 캐릭터 응답과 합쳐졌고, 화자 구분이 깨졌다.
+       화자는 추측으로 뒤집으면 안 된다. 뒤집는 조건은 둘 중 하나뿐이다.
+         ① 색이 캐릭터라고 말해 준다(hasCharacterColor)
+         ② 애초에 근거 없이 "p 태그니까 유저" 로 찍은 것이다(ownerWeak) */
     const allScene = slice.length && slice.every(c => c.kind === "scene");
-    if(hasCharacterColor || allScene){
+    /* 바로 뒤 블록도 '추측으로 유저' 라면, 이 지문은 그 유저 턴의 앞머리일 가능성이 크다
+       (유저가 지문 한 줄을 쓰고 다음 문단에 대사를 쓴 흔한 형태).
+       그런 경우까지 캐릭터로 넘기면 한 턴이 두 화자로 찢어진다. */
+    const next = blocks[i + 1];
+    const nextSlice = next ? chunks.slice(next.startChunk, next.endChunk) : [];
+    const nextAllScene = nextSlice.length && nextSlice.every(c => c.kind === "scene");
+    /* 다만 뒤 블록도 지문뿐이면 그건 인트로가 이어지는 것이므로 막지 않는다
+       (막으면 인트로 첫 문단만 유저로 남는다). 뒤에 '대사'가 오는 경우만 같은 턴으로 본다. */
+    const nextIsWeakUserLine = next && next.owner === "user" && next.ownerWeak !== false && !nextAllScene;
+    if(hasCharacterColor || (allScene && block.ownerWeak !== false && !nextIsWeakUserLine)){
       block.owner = "character";
       slice.forEach(c => { c.owner = "character"; });
     }
@@ -2576,6 +3561,9 @@ function preserveLeadingCharacterBlocks(blocks, chunks){
 function isLikelyChapterSeparatorText(text){
   const clean = String(text || "").replace(/<[^>]*>/g, "").replace(/\s+/g, "").trim();
   if(!clean) return false;
+  /* "-_-" 가 하이픈·언더바 3자라 구분선으로 걸려, 한 턴이 세 블록으로 쪼개지고
+     이름표가 같은 턴에 세 번 찍혔다. 이모티콘은 구분선이 아니다. */
+  if(typeof isEmoticonLine === "function" && isEmoticonLine(clean)) return false;
   return /^[\-—―─━_]{3,}$/.test(clean);
 }
 
@@ -2725,13 +3713,39 @@ function buildDuplicateAnswerGroups(blocks){
   const parent = Array.from({length:promptOccurrences.length}, (_,i)=>i);
   const find = (x) => parent[x] === x ? x : (parent[x] = find(parent[x]));
   const unite = (a,b) => { const ra=find(a), rb=find(b); if(ra!==rb) parent[rb]=ra; };
-  for(let i=0; i<promptOccurrences.length; i++){
-    for(let j=i+1; j<promptOccurrences.length; j++){
-      if(promptOccurrences[i].promptNorm === promptOccurrences[j].promptNorm || overlapSentenceCount(promptOccurrences[i].promptBlock.text, promptOccurrences[j].promptBlock.text) >= 2){
-        unite(i,j);
+  /* 예전에는 모든 지문 쌍(n²/2)을 돌며, 쌍마다 문장 쪼개기 정규식을 다시 돌렸다.
+     수천 턴짜리 로그에서는 이것이 불러오기를 몇 분씩 세워 버린 주범이다.
+     같은 결과를 이렇게 얻는다:
+     ① 완전히 같은 지문(promptNorm 동일)은 Map 으로 한 번에 묶는다.
+     ② '문장 2개 이상 겹침'은 문장 → 지문 색인을 만들어, 같은 문장을 가진
+        지문끼리만 센다. 문장을 쪼개는 일도 지문마다 한 번씩만 한다.
+        수십 개 지문에 다 들어 있는 문장은 상투구라 구분 근거가 못 되므로 넘긴다. */
+  const byNorm = new Map();
+  promptOccurrences.forEach((occ, idx) => {
+    if(!byNorm.has(occ.promptNorm)) byNorm.set(occ.promptNorm, []);
+    byNorm.get(occ.promptNorm).push(idx);
+  });
+  byNorm.forEach(list => { for(let k=1; k<list.length; k++) unite(list[0], list[k]); });
+  const sentenceIndex = new Map();   // 문장 → 그 문장을 가진 대표 지문 번호들
+  byNorm.forEach(list => {
+    const rep = list[0];
+    new Set(splitSentencesForCompare(promptOccurrences[rep].promptBlock.text)).forEach(s => {
+      if(!sentenceIndex.has(s)) sentenceIndex.set(s, []);
+      sentenceIndex.get(s).push(rep);
+    });
+  });
+  const pairShared = new Map();      // "i:j" → 겹친 문장 수
+  sentenceIndex.forEach(list => {
+    if(list.length < 2 || list.length > 24) return;   // 상투구는 근거에서 뺀다
+    for(let a=0; a<list.length; a++){
+      for(let b=a+1; b<list.length; b++){
+        const key = list[a] + ":" + list[b];
+        const shared = (pairShared.get(key) || 0) + 1;
+        pairShared.set(key, shared);
+        if(shared === 2) unite(list[a], list[b]);
       }
     }
-  }
+  });
   const promptMap = new Map();
   promptOccurrences.forEach((occ, idx) => {
     const r = find(idx);
@@ -2768,7 +3782,10 @@ function getDroppedBlockIdsFromDuplicateDecisions(groups){
     group.occurrences.forEach(occ => {
       const keepId = occ.answerBlock ? occ.answerBlock.id : (occ.promptBlock ? occ.promptBlock.id : "");
       if(keepId === decision) return;
-      if(occ.promptBlock) dropped.add(occ.promptBlock.id);
+      /* prompt 묶음은 '같은 유저 지문이 반복된' 것이므로 지문·응답을 함께 지우는 게 맞다.
+         answer 묶음은 '서로 다른 지문에 같은 응답이 돌아온' 것이라 지문은 각기 다른 내용이다.
+         함께 지우면 사용자가 쓴 다른 지문까지 사라진다(실측: 중복 답변 정리 후 유저 지문 2개 증발). */
+      if(group.type !== "answer" && occ.promptBlock) dropped.add(occ.promptBlock.id);
       if(occ.answerBlock) dropped.add(occ.answerBlock.id);
     });
   });
@@ -2794,7 +3811,7 @@ function getFilteredDuplicateGroups(){
 }
 function updateDuplicateReviewPanel(groups){
   currentDuplicateGroups = groups || [];
-  if(activeMode !== "chat" || !reviewDuplicatesEl.checked){
+  if(activeMode !== "chat"){
     duplicateReviewPanel.classList.add("hidden");
     duplicateReviewPanel.innerHTML = "";
     return;
@@ -2842,8 +3859,8 @@ function updateDuplicateReviewPanel(groups){
     ? `<details class="nextPromptFold"><summary><span class="nextFoldIcon">›</span><span>유저 다음 지문</span></summary><div class="previewText fullPreview nextPreview">${escapeHTML(nextUser.text || "")}</div></details>`
     : `<details class="nextPromptFold"><summary><span class="nextFoldIcon">›</span><span>유저 다음 지문</span></summary><div class="emptyState nextEmpty">다음 유저 지문이 없습니다.</div></details>`;
   html += `<div class="dupeCompareGrid">`;
-  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">연결 유저 지문</span><span class="pill">${current + 1}/${group.occurrences.length}</span></div><div class="previewText fullPreview">${escapeHTML(occ.promptBlock ? occ.promptBlock.text : "")}</div>${nextUserHtml}</div>`;
-  html += `<div class="reviewBlock"><div class="dupeSummary withNav"><span><span class="pill">${escapeHTML(ownerLabel(answer ? answer.owner : ""))}</span><span class="pill">답변 후보 ${current + 1}/${group.occurrences.length}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-dupe-page="prev" data-dupe-key="${escapeAttr(group.key)}" ${prevCandDisabled} aria-label="이전 후보">‹</button><button type="button" class="navIconBtn" data-dupe-page="next" data-dupe-key="${escapeAttr(group.key)}" ${nextCandDisabled} aria-label="다음 후보">›</button></span></div><div class="previewText fullPreview">${escapeHTML(answer ? answer.text : "")}</div></div>`;
+  html += `<div class="reviewBlock" data-owner="user" data-kind="scene"><div class="dupeSummary"><span class="pill">연결 유저 지문</span><span class="pill">${current + 1}/${group.occurrences.length}</span></div><div class="previewText fullPreview">${escapeHTML(occ.promptBlock ? occ.promptBlock.text : "")}</div>${nextUserHtml}</div>`;
+  html += `<div class="reviewBlock" data-owner="${escapeAttr(answer ? answer.owner : "character")}" data-kind="normal"><div class="dupeSummary withNav"><span><span class="pill">${escapeHTML(ownerLabel(answer ? answer.owner : ""))}</span><span class="pill">답변 후보 ${current + 1}/${group.occurrences.length}</span></span><span class="navButtons"><button type="button" class="navIconBtn" data-dupe-page="prev" data-dupe-key="${escapeAttr(group.key)}" ${prevCandDisabled} aria-label="이전 후보">‹</button><button type="button" class="navIconBtn" data-dupe-page="next" data-dupe-key="${escapeAttr(group.key)}" ${nextCandDisabled} aria-label="다음 후보">›</button></span></div><div class="previewText fullPreview">${escapeHTML(answer ? answer.text : "")}</div></div>`;
   html += `</div>`;
   html += `<div class="reviewChoices choiceRow"><label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="all" ${selected === "all" ? "checked" : ""}>모두 유지</label><label class="reviewChoice"><input type="radio" name="dupe_${escapeAttr(group.key)}" data-dupe-key="${escapeAttr(group.key)}" value="${escapeAttr(answerId)}" ${selected === answerId ? "checked" : ""}>현재 후보만 유지</label></div>`;
   html += `</div>`;
@@ -2986,7 +4003,7 @@ function updateContainsReviewPanel(items){
       const chunk = item.chunk;
       const kindLabel = chunk.kind === "scene" ? "지문" : "대사";
       const extra = item.count && item.count > 1 ? ` 외 ${item.count - 1}개` : "";
-      html += `<details class="containsRow"><summary><span class="containsPreview">${escapeHTML(getContainsSnippet(chunk.text))}${escapeHTML(extra)}</span><span class="containsRight"><span class="pill">${escapeHTML(ownerLabel(chunk.owner))}</span><span class="pill">${kindLabel}</span><span class="inlineChoice" data-stop-summary><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" data-contains-group-key="${escapeAttr(group.tokenKey)}" value="keep" ${decision !== "delete" ? "checked" : ""}>남김</label><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" data-contains-group-key="${escapeAttr(group.tokenKey)}" value="delete" ${decision === "delete" ? "checked" : ""}>삭제</label></span></span></summary><div class="reviewBlock"><div class="previewText compactPreview">${escapeHTML(chunk.text)}</div></div></details>`;
+      html += `<details class="containsRow" data-owner="${escapeAttr(chunk.owner || "")}" data-kind="${escapeAttr(chunk.kind || "normal")}"><summary><span class="containsPreview">${escapeHTML(getContainsSnippet(chunk.text))}${escapeHTML(extra)}</span><span class="containsRight"><span class="pill">${escapeHTML(ownerLabel(chunk.owner))}</span><span class="pill">${kindLabel}</span><span class="inlineChoice" data-stop-summary><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" data-contains-group-key="${escapeAttr(group.tokenKey)}" value="keep" ${decision !== "delete" ? "checked" : ""}>남김</label><label><input type="radio" name="contains_${escapeAttr(key)}" data-contains-key="${escapeAttr(key)}" data-contains-group-key="${escapeAttr(group.tokenKey)}" value="delete" ${decision === "delete" ? "checked" : ""}>삭제</label></span></span></summary><div class="reviewBlock" data-owner="${escapeAttr(chunk.owner || "")}" data-kind="${escapeAttr(chunk.kind || "normal")}"><div class="previewText compactPreview">${escapeHTML(chunk.text)}</div></div></details>`;
     });
     html += `</div></details>`;
   });
@@ -3077,13 +4094,14 @@ function getOocReviewKey(block){
   return "ooc-" + (block && block.id ? block.id : hashString(block ? block.text : ""));
 }
 function buildOocReviewItems(blocks, alreadyDropped){
-  if(activeMode !== "chat" || !reviewOocPairsEl || !reviewOocPairsEl.checked) return [];
+  if(activeMode !== "chat") return [];
   const cascade = oocCascadeModeEl && oocCascadeModeEl.value === "cascade";
   const items = [];
   for(let i=0; i<blocks.length; i++){
     const block = blocks[i];
     if(!block || block.owner !== "user" || !isOocPrompt(block.text) || (alreadyDropped && alreadyDropped.has(block.id))) continue;
     const answerBlocks = [];
+    const continuationBlocks = [];   // cascade 로 건너뛴 "계속." 류 이어쓰기 지문
     let j = i + 1;
     while(j < blocks.length){
       const cur = blocks[j];
@@ -3096,6 +4114,10 @@ function buildOocReviewItems(blocks, alreadyDropped){
       }
       if(cur.owner === "user"){
         if(cascade && isTrivialContinuationPrompt(cur.text)){
+          /* "계속." 같은 이어쓰기 지문은 건너뛰기만 하고 어디에도 담지 않았다.
+             그래서 "응답까지 삭제"를 골라도 앞뒤 응답만 지워지고 이 지문 한 줄이
+             혼자 남았다. 함께 지울 수 있도록 목록에 담아 둔다. */
+          continuationBlocks.push(cur);
           j++;
           continue;
         }
@@ -3103,7 +4125,7 @@ function buildOocReviewItems(blocks, alreadyDropped){
       }
       j++;
     }
-    items.push({key:getOocReviewKey(block), promptBlock:block, answerBlocks});
+    items.push({key:getOocReviewKey(block), promptBlock:block, answerBlocks, continuationBlocks});
   }
   return items.slice(0, 120);
 }
@@ -3123,7 +4145,7 @@ function getFilteredOocItems(){
 }
 function updateOocReviewPanel(items){
   currentOocItems = items || [];
-  if(activeMode !== "chat" || !reviewOocPairsEl || !reviewOocPairsEl.checked){
+  if(activeMode !== "chat"){
     oocReviewPanel.classList.add("hidden");
     oocReviewPanel.innerHTML = "";
     return;
@@ -3138,7 +4160,7 @@ function updateOocReviewPanel(items){
   const count = filtered.length;
   oocGroupPage = Math.max(0, Math.min(Math.max(0, count - 1), oocGroupPage || 0));
 
-  let html = `<div class="reviewHead"><div><div class="reviewTitle">OOC 응답 검토</div><div class="reviewMeta">OOC가 포함된 지문을 한 개씩 확인합니다.</div></div><div class="bulkButtons"><button type="button" class="btn subtle" data-ooc-bulk="keepPrompt">전체 지문만 삭제</button><button type="button" class="btn subtle" data-ooc-bulk="delete">전체 응답까지 삭제</button></div></div>`;
+  let html = `<div class="reviewHead"><div><div class="reviewTitle">OOC 응답 검토</div><div class="reviewMeta">OOC가 포함된 지문을 한 개씩 확인합니다.</div></div><div class="bulkButtons"><button type="button" class="btn subtle" data-ooc-bulk="keep">전체 남김</button><button type="button" class="btn subtle" data-ooc-bulk="keepPrompt">전체 지문만 삭제</button><button type="button" class="btn subtle" data-ooc-bulk="delete">전체 응답까지 삭제</button></div></div>`;
   html += `<div class="reviewSearchBar"><input type="search" data-ooc-search="keyword" placeholder="OOC/응답 내용 검색" value="${escapeAttr(oocFilterText)}"><input type="number" min="1" data-ooc-search="order" placeholder="순서" value="${escapeAttr(oocOrderQuery)}"><button type="button" class="btn primary" data-ooc-search-apply="1">검색</button><button type="button" class="btn subtle" data-ooc-search-clear="1">초기화</button></div>`;
   if(!count){
     html += `<div class="emptyState">검색 조건에 맞는 OOC 지문이 없습니다.</div>`;
@@ -3157,10 +4179,10 @@ function updateOocReviewPanel(items){
   html += `<div class="dupeCard oocCard">`;
   html += `<div class="reviewNav"><div><div class="reviewTitle">OOC 지문 ${idx + 1}</div><div class="reviewMeta">전체 ${idx + 1}/${total} · 검색 결과 ${oocGroupPage + 1}/${count} · 연결 응답 ${answerCount}개</div></div><div class="navButtons"><button type="button" class="navIconBtn" data-ooc-page="prev" ${prevDisabled} aria-label="이전 OOC">‹</button><button type="button" class="navIconBtn" data-ooc-page="next" ${nextDisabled} aria-label="다음 OOC">›</button></div></div>`;
   html += `<div class="dupeCompareGrid">`;
-  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">OOC 포함 지문</span></div><div class="previewText">${escapeHTML(item.promptBlock.text)}</div></div>`;
-  html += `<div class="reviewBlock"><div class="dupeSummary"><span class="pill">연결 캐릭터 응답</span><span class="pill">${answerCount}개</span></div>${answerCount ? `<div class="previewText">${escapeHTML(answersText)}</div>` : `<div class="emptyState">연결된 캐릭터 응답이 없습니다.</div>`}</div>`;
+  html += `<div class="reviewBlock" data-owner="user" data-kind="scene"><div class="dupeSummary"><span class="pill">OOC 포함 지문</span></div><div class="previewText">${escapeHTML(item.promptBlock.text)}</div></div>`;
+  html += `<div class="reviewBlock" data-owner="character" data-kind="normal"><div class="dupeSummary"><span class="pill">연결 캐릭터 응답</span><span class="pill">${answerCount}개</span></div>${answerCount ? `<div class="previewText">${escapeHTML(answersText)}</div>` : `<div class="emptyState">연결된 캐릭터 응답이 없습니다.</div>`}</div>`;
   html += `</div>`;
-  html += `<div class="reviewChoices choiceRow threeChoices"><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="strip" ${decision === "strip" ? "checked" : ""}>OOC 문단만 삭제</label><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="prompt" ${decision === "prompt" ? "checked" : ""}>전체 유저 지문 삭제</label><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="delete" ${decision === "delete" ? "checked" : ""}>응답까지 삭제</label></div>`;
+  html += `<div class="reviewChoices choiceRow fourChoices"><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="keep" ${decision === "keep" ? "checked" : ""}>남김</label><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="strip" ${decision === "strip" ? "checked" : ""}>OOC 문단만 삭제</label><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="prompt" ${decision === "prompt" ? "checked" : ""}>전체 유저 지문 삭제</label><label class="reviewChoice"><input type="radio" name="ooc_${escapeAttr(item.key)}" data-ooc-key="${escapeAttr(item.key)}" value="delete" ${decision === "delete" ? "checked" : ""}>응답까지 삭제</label></div>`;
   html += `</div>`;
   oocReviewPanel.classList.remove("hidden");
   oocReviewPanel.innerHTML = html;
@@ -3174,7 +4196,10 @@ function handleOocReviewChange(e){
 function handleOocReviewClick(e){
   const bulk = e.target.closest("button[data-ooc-bulk]");
   if(bulk){
-    const value = bulk.dataset.oocBulk === "delete" ? "delete" : "prompt";
+    /* [v375] 예전에는 'delete 가 아니면 전부 prompt' 였다 — 단추를 늘리려면
+       여기부터 값을 제대로 갈라야 한다. keepPrompt 는 '지문만 삭제'(=prompt) 다. */
+    const BULK = { keep: "keep", keepPrompt: "prompt", delete: "delete" };
+    const value = BULK[bulk.dataset.oocBulk] || "prompt";
     currentOocItems.forEach(item => { oocDecisions[item.key] = value; });
     transformText();
     return;
@@ -3221,6 +4246,7 @@ function getDroppedBlockIdsFromOocDecisions(items){
     }
     if(decision === "delete"){
       item.answerBlocks.forEach(b => dropped.add(b.id));
+      (item.continuationBlocks || []).forEach(b => dropped.add(b.id));
     }
   });
   return dropped;
@@ -3249,10 +4275,6 @@ function createStructuralDeletePlan(chunks, dropBlockIds){
     const t = String(chunk.text || "").trim();
     if(!t) return;
     const protectedHere = isProtectedText(t, tokens);
-    if(removeDetailsEl.checked && chunk.fromDetails && !protectedHere){
-      dropChunkIds.add(chunk.id);
-      return;
-    }
     if(removeTablesEl.checked && !protectedHere && (chunk.fromTable || isRemovableBlockText(t))){
       // 표/블록 제거는 문단 단위(chunk)로만 처리합니다.
       // 같은 응답 블록 안의 뒤쪽 지문까지 blockId로 삭제하지 않도록 여기에서 범위를 고정합니다.
@@ -3297,18 +4319,13 @@ function renderChunks(chunks, options){
     }
     if(!t) return "";
 
-    if(removeDetailsEl && removeDetailsEl.checked){
-      t = stripDetailsSegmentsFromText(t, tokens, {open:false});
-      if(!t) return "";
-    }
-
     if(removeHTMLEl.checked){
       t = t.replace(/<script[\s\S]*?<\/script>/gi,"");
       t = t.replace(/<style[\s\S]*?<\/style>/gi,"");
       t = t.replace(/<br\s*\/?>/gi,"\n");
       t = t.replace(/<\/p>/gi,"\n");
-      t = t.replace(/<[^>]+>/g,"");
-      t = t.replace(/<[^>\n]*/g,"");
+      t = t.replace(/<(?!\/?(?:details|summary)\b)[^>]+>/g,"");
+      t = t.replace(/<(?!\/?(?:details|summary)\b)[^>\n]*/g,"");
       t = t.trim();
       if(!t) return "";
     }
@@ -3318,7 +4335,6 @@ function renderChunks(chunks, options){
 
     const protectedHere = isProtectedText(t, tokens);
 
-    if(removeDetailsEl.checked && fromDetails && !protectedHere) return "";
     if(options.removeTables && !protectedHere && (fromTable || isRemovableBlockText(t))) return "";
 
     if(shouldDeleteByContains(t, deleteTokens) && !protectedHere){
@@ -3355,7 +4371,7 @@ function renderChunks(chunks, options){
     if(isDecorOnlyParagraph(t, getProtectedChapterSeparators())) return { text: t, blockId: chunk.blockId, owner: chunk.owner || "", kind: chunk.kind || "normal" };
 
     let dialogue = t;
-    if(quoteStyle !== "none" && !isAlreadyQuoted(t)) dialogue = openQ + t + closeQ;
+    if(quoteStyle !== "none" && !isAlreadyQuoted(t) && !shouldSkipQuote(t)) dialogue = wrapWithQuotes(t, openQ, closeQ);
     dialogue = indentRenderedText(dialogue);
     const shouldLabel = allowSpeakerLabels && !labeledBlockIds.has(chunk.blockId);
     if(shouldLabel) labeledBlockIds.add(chunk.blockId);
@@ -3379,6 +4395,34 @@ function renderChunks(chunks, options){
 }
 
 // ------------------ 메인 변환 ------------------
+function stripFencedAndTableChunks(chunks){
+  const list = chunks || [];
+  const fence = /^\s*(?:```+|'{3,})\s*[^\s|]*\s*$/;
+  const drop = new Set();
+  let i = 0;
+  while(i < list.length){
+    const bid = list[i] && list[i].blockId;
+    let j = i;
+    while(j < list.length && ((list[j] && list[j].blockId) === bid)) j++;
+    const local = [];
+    for(let x = i; x < j; x++) if(fence.test(String(list[x] && list[x].text || ""))) local.push(x);
+    let k = 0;
+    while(k + 1 < local.length){
+      for(let y = local[k]; y <= local[k + 1]; y++) drop.add(y);
+      k += 2;
+    }
+    if(k < local.length){ for(let y = local[k]; y < j; y++) drop.add(y); }
+    i = j;
+  }
+  const out = [];
+  list.forEach((c, x) => {
+    if(drop.has(x)) return;
+    const t = String(c && c.text || "");
+    if(c.fromTable || isTableLikeText(t)) return;
+    out.push(c);
+  });
+  return out;
+}
 function shouldRenderSpeakerLabels(){
   if(!(activeMode === "chat" || activeMode === "classic")) return false;
   if(!labelSpeakersEl || !labelSpeakersEl.checked) return false;
@@ -3399,8 +4443,9 @@ function transformText(){
     return;
   }else if(activeMode === "chat"){
     const parsed = parseRofanChatChunks(chatPaste);
+    if(removeTablesEl && removeTablesEl.checked) parsed.chunks = stripFencedAndTableChunks(parsed.chunks);
     currentParsedBlocks = parsed.blocks || [];
-    const duplicateGroups = reviewDuplicatesEl.checked ? buildDuplicateAnswerGroups(parsed.blocks) : [];
+    const duplicateGroups = buildDuplicateAnswerGroups(parsed.blocks);
     const duplicateDropBlockIds = getDroppedBlockIdsFromDuplicateDecisions(duplicateGroups);
     updateDuplicateReviewPanel(duplicateGroups);
 
@@ -3528,6 +4573,16 @@ function currentDownloadBaseName(fallback){
   downloadFileNameEls.forEach(el => {
     if(!typed && el.value) typed = el.value;
   });
+  /* 파일 이름을 안 적었을 때, HTML·Markdown·EPUB 은 작품 제목을 쓰는데
+     TXT 만 영어 기본값(cleaned_rofan_chat)으로 나갔다. 같은 화면에서 받은 파일들의
+     이름이 제각각이 되던 것. 적어 둔 제목이 있으면 어느 형식이든 그것을 먼저 쓴다. */
+  if(!typed){
+    /* 입력칸이 비어 있어도 getEpubConfig 는 자리 표시 문구("정리한 로그")를 제목으로 쓴다.
+       HTML·EPUB 이 그 이름으로 나가므로 TXT 도 같은 이름을 따라간다. */
+    let title = "";
+    try{ title = String((typeof getEpubConfig === "function" ? getEpubConfig().title : "") || "").trim(); }catch(_){ title = ""; }
+    if(title) typed = title;
+  }
   typed = String(typed || fallback || "download").trim();
   return typed || "download";
 }
@@ -3540,9 +4595,11 @@ function downloadTxt(){
   const a=document.createElement("a");
   a.href=url;
   const fallback = activeMode === "chat" ? "cleaned_rofan_chat" : (activeMode === "epubedit" ? "edited_epub_text" : "cleaned_log");
-  a.download=safeDownloadFileName(".txt", fallback);
+  const name = safeDownloadFileName(".txt", fallback);
+  a.download = name;
   a.click();
   URL.revokeObjectURL(url);
+  showToast(name + " 을(를) 내보냈습니다.");
 }
 function clearAll(){
   if(!window.confirm("정말 초기화하시겠습니까? 현재 입력과 변환 결과가 비워집니다.")) return;
@@ -3665,7 +4722,7 @@ function updateResultStats(chunks, blocks, renderedText){
       <div class="stat"><strong>${fmtNum(currentDuplicateGroups.length)}</strong><span>중복 묶음</span></div>
       <div class="stat"><strong>${fmtNum(currentContainsItems.length)}</strong><span>키워드 후보</span></div>`;
   }
-  updateRiskPanel(renderedText || "");
+  updateRiskPanel(renderedText || "", chunks || []);
   if(workflowHintEl){
     const missing = !renderedText ? "입력하면 바로 정리됩니다." : `${fmtNum(stats.paragraphs)}개 문단 준비됨`;
     workflowHintEl.textContent = missing;
@@ -3996,8 +5053,46 @@ function restoreAllowedInlineSpans(escaped){
     return `<span ${attrParts.join(" ")}>${inner}</span>`;
   });
 }
+/* 본문은 통째로 이스케이프한 뒤 필요한 것만 되살린다. 여태 되살리는 것이
+   <span>(화자 이름표·색) 하나뿐이라, 굵게/기울임 같은 서식 태그가
+   &lt;strong&gt; 그대로 글자로 보였다.
+
+   EPUB 은 XML 이라 짝이 안 맞는 태그 하나로 파일 전체가 열리지 않는다.
+   그래서 되살린 뒤 짝을 검사하고, 어긋나면 그 줄은 이스케이프된 상태로 되돌린다.
+   허용 목록에 없는 태그(script 등)는 계속 글자로 남는다. */
+const EPUB_INLINE_TAGS = {
+  strong:"strong", b:"strong",
+  em:"em", i:"em",
+  u:"u",
+  s:"s", strike:"s", del:"s",
+  mark:"mark", sup:"sup", sub:"sub", code:"code"
+};
+function restoreAllowedInlineTags(escaped){
+  let out = String(escaped || "").replace(/&lt;br\s*\/?\s*&gt;/gi, "<br/>");
+  out = out.replace(/&lt;(\/?)([a-zA-Z]+)(?:\s(?:(?!&gt;)[\s\S])*?)?\s*\/?&gt;/g, (whole, slash, name) => {
+    const tag = EPUB_INLINE_TAGS[String(name).toLowerCase()];
+    return tag ? "<" + slash + tag + ">" : whole;   // 속성은 버린다
+  });
+  return out;
+}
+/* 열고 닫힘이 맞는지 확인한다. <br/> 처럼 스스로 닫는 것은 세지 않는다. */
+function inlineTagsBalanced(html){
+  const stack = [];
+  const re = /<(\/?)([a-zA-Z]+)\b[^>]*?(\/?)>/g;
+  let m;
+  while((m = re.exec(html))){
+    if(m[3]) continue;                       // <br/> 같은 자기완결 태그
+    if(m[1]){ if(stack.pop() !== m[2]) return false; }
+    else stack.push(m[2]);
+  }
+  return stack.length === 0;
+}
 function paragraphToXhtml(p){
-  const lines = String(p || "").split(/\n/).map(line => restoreAllowedInlineSpans(escapeXML(line)));
+  const lines = String(p || "").split(/\n/).map(line => {
+    const escaped = escapeXML(line);
+    const restored = restoreAllowedInlineTags(restoreAllowedInlineSpans(escaped));
+    return inlineTagsBalanced(restored) ? restored : escaped;
+  });
   return `<p>${lines.join("<br/>")}</p>`;
 }
 function textToXhtmlBody(text){
@@ -4005,12 +5100,12 @@ function textToXhtmlBody(text){
 }
 function getEpubCss(){
   const preset = getEpubConfig().stylePreset;
-  const fontFace = cachedEpubFontAsset ? `@font-face{font-family:"UploadedEpubFont";src:url("${escapeXML(cachedEpubFontAsset.epubName || cachedEpubFontAsset.name || "uploaded-font.woff")}");} body{font-family:"UploadedEpubFont",serif !important;}` : "";
+  const fontFace = cachedEpubFontAsset ? `@font-face{font-family:"UploadedEpubFont";src:url("${escapeXML(cachedEpubFontAsset.epubName || cachedEpubFontAsset.name || "uploaded-font.woff")}");} body{font-family:"UploadedEpubFont",sans-serif !important;}` : "";
   const base = `body{line-height:1.82;word-break:keep-all;overflow-wrap:break-word;} p{margin:0 0 1em;} h1{font-size:1.45em;margin:0 0 1.2em;} .cover{text-align:center;} .cover img{max-width:100%;height:auto;} blockquote{margin:1em 0;} .quoteLine{padding:.25em 0 .25em 1em;border-left:4px solid #4f8aa4;background:transparent;border-radius:0;text-align:left;} .quotePostype{padding:.9em 1.05em;border-left:4px solid #4f8aa4;background:#f3f9fc;border-radius:.75em;text-align:left;} .quoteBlog{padding:1em .5em;border-top:1px solid #bdd8e3;border-bottom:1px solid #bdd8e3;border-left:0;background:transparent;border-radius:0;text-align:center;} .quoteSoft{padding:1em 1.1em;border-left:0;background:#eaf5fa;border:1px solid #d4e9f1;border-radius:1em;text-align:center;} .rofan-block[data-owner]{margin:0 0 1em;} .rofan-block[data-kind="scene"]{font-style:normal;}`;
-  if(preset === "paper") return fontFace + base + ` body{font-family:serif;} p{text-indent:1em;margin-bottom:.65em;}`;
+  if(preset === "paper") return fontFace + base + ` body{font-family:sans-serif;} p{text-indent:1em;margin-bottom:.65em;}`;
   if(preset === "script") return fontFace + base + ` body{font-family:sans-serif;} p{margin-bottom:1.1em;} p:nth-child(odd){padding-left:.5em;border-left:2px solid #ddd;}`;
   if(preset === "backup") return fontFace + base + ` body{font-family:monospace;font-size:.92em;} p{white-space:pre-wrap;margin-bottom:1.2em;}`;
-  return fontFace + base + ` body{font-family:serif;} p{margin-bottom:.95em;}`;
+  return fontFace + base + ` body{font-family:sans-serif;} p{margin-bottom:.95em;}`;
 }
 function updateEpubPreview(){
   const text = getPreparedOutputForExport();
@@ -4030,6 +5125,29 @@ function updateEpubPreview(){
       <div class="bookPreview">${previewBody || `<p class="mutedText">미리보기 없음</p>`}</div>`;
   }
 }
+/* [v373] 발췌 파일에 이름을 지어 뒀으면, 그것을 불러와 HTML·Markdown 등으로 내보낼 때
+   그 이름을 그대로 쓴다. 예전에는 작품 제목이나 형식별 기본값(cleaned_log …)으로 나가서,
+   애써 지어 둔 이름이 한 번 불러오면 사라졌다.
+   '파일 이름' 칸에 직접 적어 둔 것이 있으면 그것이 이긴다 — 우리가 채워 넣은 것만
+   새로 불러온 파일 이름으로 갈아 끼운다. */
+const LOADED_NAME_EXT = /\.(mhtml|mht|markdown|html|htm|md|txt|epub)$/i;
+function loadedFileBaseName(name){
+  let base = String(name || "").trim();
+  if(!base) return "";
+  base = base.replace(LOADED_NAME_EXT, "");     /* 확장자 한 겹 */
+  base = base.replace(/\.rofan$/i, "");         /* 발췌본은 ".rofan.html" 로 두 겹이다 */
+  return base.trim();
+}
+function adoptLoadedFileName(file){
+  try{
+    const base = loadedFileBaseName(file && file.name);
+    if(!base) return;
+    if(downloadFileBaseName && !downloadFileNameFromLoad) return;   /* 직접 적은 이름 */
+    downloadFileBaseName = base;
+    downloadFileNameFromLoad = true;
+    syncDownloadFileNameInputs(null);
+  }catch(_){}
+}
 function safeFileName(name, ext){
   const base = String(name || "download").replace(/[\\/:*?"<>|]/g,"_").replace(/\s+/g,"_").slice(0,80) || "download";
   return base + ext;
@@ -4043,6 +5161,7 @@ function downloadBlob(blob, filename){
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+  try{ if(typeof showToast === "function") showToast(filename + " 을(를) 내보냈습니다."); }catch(_err){}
 }
 
 function itemKindLabel(kind){ return kind === "scene" ? "scene" : "dialogue"; }
@@ -4092,7 +5211,17 @@ function structuredItemsToMarkdown(items){
     const kind = safeMetaValue(item.kind, "normal");
     const blockId = safeMetaValue(item.blockId, "block-" + idx);
     const body = shouldKeepSpeakerLabelsForExport() ? String(item.text || "").trim() : stripCurrentSpeakerLabelsFromItemText(item.text || "");
-    return body ? `<!-- rofan:block=${blockId};owner=${owner};kind=${kind} -->\n${body}` : "";
+    /* 마크다운은 홑줄바꿈을 줄바꿈으로 치지 않는다. 그래서 이름 표기 줄과
+       그 다음 줄이 한 문단으로 붙어 버렸다. 홑줄바꿈만 하드 브레이크(줄 끝 두 칸)로 바꾼다.
+       빈 줄로 나뉜 문단은 그대로 둔다.
+       내보내기 → 다시 불러오기 → 내보내기 를 반복해도 두 칸이 쌓이지 않도록,
+       붙이기 전에 줄 끝 공백을 먼저 지운다. */
+    const mdBody = String(body)
+      .replace(/[ \t]+$/gm, "")
+      .split(/\n{2,}/)                        // 빈 줄로 나뉜 문단은 건드리지 않는다
+      .map(par => par.replace(/\n/g, "  \n"))  // 문단 안의 홑줄바꿈만 하드 브레이크로
+      .join("\n\n");
+    return body ? `<!-- rofan:block=${blockId};owner=${owner};kind=${kind} -->\n${mdBody}` : "";
   }).filter(Boolean).join("\n\n");
 }
 
@@ -4148,9 +5277,20 @@ function structuredMarkdownToHtml(raw){
   const chunks = parseStructuredMarkdownToChunks(raw);
   return chunks ? structuredItemsToHtml(chunks.map(c => ({blockId:c.blockId, owner:c.owner, kind:c.kind, text:c.text}))) : '';
 }
+function stripFoldedDetailsForImport(input){
+  /* 접힘을 지우던 예전 경로. 접힘 내용도 본문이라 더는 지우지 않는다.
+     호출자가 남아 있어도 안전하도록 원문을 그대로 돌려준다. */
+  return String(input || '');
+}
 function parseHtmlToRofanChunks(html){
+  /* 원본 웹 경로 그대로: 정리 → 본문 추출 → 청크 파싱.
+     예전에는 여기서 stripFoldedDetailsForImport 로 접힘을 미리 지우고,
+     그 뒤 details/detail/summary 노드까지 제거했다.
+     가져오기 단계에서 접힘이 통째로 사라진 진짜 원인이 이 두 줄이었다.
+     접힘 내용은 본문이므로 파서에 그대로 넘긴다. */
   const holder = document.createElement('div');
   holder.innerHTML = sanitizePastedHTML(extractLikelyChatHTML(String(html || '')));
+  try{ if(typeof openAllFolds === "function") openAllFolds(holder); }catch(_foldErr){}
   return parseRofanChatChunks(holder).chunks || [];
 }
 function fileContentToChunks(raw, fileName){
@@ -4375,7 +5515,7 @@ function createZipBlob(entries, type){
   return new Blob(chunks, {type:type || "application/zip"});
 }
 function collectPresetValues(){
-  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerUserColor","speakerCharacterColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode","epubEditTextColor","epubQuoteColor","epubEditTextColorR","epubEditTextColorG","epubEditTextColorB","epubQuoteColorR","epubQuoteColorG","epubQuoteColorB"];
+  const ids = ["removeDetails","removeEmptyLines","removeCellEmptyLines","removeHTML","removeDecor","protectEnabled","protectToken","quoteStyle","quoteSkipEmoji","quoteSkipTags","quoteSkipSymbols","indentOutput","deleteContainsEnabled","deleteContainsToken","deleteContainsMode","removeTables","reviewDuplicates","reviewOocPairs","oocCascadeMode","speakerLabelMode","labelSpeakers","userName","characterName","speakerMarkerPreset","speakerMarkerCustom","speakerLabelColor","speakerUserColor","speakerCharacterColor","speakerColorTarget","epubTitle","epubSubtitle","epubAuthor","epubSeries","epubVolume","epubDescription","epubTags","epubLanguage","chapterSplitMode","chapterSize","chapterSeparator","chapterTitlePrefix","chapterFirstTitle","chapterKeywordInput","chapterOrderInput","chapterPosition","epubStylePreset","epubTextMode","epubEditTextColor","epubQuoteColor","epubEditTextColorR","epubEditTextColorG","epubEditTextColorB","epubQuoteColorR","epubQuoteColorG","epubQuoteColorB"];
   const data = {};
   ids.forEach(id => {
     const el = document.getElementById(id);
@@ -4400,12 +5540,12 @@ function applyPresetValues(data){
   refreshColorWidgets();
 }
 function saveCurrentPreset(){
-  if(!safeLocalStorageSet("rofan-cleaner-preset", JSON.stringify(collectPresetValues()))){ showToast("브라우저 저장소를 사용할 수 없습니다."); return; }
+  localStorage.setItem("rofan-cleaner-preset", JSON.stringify(collectPresetValues()));
   showToast("현재 옵션을 저장했습니다.");
   scheduleAutosave();
 }
 function loadSavedPreset(){
-  const raw = safeLocalStorageGet("rofan-cleaner-preset");
+  const raw = localStorage.getItem("rofan-cleaner-preset");
   if(!raw){ showToast("저장된 프리셋이 없습니다."); return; }
   try{
     applyPresetValues(JSON.parse(raw));
@@ -4420,7 +5560,7 @@ function loadSavedPreset(){
 }
 function clearSavedPreset(){
   if(!window.confirm("저장된 프리셋을 삭제하시겠습니까?")) return;
-  safeLocalStorageRemove("rofan-cleaner-preset");
+  localStorage.removeItem("rofan-cleaner-preset");
   showToast("저장된 프리셋을 삭제했습니다.");
 }
 function updateFileNameLabel(inputEl, labelEl, emptyText){
@@ -4446,23 +5586,69 @@ async function readFileAsTextSmart(file){
   const bytes = new Uint8Array(buffer);
   return decodeBytesSmart(bytes);
 }
+async function readClassicFileUsingOriginalPath(file){
+  const raw = await readFileAsTextSmart(file);
+  const chunks = fileContentToChunks(raw, file.name || "");
+  /* 수정 전 입력칸에는 디코딩한 원본 소스를 그대로 보여 준다.
+     구조화 청크는 따로 보관해 변환·내보내기에 그대로 쓴다. */
+  return {
+    raw: String(raw || ""),
+    chunks: chunks && chunks.length ? chunks : null,
+    displayText: String(raw || "")
+  };
+}
+async function loadClassicFileObject(file, options = {}){
+  if(!file) return false;
+  adoptLoadedFileName(file);          /* 보관함에서 불러오기 · 파일에서 발췌 둘 다 여기를 지난다 */
+  /* 로판AI 발췌/채팅 저장본은 채팅 경로로 보낸다.
+     기존 로그 경로는 태그를 벗겨 접힘 코드가 입력칸에서부터 사라진다. */
+  try{
+    const nameLower = String(file.name || "").toLowerCase();
+    let head = "";
+    try{ head = await file.slice(0, 4096).text(); }catch(_headErr){}
+    const isChatSave = /\.rofan\.html?$/.test(nameLower) || /data-rofan-export=/.test(head);
+    if(isChatSave && typeof window.loadChatFileObject === "function"){
+      const ok = await window.loadChatFileObject(file);
+      if(ok !== false){
+        if(!options.silentSuccess) showToast("파일을 불러왔습니다.");
+        return true;
+      }
+      /* 채팅 로더가 실패를 알리면 기존 경로로 계속 진행한다 */
+    }
+  }catch(routeErr){ console.warn("채팅 경로 실패, 기존 경로로 진행", routeErr); }
+  const parsed = await readClassicFileUsingOriginalPath(file);
+  if(options.activate !== false && activeMode !== "classic"){
+    const classicTab = document.querySelector('.tab[data-tab="classic"]');
+    if(classicTab) classicTab.click();
+  }
+  if(parsed.chunks){
+    classicLoadedChunks = parsed.chunks;
+    classicLoadedFileText = parsed.displayText;
+  }else{
+    classicLoadedChunks = null;
+    classicLoadedFileText = parsed.raw;
+  }
+  applyClassicExcerpt();
+  if(!options.silentSuccess) showToast("파일을 불러왔습니다.");
+  return true;
+}
 async function loadClassicFile(){
   const file = classicFileInput && classicFileInput.files && classicFileInput.files[0];
   if(!file) return;
   try{
-    const raw = await readFileAsTextSmart(file);
-    const chunks = fileContentToChunks(raw, file.name || "");
-    if(chunks && chunks.length){
-      classicLoadedChunks = chunks;
-      classicLoadedFileText = chunksDisplayText(chunks);
-    }else{
-      classicLoadedChunks = null;
-      classicLoadedFileText = String(raw || "");
-    }
-    applyClassicExcerpt();
-    showToast("파일을 불러왔습니다.");
+    await loadClassicFileObject(file, {activate:false});
   }catch(err){ console.error(err); showToast("파일을 읽지 못했습니다."); }
 }
+async function buildClassicFilePreviewSource(file){
+  const parsed = await readClassicFileUsingOriginalPath(file);
+  const raw = parsed.raw;
+  const lowerName = (file && file.name ? file.name : "").toLowerCase();
+  const looksMHT = /\.(mht|mhtml)$/i.test(lowerName) || /MIME-Version:\s*1\.0/i.test(raw) || /Content-Type:\s*multipart\/related/i.test(raw);
+  return looksMHT ? (extractHTMLFromMHT(raw) || raw) : raw;
+}
+window.readClassicFileUsingOriginalPath = readClassicFileUsingOriginalPath;
+window.loadClassicFileObject = loadClassicFileObject;
+window.buildClassicFilePreviewSource = buildClassicFilePreviewSource;
 
 function sliceByStartEnd(text, startNeedle, endNeedle){
   let s = String(text || "");
@@ -4475,15 +5661,12 @@ function sliceByStartEnd(text, startNeedle, endNeedle){
 function applyClassicExcerpt(){
   const start = excerptStartTextEl ? excerptStartTextEl.value : "";
   const end = excerptEndTextEl ? excerptEndTextEl.value : "";
-  let next = "";
-  if(classicLoadedChunks && classicLoadedChunks.length){
-    classicActiveChunks = sliceChunksByStartEnd(classicLoadedChunks, start, end);
-    next = chunksDisplayText(classicActiveChunks);
-  }else{
-    const base = classicLoadedFileText || (input ? input.value : "");
-    next = sliceByStartEnd(base, start, end);
-    classicActiveChunks = null;
-  }
+  /* 표시는 원본 소스를 잘라서, 변환은 청크를 잘라서 — 둘을 함께 갱신한다. */
+  const base = classicLoadedFileText || (input ? input.value : "");
+  const next = sliceByStartEnd(base, start, end);
+  classicActiveChunks = (classicLoadedChunks && classicLoadedChunks.length)
+    ? sliceChunksByStartEnd(classicLoadedChunks, start, end)
+    : null;
   classicActiveDisplayText = next;
   isApplyingClassicExcerpt = true;
   if(input) input.value = next;
@@ -4521,6 +5704,7 @@ async function loadEpubEditFile(){
     activateEpubEditTab();
     epubEditEditor.innerHTML = html;
     cachedEpubEditFileName = file.name || "원고 파일";
+  adoptLoadedFileName(file);
     transformText();
     scheduleAutosave();
     showToast("EPUB 수정 원고를 불러왔습니다.");
@@ -4532,17 +5716,79 @@ function parseStructuredMarkdown(raw){
   return structuredItemsToHtml(chunks.map(c => ({blockId:c.blockId, owner:c.owner, kind:c.kind, text:c.text})));
 }
 
+/* 마크다운 인라인 서식을 HTML 로 바꾼다. 반드시 escapeHTML 뒤에 부른다. */
+function markdownInlineToHtml(escaped){
+  return String(escaped || "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")                 // 링크는 글자만 남긴다(주소는 정리 단계에서 어차피 지워진다)
+    .replace(/(\*\*|__)(?=\S)([\s\S]*?\S)\1/g, "<strong>$2</strong>")
+    .replace(/(^|[^*\w])\*(?=\S)([^*\n]*?\S)\*(?!\*)/g, "$1<em>$2</em>")
+    .replace(/(^|[^_\w])_(?=\S)([^_\n]*?\S)_(?!_)/g, "$1<em>$2</em>")
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>");
+}
 function markdownOrTextToEditorHTML(raw, isMarkdown){
   let text = String(raw || "").replace(/\r/g, "");
-  if(isMarkdown){
-    const structured = parseStructuredMarkdown(text);
-    if(structured) return structured;
-    text = text.replace(/^#{1,6}\s+/gm, "");
-    text = text.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/__([^_]+)__/g, "$1");
-    text = text.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
-    text = text.replace(/^>\s?/gm, "");
-  }
-  return plainTextToHtml(text);
+  if(!isMarkdown) return plainTextToHtml(text);
+
+  const structured = parseStructuredMarkdown(text);
+  if(structured) return structured;
+
+  /* 예전에는 마크다운 표식을 지우기만 했다. 그래서 `# 제목` 이 그냥 문단이 되고
+     `**굵게**` 는 표식만 사라지고, `*기울임*` 은 별표가 그대로 남고,
+     `- 목록` 은 한 문단 안에 <br> 로 뭉쳐졌다. 실제 서식으로 바꾼다. */
+  const out = [];
+  const lines = text.split("\n");
+  let paragraph = [];
+  let list = null;          // {tag:"ul"|"ol", items:[]}
+  let quote = [];
+
+  const flushParagraph = () => {
+    if(!paragraph.length) return;
+    out.push("<p>" + markdownInlineToHtml(escapeHTML(paragraph.join("\n")).replace(/\n/g, "<br>")) + "</p>");
+    paragraph = [];
+  };
+  const flushList = () => {
+    if(!list) return;
+    out.push("<" + list.tag + ">" + list.items.map(item => "<li>" + markdownInlineToHtml(escapeHTML(item)) + "</li>").join("") + "</" + list.tag + ">");
+    list = null;
+  };
+  const flushQuote = () => {
+    if(!quote.length) return;
+    out.push("<blockquote>" + quote.map(line => "<p>" + markdownInlineToHtml(escapeHTML(line)) + "</p>").join("") + "</blockquote>");
+    quote = [];
+  };
+  const flushAll = () => { flushParagraph(); flushList(); flushQuote(); };
+
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if(!trimmed){ flushAll(); return; }
+
+    const heading = trimmed.match(/^(#{1,6})\s+(.*)$/);
+    if(heading){
+      flushAll();
+      const level = Math.min(6, heading[1].length);
+      out.push("<h" + level + ">" + markdownInlineToHtml(escapeHTML(heading[2].trim())) + "</h" + level + ">");
+      return;
+    }
+    if(/^([-*_])\1{2,}$/.test(trimmed.replace(/\s+/g, ""))){ flushAll(); out.push("<hr>"); return; }
+
+    const quoted = trimmed.match(/^>\s?(.*)$/);
+    if(quoted){ flushParagraph(); flushList(); quote.push(quoted[1]); return; }
+
+    const bullet = trimmed.match(/^[-*+]\s+(.*)$/);
+    const ordered = trimmed.match(/^\d+[.)]\s+(.*)$/);
+    if(bullet || ordered){
+      flushParagraph(); flushQuote();
+      const tag = bullet ? "ul" : "ol";
+      if(!list || list.tag !== tag){ flushList(); list = {tag, items:[]}; }
+      list.items.push((bullet ? bullet[1] : ordered[1]).trim());
+      return;
+    }
+
+    flushList(); flushQuote();
+    paragraph.push(line);
+  });
+  flushAll();
+  return out.join("\n") || plainTextToHtml(text);
 }
 function sanitizeInlineStyle(style){
   const allowed = [];
@@ -4600,11 +5846,28 @@ async function readZipTextEntries(bytes){
   }
   return entries;
 }
+/* 문서 맨 앞에 홀로 있는 <h1> 하나만 걷어 낸다. 본문 중간의 h1 은 사용자가 넣은 것일 수 있어 남긴다. */
+function stripLeadingChapterHeading(html){
+  try{
+    const box = document.createElement("div");
+    box.innerHTML = String(html || "");
+    const first = box.firstElementChild;
+    if(first && first.tagName === "H1" && first.textContent.trim()){
+      first.remove();
+      return box.innerHTML;
+    }
+  }catch(_){ }
+  return html;
+}
 async function extractHtmlFromEpubFile(file){
   const bytes = new Uint8Array(await file.arrayBuffer());
   const entries = await readZipTextEntries(bytes);
   const bodyEntries = entries.filter(e => /\.(xhtml|html|htm)$/i.test(e.name) && !/nav|toc|cover/i.test(e.name)).sort((a,b)=>a.name.localeCompare(b.name));
-  const html = bodyEntries.map(e => sanitizeEditorHTML(e.text)).join("\n<hr/>\n");
+  /* 챕터 파일은 맨 앞에 <h1>챕터 제목</h1> 을 달고 나간다(fullChapterHtml).
+     그대로 본문으로 되불러오면 다음 내보내기에서 제목이 또 붙어 왕복할 때마다 쌓였다
+     (2차 EPUB 이 <h1>Prologue</h1><h1>Prologue</h1> 로 시작했다).
+     제목은 챕터 정보로 따로 관리되므로, 맨 앞의 h1 한 개만 본문에서 뺀다. */
+  const html = bodyEntries.map(e => stripLeadingChapterHeading(sanitizeEditorHTML(e.text))).join("\n<hr/>\n");
   return html || "";
 }
 function selectEditorRangeForText(query){
@@ -4642,8 +5905,25 @@ function replaceAllInEpubEditor(){
   const r = epubReplaceTextEl ? epubReplaceTextEl.value : "";
   if(!q || !epubEditEditor) return;
   const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"), "gi");
-  epubEditEditor.innerHTML = epubEditEditor.innerHTML.replace(re, escapeHTML(r));
-  transformText(); scheduleAutosave(); showToast("모두 바꿨습니다.");
+  /* 예전에는 innerHTML 을 통째로 치환했다. 그래서 본문에 없는 글자도
+     태그 이름·속성값까지 함께 바뀌었다 — 예를 들어 "user" 를 바꾸면
+     data-owner="user" 가 data-owner="손님" 이 되어 유저/캐릭터 구분이 깨졌다.
+     (내보내기와 되불러오기가 이 속성에 의존한다)
+     텍스트 노드만 훑어 바꾼다. 마크업은 손대지 않는다. */
+  const walker = document.createTreeWalker(epubEditEditor, NodeFilter.SHOW_TEXT, null);
+  const targets = [];
+  for(let node = walker.nextNode(); node; node = walker.nextNode()){
+    re.lastIndex = 0;
+    if(re.test(node.nodeValue || "")) targets.push(node);
+  }
+  let hits = 0;
+  targets.forEach(node => {
+    const before = node.nodeValue || "";
+    const after = before.replace(re, () => { hits += 1; return r; });
+    if(after !== before) node.nodeValue = after;
+  });
+  transformText(); scheduleAutosave();
+  showToast(hits ? `${hits}곳을 바꿨습니다.` : "찾지 못했습니다.");
 }
 function rememberEditorSelection(){
   const sel = window.getSelection();
@@ -4768,6 +6048,48 @@ function quoteStyleForType(type, color){
   if(type === "soft") return `border-color:${color};`;
   return `border-left-color:${color};`;
 }
+/* 선택 범위에 통째로 끼워 넣기 때문에 <p> 안에 <blockquote> 가 들어간다.
+   HTML 사양이 허용하지 않는 중첩이고, 그대로 EPUB xhtml 로 나가 뷰어마다 다르게 그려진다.
+   문단 밖으로 끌어내고, 앞뒤에 남은 글이 있으면 각각 문단으로 쪼갠다. */
+function liftQuotesOutOfParagraphs(){
+  if(!epubEditEditor) return;
+  let guard = 0;
+  while(guard++ < 20){
+    const quote = epubEditEditor.querySelector("p > blockquote");
+    if(!quote) break;
+    const p = quote.parentElement;
+    const makeSibling = () => {
+      const el = document.createElement("p");
+      if(p.className) el.className = p.className;
+      const style = p.getAttribute("style");
+      if(style) el.setAttribute("style", style);
+      return el;
+    };
+    const before = makeSibling(), after = makeSibling();
+    while(p.firstChild && p.firstChild !== quote) before.appendChild(p.firstChild);
+    let node = quote.nextSibling;
+    while(node){ const next = node.nextSibling; after.appendChild(node); node = next; }
+    const frag = document.createDocumentFragment();
+    if(before.textContent.trim() || before.querySelector("img")) frag.appendChild(before);
+    frag.appendChild(quote);
+    if(after.textContent.trim() || after.querySelector("img")) frag.appendChild(after);
+    p.replaceWith(frag);
+  }
+}
+/* 선택 범위에 통째로 끼워 넣는 방식이라 원래 문단의 빈 껍데기가 남을 수 있다.
+   글도 그림도 없는 인용·문단만 지운다(사용자 내용은 건드리지 않는다). */
+function dropEmptyQuoteShells(){
+  if(!epubEditEditor) return;
+  const isEmpty = el => !el.textContent.trim() && !el.querySelector("img, br");
+  epubEditEditor.querySelectorAll("blockquote").forEach(quote => {
+    /* 인용 바로 앞뒤에 생긴 빈 껍데기 문단만 지운다.
+       (문서 전체의 빈 문단을 쓸면 사용자가 일부러 띄운 줄까지 사라진다) */
+    [quote.previousElementSibling, quote.nextElementSibling].forEach(sib => {
+      if(sib && sib.tagName === "P" && isEmpty(sib)) sib.remove();
+    });
+    if(isEmpty(quote)) quote.remove();
+  });
+}
 function makeQuoteHtml(type, content){
   const cls = type === "blog" ? "quoteBlog" : (type === "soft" ? "quoteSoft" : (type === "postype" ? "quotePostype" : "quoteLine"));
   const color = getQuoteColor();
@@ -4777,20 +6099,82 @@ function getCustomQuoteTemplate(){
   const el = document.getElementById("epubQuoteCustomTemplate");
   return el ? el.value.trim() : "";
 }
+/* 선택이 이미 인용 안에 있으면 새로 감싸지 말고 그 인용의 옷만 갈아입힌다.
+   감싸기로 처리하면 선택 HTML 에 바깥 blockquote 가 안 들어와 중첩이 계속 쌓였고
+   (프리셋을 네 번 누르면 4중첩), 빈 껍데기 blockquote 와 복제된 문단이 남았다. */
+function quoteAroundSelection(){
+  if(!epubEditEditor) return null;
+  const range = getActiveEditorRange();
+  if(!range) return null;
+  let node = range.commonAncestorContainer;
+  if(node && node.nodeType !== 1) node = node.parentElement;
+  if(!node || !node.closest) return null;
+  const quote = node.closest("blockquote");
+  return (quote && epubEditEditor.contains(quote)) ? quote : null;
+}
 function applyQuoteStyle(type){
   if(!epubEditEditor) return;
+  const existing = quoteAroundSelection();
+  if(existing){
+    if(type === "custom"){
+      const tpl = getCustomQuoteTemplate();
+      if(!tpl){ showToast("직접 입력 형식을 입력하세요."); return; }
+      if(!tpl.includes("{{content}}")){ showToast("형식 안에 {{content}} 자리를 넣어 주세요. 그 자리에 선택한 글이 들어갑니다."); return; }
+      const box = document.createElement("div");
+      box.innerHTML = tpl.replace(/{{content}}/g, existing.innerHTML);
+      existing.replaceWith(...box.childNodes);
+    }else{
+      const cls = type === "blog" ? "quoteBlog" : (type === "soft" ? "quoteSoft" : (type === "postype" ? "quotePostype" : "quoteLine"));
+      existing.className = cls;
+      existing.setAttribute("style", quoteStyleForType(type, getQuoteColor()));
+    }
+    liftQuotesOutOfParagraphs();
+    updateEpubPreview(); scheduleAutosave(); showToast("인용 형식을 바꿨습니다.");
+    return;
+  }
   const selected = getSelectedHtml();
   if(!selected){ showToast("인용할 문장을 드래그하세요."); return; }
+  /* 이미 인용으로 감싼 문장에 다른 프리셋을 다시 적용하면 blockquote 가 겹겹이 쌓였다
+     (네 번 누르면 4중첩). 프리셋은 '교체'가 자연스러우므로 바깥 인용을 먼저 벗긴다. */
+  const unwrapped = (() => {
+    try{
+      const box = document.createElement("div");
+      box.innerHTML = selected;
+      let changed = false;
+      /* 트리플 클릭으로 문단을 고르면 선택 HTML 이 <blockquote>…</blockquote><p></p> 처럼
+         자식이 여럿이라 "자식 1개일 때만" 조건에 걸리지 않았고, 인용이 겹겹이 쌓였다.
+         최상위에 있는 blockquote 는 몇 개든 제자리에서 벗긴다. */
+      for(let guard = 0; guard < 8; guard++){
+        const quotes = Array.from(box.children).filter(el => el.tagName === "BLOCKQUOTE");
+        if(!quotes.length) break;
+        quotes.forEach(q => {
+          const frag = document.createDocumentFragment();
+          while(q.firstChild) frag.appendChild(q.firstChild);
+          q.replaceWith(frag);
+        });
+        changed = true;
+      }
+      /* 비어 버린 껍데기 문단이 남으면 지운다 */
+      Array.from(box.children).forEach(el => { if(!el.textContent.trim() && !el.querySelector("img")) el.remove(); });
+      return changed ? box.innerHTML : selected;
+    }catch(_){ return selected; }
+  })();
   let html = "";
   if(type === "custom"){
     const tpl = getCustomQuoteTemplate();
     if(!tpl){ showToast("직접 입력 형식을 입력하세요."); return; }
-    html = tpl.includes("{{content}}") ? tpl.replace(/{{content}}/g, selected) : `${tpl}${selected}`;
+    if(!tpl.includes("{{content}}")){
+      /* {{content}} 가 없으면 예전에는 선택 글 앞에 형식을 그냥 덧붙이고
+         "적용했습니다" 라고 했다. 무엇이 잘못됐는지 알 수 없었다. */
+      showToast("형식 안에 {{content}} 자리를 넣어 주세요. 그 자리에 선택한 글이 들어갑니다.");
+      return;
+    }
+    html = tpl.replace(/{{content}}/g, unwrapped);
   }else{
-    html = makeQuoteHtml(type, selected);
+    html = makeQuoteHtml(type, unwrapped);
   }
   const ok = replaceSelectionWithHtml(html);
-  if(ok){ updateEpubPreview(); scheduleAutosave(); showToast("인용구를 적용했습니다."); }
+  if(ok){ liftQuotesOutOfParagraphs(); dropEmptyQuoteShells(); updateEpubPreview(); scheduleAutosave(); showToast("인용구를 적용했습니다."); }
   else showToast("선택 영역을 다시 드래그해 주세요.");
 }
 function selectionInsideEditor(){
@@ -4805,19 +6189,26 @@ function wrapRangeWithSpan(range, styleText){
 function applyEpubTextFormat(){
   if(!epubEditEditor) return;
   const size = Math.max(8, Math.min(72, parseInt(epubEditFontSizeEl ? epubEditFontSizeEl.value : "15",10) || 15));
+  /* 0·999·-3 을 넣어도 실제로는 8~72 로 잘려 적용된다. 칸에도 그 값을 적어 준다. */
+  if(epubEditFontSizeEl && String(epubEditFontSizeEl.value) !== String(size)) epubEditFontSizeEl.value = String(size);
   const color = epubEditTextColorEl ? epubEditTextColorEl.value : "#1f2d36";
   const range = getActiveEditorRange();
   if(range && !range.collapsed){
     const ok = wrapRangeWithSpan(range, `font-size:${size}px;color:${color};`);
     if(!ok){ showToast("선택 영역을 다시 드래그해 주세요."); return; }
   }else{
+    /* 예전에는 크기·색을 편집기 '상자'에만 걸고 자식에는 inherit 을 심었다.
+       내보내기는 문단(unit)의 HTML 만 모으므로 상자의 스타일은 따라가지 못했고,
+       그래서 전체 적용한 서식이 Markdown 에만 반영되고 EPUB·HTML·DOC 에는 빠졌다.
+       (게다가 남은 inherit 은 서식 제거 뒤에도 문단에 붙어 나갔다)
+       화면 미리보기용으로 상자에도 걸되, 실제 값은 문단마다 직접 적는다. */
     epubEditEditor.style.setProperty("font-size", size + "px", "important");
     epubEditEditor.style.setProperty("color", color, "important");
     Array.from(epubEditEditor.children).forEach(el => {
-      if(el.nodeType === 1){
-        if(!el.style.fontSize) el.style.fontSize = "inherit";
-        if(!el.style.color) el.style.color = "inherit";
-      }
+      if(el.nodeType !== 1) return;
+      if(el.classList && el.classList.contains("manual-chapter-separator")) return;
+      el.style.fontSize = size + "px";
+      el.style.color = color;
     });
   }
   rememberEditorSelection();
@@ -4839,6 +6230,13 @@ function clearEpubInlineFormat(){
     epubEditEditor.querySelectorAll("span,font").forEach(n => n.replaceWith(...n.childNodes));
     epubEditEditor.style.fontSize="";
     epubEditEditor.style.color="";
+    /* 전체 적용이 문단마다 적어 둔 크기·색(그리고 예전 방식이 남긴 inherit)도 같이 지운다.
+       이걸 안 지우면 "서식 제거" 뒤에도 내보낸 파일에 스타일이 그대로 남았다. */
+    epubEditEditor.querySelectorAll("[style]").forEach(el => {
+      el.style.removeProperty("font-size");
+      el.style.removeProperty("color");
+      if(!el.getAttribute("style")) el.removeAttribute("style");
+    });
   }
   updateEpubPreview(); scheduleAutosave(); showToast("서식을 제거했습니다.");
 }
@@ -4891,12 +6289,44 @@ function editorHtmlToChapterBlocks(html){
 
 function editorStructuredBlocks(){
   if(!epubEditEditor) return [];
-  return Array.from(epubEditEditor.querySelectorAll('[data-owner][data-kind], .rofan-block')).map((el, idx) => ({
-    blockId: el.getAttribute('data-block-id') || el.getAttribute('data-block') || ('editor-' + idx),
-    owner: el.getAttribute('data-owner') || 'character',
-    kind: el.getAttribute('data-kind') || 'normal',
-    text: (el.innerText || el.textContent || '').trim()
-  })).filter(it => it.text);
+  const marked = Array.from(epubEditEditor.querySelectorAll('[data-owner][data-kind], .rofan-block'));
+  if(!marked.length) return [];
+  /* Markdown 내보내기도 표시된 블록만 모으고 있었다. 그래서 블록 밖에 직접 쓴 문단이
+     .md 에서만 계속 사라졌다(EPUB·HTML 은 unitsFromRofanBlocksInEditor 쪽에서 고쳤다).
+     여기도 문서 순서를 따라가며 블록 밖 내용을 함께 담는다. 화자 표시가 없는 글은
+     owner/kind 를 비워 두어 아래 변환이 평범한 문단으로 다루게 한다. */
+  const markedSet = new Set(marked);
+  const items = [];
+  let idx = 0;
+  const skip = el => el.classList && (el.classList.contains('manual-chapter-separator') || el.closest('.manual-chapter-separator'));
+  const walk = parent => {
+    Array.from(parent.childNodes).forEach(node => {
+      if(node.nodeType === Node.ELEMENT_NODE){
+        if(skip(node)) return;
+        if(markedSet.has(node)){
+          const text = (node.innerText || node.textContent || '').trim();
+          if(text) items.push({
+            blockId: node.getAttribute('data-block-id') || node.getAttribute('data-block') || ('editor-' + idx),
+            owner: node.getAttribute('data-owner') || 'character',
+            kind: node.getAttribute('data-kind') || 'normal',
+            text
+          });
+          idx += 1;
+          return;
+        }
+        if(node.querySelector && node.querySelector('[data-owner][data-kind], .rofan-block')){ walk(node); return; }
+        const text = (node.innerText || node.textContent || '').trim();
+        if(text) items.push({ blockId: 'editor-plain-' + (idx++), owner: '', kind: 'normal', text });
+        return;
+      }
+      if(node.nodeType === Node.TEXT_NODE){
+        const text = String(node.textContent || '').trim();
+        if(text) items.push({ blockId: 'editor-plain-' + (idx++), owner: '', kind: 'normal', text });
+      }
+    });
+  };
+  walk(epubEditEditor);
+  return items.filter(it => it.text);
 }
 function editorStructuredMarkdown(){
   const items = editorStructuredBlocks();
@@ -5227,6 +6657,16 @@ requestAnimationFrame(syncActiveResultHeight);
   function findChapterById(id){ return currentPlan().chapters.find(ch => ch.id === id); }
   function addChapter(){
     const plan = currentPlan();
+    /* 끝 지점이 없는 챕터는 '마지막일 때만' 문서 끝까지를 갖는다(chaptersFromPlan).
+       그래서 챕터를 추가하는 순간 직전 챕터가 빈 챕터가 되고 본문이 통째로 새 챕터로 밀렸다
+       — 미리보기에 "Prologue · 빈 챕터 · 0자" 로 보이던 것.
+       직전 챕터의 끝을 문서 끝으로 고정해 본문을 제자리에 두고, 새 챕터는 비워 둔다.
+       끝 지점을 앞으로 당기면 그때 뒤쪽이 새 챕터로 넘어간다. */
+    const units = (typeof getChapterUnits === "function") ? getChapterUnits() : [];
+    const last = plan.chapters[plan.chapters.length - 1];
+    if(last && (last.endPara === null || last.endPara === undefined) && units.length){
+      last.endPara = units.length - 1;
+    }
     plan.chapters.push({ id: uid(), title: getChapterTitleFallback(plan.chapters.length), endPara: null, note:"", imageData:"", imageName:"", imageType:"", imagePos:"belowTitle" });
     saveState();
     renderManualChapterManager();
@@ -5357,6 +6797,12 @@ requestAnimationFrame(syncActiveResultHeight);
       chapterItems.push({id:`ch${idx+1}`, href:file, title:ch.title});
       entries.push({name:`OEBPS/${file}`, data:makeXhtmlDoc(ch.title, fullChapterHtml(ch, true))});
     });
+    /* styles.css 의 @font-face 는 언제나 uploaded-font 를 가리키는데(getEpubCss),
+       이 재정의 빌더가 폰트 바이트 넣기를 빠뜨려 EPUB 안에 없는 파일을 참조하고 있었다.
+       원래 빌더(5187행 근처)와 같이 넣는다. */
+    if(typeof cachedEpubFontAsset !== "undefined" && cachedEpubFontAsset && cachedEpubFontAsset.dataUrl && typeof dataUrlToUint8Array === "function"){
+      entries.push({name:`OEBPS/${cachedEpubFontAsset.epubName || cachedEpubFontAsset.name}`, data:dataUrlToUint8Array(cachedEpubFontAsset.dataUrl)});
+    }
     if(cover){
       entries.push({name:`OEBPS/${cover.name}`, data:cover.data});
       entries.push({name:"OEBPS/cover.xhtml", data:makeXhtmlDoc("Cover", `<section class="cover"><img src="${safeAttr(cover.name)}" alt="cover"/></section>`)});
@@ -5365,7 +6811,7 @@ requestAnimationFrame(syncActiveResultHeight);
     entries.push({name:"OEBPS/nav.xhtml", data:makeXhtmlDoc("목차", `<nav epub:type="toc" id="toc"><h1>목차</h1><ol>${navItems}</ol></nav>`)});
     const uidValue = (typeof uuidLike === "function") ? uuidLike() : ("id-" + Date.now());
     const metaTags = [`<dc:identifier id="pub-id">${safeHtml(uidValue)}</dc:identifier>`,`<dc:title>${safeHtml(cfg.title || "정리한 로그")}</dc:title>`, cfg.subtitle ? `<dc:title id="subtitle">${safeHtml(cfg.subtitle)}</dc:title>` : "", cfg.author ? `<dc:creator>${safeHtml(cfg.author)}</dc:creator>` : "", `<dc:language>${safeHtml(cfg.language || "ko")}</dc:language>`, cfg.description ? `<dc:description>${safeHtml(cfg.description)}</dc:description>` : "", ...((cfg.tags||[]).map(tag => `<dc:subject>${safeHtml(tag)}</dc:subject>`)), cfg.series ? `<meta property="belongs-to-collection" id="series">${safeHtml(cfg.series)}</meta>` : "", cfg.volume ? `<meta property="group-position">${safeHtml(cfg.volume)}</meta>` : "", `<meta property="dcterms:modified">${new Date().toISOString().replace(/\.\d{3}Z$/, "Z")}</meta>`, cover ? `<meta name="cover" content="cover-image"/>` : ""].filter(Boolean).join("\n");
-    const manifest = [`<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`, `<item id="css" href="styles.css" media-type="text/css"/>`, cover ? `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>` : "", cover ? `<item id="cover-image" href="${safeAttr(cover.name)}" media-type="${safeAttr(cover.media)}" properties="cover-image"/>` : "", ...chapterItems.map(item => `<item id="${item.id}" href="${safeAttr(item.href)}" media-type="application/xhtml+xml"/>`)].filter(Boolean).join("\n");
+    const manifest = [`<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`, `<item id="css" href="styles.css" media-type="text/css"/>`, (typeof cachedEpubFontAsset !== "undefined" && cachedEpubFontAsset) ? `<item id="uploaded-font" href="${safeAttr(cachedEpubFontAsset.epubName || cachedEpubFontAsset.name)}" media-type="${safeAttr(cachedEpubFontAsset.type || "font/woff")}"/>` : "", cover ? `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>` : "", cover ? `<item id="cover-image" href="${safeAttr(cover.name)}" media-type="${safeAttr(cover.media)}" properties="cover-image"/>` : "", ...chapterItems.map(item => `<item id="${item.id}" href="${safeAttr(item.href)}" media-type="application/xhtml+xml"/>`)].filter(Boolean).join("\n");
     const spine = [cover ? `<itemref idref="cover" linear="no"/>` : "", ...chapterItems.map(item => `<itemref idref="${item.id}"/>`)].filter(Boolean).join("\n");
     const opf = `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="pub-id" xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/"><metadata>${metaTags}</metadata><manifest>${manifest}</manifest><spine>${spine}</spine></package>`;
     entries.push({name:"OEBPS/content.opf", data:opf});
@@ -5375,12 +6821,15 @@ requestAnimationFrame(syncActiveResultHeight);
 
   function installEmojiControl(){
     if(qs("#removeEmojiParagraphs")) return;
-    const row = qs(".basicOptionsRow") || qs("#optionsBoard .optionRow");
+    const protect = qs("#protectEnabled");
+    const protectLabel = protect ? protect.closest("label") : null;
+    const row = (protectLabel && protectLabel.parentElement) || qs(".basicOptionsRow") || qs("#optionsBoard .optionRow");
     if(!row) return;
+    if(row.querySelector("#removeEmojiParagraphs")) return;
     const label = document.createElement("label");
     label.className = "toggle compactToggle";
     label.innerHTML = `<input type="checkbox" id="removeEmojiParagraphs">이모지 포함 문단 제거`;
-    row.insertBefore(label, row.querySelector("#protectEnabled") ? row.querySelector("#protectEnabled").closest("label") : null);
+    row.insertBefore(label, protectLabel && protectLabel.parentElement === row ? protectLabel : null);
     qs("#removeEmojiParagraphs").addEventListener("change", () => { if(typeof transformText === "function") transformText(); saveState(); });
   }
   const originalStructuralPlan = (typeof createStructuralDeletePlan === "function") ? createStructuralDeletePlan : null;
@@ -5497,10 +6946,20 @@ requestAnimationFrame(syncActiveResultHeight);
       .editorBox.resultBox{align-self:start!important;min-height:0!important;overflow:visible!important;}
       .editorBox.resultBox .rawResultStorage{display:none!important;}
       .editorBox.resultBox .richResultBox{display:block!important;height:var(--synced-result-height,520px)!important;min-height:0!important;max-height:var(--synced-result-height,520px)!important;overflow:auto!important;flex:0 0 auto!important;box-sizing:border-box!important;}
-      .manualChapterIntro{padding:10px 12px;border:1px dashed var(--line);border-radius:14px;background:var(--paper2);color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:12px;}
+      /* [v337] 점선 상자는 이 화면의 '빈 목록'(.emptyState) 표시라, 늘 떠 있는 안내문에 쓰니
+         혼자 튀어 보였다. 다른 블록의 안내문과 같은 결(.sectionDesc)로 맞춘다. */
+      .manualChapterIntro{margin:0 2px 12px;color:var(--muted);font-size:12px;line-height:1.6;}
       .manualChapterHead{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px;}
       .manualChapterRows{display:grid;gap:8px;}
-      .manualChapterRow{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:14px;background:#fff;padding:9px 10px;}
+      /* [v337] 격자에서 가로 flex 로. 격자는 칸을 미리 정해 두는 방식이라, 좁은 화면 규칙이
+         칸 수를 줄이면 단추가 아래 줄로 떨어지고 그 자리 폭이 26px 뿐이라 글자가 한 자씩
+         접혔다('편/집'). 또 삭제 단추가 없는 줄에서는 빈 칸의 간격만큼 오른쪽이 떴다.
+         flex 는 단추 수가 하나든 둘이든 늘 줄 맨 오른쪽에 붙인다. */
+      .manualChapterRow{display:flex;flex-wrap:nowrap;gap:8px;align-items:center;border:1px solid var(--line);border-radius:14px;background:#fff;padding:9px 10px;}
+      .manualChapterRow>b{flex:0 0 auto;}
+      .manualChapterRow>span{flex:1 1 auto;}
+      .manualChapterRow>.btn{flex:0 0 auto;margin-left:auto;white-space:nowrap;}
+      .manualChapterRow>.btn~.btn{margin-left:0;}
       .manualChapterRow b{width:24px;height:24px;border-radius:8px;background:var(--paper2);display:grid;place-items:center;color:var(--sub);font-size:12px;}
       .manualChapterRow span{min-width:0;display:flex;flex-direction:column;gap:2px;}
       .manualChapterRow strong{font-weight:760;color:rgba(31,45,54,.76);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -5526,7 +6985,7 @@ requestAnimationFrame(syncActiveResultHeight);
       .chapterImage img{max-width:100%;height:auto;border-radius:12px;}
       .manual-chapter-separator{border:0;border-top:2px dashed var(--line);margin:18px 0;position:relative;}
       .manual-chapter-separator:after{content:"챕터 구분";display:inline-block;position:relative;top:-13px;background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--muted);font-size:11px;}
-      @media(max-width:860px){.manualChapterForm{grid-template-columns:1fr}.manualChapterRow{grid-template-columns:26px minmax(0,1fr);}.manualChapterRow .btn{font-size:11px;padding:6px 8px;min-height:30px}.chapterPreviewItem>summary{grid-template-columns:26px minmax(0,1fr)}.chapterPreviewItem>summary em{grid-column:2}.editorBox.resultBox .richResultBox{height:420px!important;max-height:420px!important;min-height:320px!important;}}
+      @media(max-width:860px){.manualChapterForm{grid-template-columns:1fr}.manualChapterRow>b{width:22px;height:22px;font-size:11px}.manualChapterRow .btn{font-size:11px;padding:6px 8px;min-height:30px}.chapterPreviewItem>summary{grid-template-columns:26px minmax(0,1fr)}.chapterPreviewItem>summary em{grid-column:2}.editorBox.resultBox .richResultBox{height:420px!important;max-height:420px!important;min-height:320px!important;}}
     `;
     document.head.appendChild(style);
   }
@@ -5547,13 +7006,24 @@ requestAnimationFrame(syncActiveResultHeight);
 
 
   function installResultHeightWatchers(){
-    const targets = [qs("#chatPaste"), qs("#inputText"), qs("#chatOutputTextPreview"), qs("#outputTextPreview")].filter(Boolean);
-    if(window.ResizeObserver){
-      const ro = new ResizeObserver(() => syncActiveResultHeight());
-      targets.forEach(t => ro.observe(t));
-    }
+    /* 결과 미리보기 자신을 관찰하면 높이를 고치는 행위가 다시 관찰을 부른다.
+       이 되먹임이 ResizeObserver 경고의 정체이자, 맨 아래에서 몇 줄 튕겨 오르던 원인이다.
+       입력측만 관찰한다. */
+    /* 크기를 계속 관찰하거나 주기적으로 다시 재면, 높이를 정하는 행위가 다시 측정을
+       부르는 되먹임이 된다. 그리드를 우회해서 돌기 때문에 잠금·임계만으로는 못 막았다.
+       관찰과 주기 호출을 없애고, 확실한 시점에만 한 번씩 맞춘다. */
     ["load","resize","orientationchange"].forEach(ev => window.addEventListener(ev, () => setTimeout(syncActiveResultHeight, 60), {passive:true}));
-    setInterval(() => { if(mode() === "classic" || mode() === "chat") syncActiveResultHeight(); }, 800);
+    document.addEventListener("click", e => {
+      const t = e.target;
+      if(!t || !t.closest) return;
+      if(t.closest(".tab")) setTimeout(syncActiveResultHeight, 140);
+      /* 높이 조절 버튼(− 50% +)을 누르면 결과칸도 따라와야 한다.
+         주기 호출을 없애면서 이 연결이 끊겨 창 크기가 바뀌지 않았다. */
+      if(t.closest("[data-editor-size-key],[data-editor-size-value]")){
+        [0, 80, 260].forEach(ms => setTimeout(syncActiveResultHeight, ms));
+      }
+    }, true);
+    [300, 1200, 2500].forEach(ms => setTimeout(syncActiveResultHeight, ms));
   }
 
   function initFinalPatch(){
@@ -5889,22 +7359,10 @@ requestAnimationFrame(syncActiveResultHeight);
     });
   }
   function hardSyncResultHeight(){
-    if(currentMode() !== 'classic' && currentMode() !== 'chat') return;
-    const panel = currentMode() === 'chat' ? qs('#chatPanel') : qs('#classicPanel');
-    if(!panel || panel.classList.contains('hidden')) return;
-    const left = currentMode() === 'chat' ? qs('#chatPaste', panel) : (qs('#inputTextPreview', panel) || qs('#inputText', panel));
-    const preview = currentMode() === 'chat' ? qs('#chatOutputTextPreview', panel) : qs('#outputTextPreview', panel);
-    const box = preview && preview.closest('.resultBox');
-    if(!left || !preview) return;
-    if(window.matchMedia('(max-width: 860px)').matches){
-      preview.style.height = '420px'; preview.style.maxHeight = '420px'; preview.style.overflow = 'auto'; return;
-    }
-    const apply = () => {
-      const h = Math.max(320, Math.round(left.getBoundingClientRect().bottom - preview.getBoundingClientRect().top));
-      preview.style.height = h + 'px'; preview.style.maxHeight = h + 'px'; preview.style.minHeight = '0'; preview.style.overflow = 'auto'; preview.style.flex = '0 0 auto';
-      if(box){ box.style.height = Math.max(h, Math.round(left.getBoundingClientRect().bottom - box.getBoundingClientRect().top)) + 'px'; box.style.overflow = 'visible'; box.style.minHeight = '0'; }
-    };
-    requestAnimationFrame(apply); setTimeout(apply, 60); setTimeout(apply, 180);
+    /* v138: 높이 계산을 syncActiveResultHeight 하나로 일원화한다.
+       이 함수는 700ms 주기·클릭·입력마다 자기 값으로 덮어쓰며
+       본 계산과 싸웠다 — 크기가 굳거나 오락가락하던 마지막 원인. */
+    return;
   }
   function installPatchStyle(){
     if(qs('#rofanActuallyFinalPatchStyle')) return;
@@ -5935,10 +7393,32 @@ requestAnimationFrame(syncActiveResultHeight);
     updatePreviewPatch();
     hardSyncResultHeight();
   }
-  document.addEventListener('click', () => setTimeout(() => { hideEditOnlyBoards(); hardSyncResultHeight(); updatePreviewPatch(); }, 20), true);
-  document.addEventListener('input', () => setTimeout(() => { hideEditOnlyBoards(); hardSyncResultHeight(); updatePreviewPatch(); }, 20), true);
+  /* EPUB 편집 화면이 아닐 때는 장 계획·미리보기 재생성을 건너뛴다.
+     로그 다듬기 탭에서 버튼을 누를 때마다 결과 전체를 다시 장으로 쪼개던 것 —
+     긴 로그에서 클릭 렉의 원인. 보드 표시 갱신(값싼 토글)만 남긴다. */
+  /* 미리보기 재생성은 이제 어떤 훅에서도 자동으로 돌지 않는다.
+     '미리보기 생성' 버튼과 챕터 편집 액션(추가·초기화·저장)의 명시 호출만 남는다. */
+  window.__aiEpubPreviewNow = () => {
+    try { renderRowsPatch(); renderSearchResultsPatch(); updatePreviewPatch(); }
+    catch (err) { console.warn("미리보기 생성", err); }
+  };
+  document.addEventListener('click', () => setTimeout(hideEditOnlyBoards, 20), true);
+  /* 키 입력마다 장 목록·미리보기를 통째로 다시 만들던 낭비 — 입력이 멎은 뒤 한 번만 */
+  let editInputTimer = 0;
+  document.addEventListener('input', () => {
+    clearTimeout(editInputTimer);
+    editInputTimer = setTimeout(hideEditOnlyBoards, 200);
+  }, true);
   window.addEventListener('resize', () => setTimeout(hardSyncResultHeight, 50), {passive:true});
-  setInterval(() => { hideEditOnlyBoards(); hardSyncResultHeight(); }, 700);
+  /* 상시 0.7초 루프 제거: 앱이 켜져 있는 내내 돌며 체감 렉의 상시 비용이었다.
+     hardSyncResultHeight 는 이 상시 루프에서만 뺐다 — 창 크기 변경·명시적 동기화
+     시점에는 그대로 돈다(전면 제거는 높이 회귀 위험이 있어 별도 판단 사항).
+     화면 정리는 실제로 바뀌는 순간(탭 전환·복귀·창 크기 변경)에만 한다. */
+  const boardTidy = () => { try { hideEditOnlyBoards(); } catch(_) {} };
+  addEventListener("resize", boardTidy, {passive:true});
+  addEventListener("orientationchange", boardTidy, {passive:true});
+  document.addEventListener("visibilitychange", () => { if(!document.hidden) boardTidy(); });
+  [300, 1200].forEach(ms => setTimeout(boardTidy, ms));
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootFinalFix); else bootFinalFix();
 })();
 
@@ -6606,6 +8086,15 @@ requestAnimationFrame(syncActiveResultHeight);
       ev.preventDefault(); ev.stopImmediatePropagation();
       const unitList = units();
       const pl = sanitizePlan(plan(), unitList);
+      /* 끝 지점이 없는 챕터는 '마지막일 때만' 문서 끝까지를 갖는다(chaptersFromPlan).
+         그래서 챕터를 추가하는 순간 직전 챕터가 빈 챕터로 변하고 본문이 통째로
+         새 챕터로 밀려났다 — 미리보기에 "Prologue · 빈 챕터 · 0자" 로 보이던 것.
+         직전 챕터의 끝을 문서 끝으로 고정해 본문을 제자리에 두고, 새 챕터는 비워 둔다.
+         끝 지점을 앞으로 당기면 그때 뒤쪽이 새 챕터로 넘어간다. */
+      const prev = pl.chapters[pl.chapters.length - 1];
+      if(prev && (prev.endPara === null || prev.endPara === undefined) && unitList.length){
+        prev.endPara = unitList.length - 1;
+      }
       pl.chapters.push(defaultChapter(pl.chapters.length));
       savePlan(pl); activeId = pl.chapters[pl.chapters.length-1].id; refresh();
       setTimeout(()=>{ const btn = qs(`[data-chapter-edit="${CSS.escape(activeId)}"]`); if(btn) btn.click(); }, 40);
@@ -6771,12 +8260,43 @@ requestAnimationFrame(syncActiveResultHeight);
     if(typeof epubEditEditor === 'undefined' || !epubEditEditor) return [];
     const blocks = Array.from(epubEditEditor.querySelectorAll('.rofan-block,[data-owner][data-kind]')).filter(el => !el.closest('.manual-chapter-separator'));
     if(!blocks.length) return [];
-    return blocks.map((el, idx) => {
-      const html = el.outerHTML || '';
-      const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-      if(!text) return null;
-      return { text, body:(el.innerText || el.textContent || '').trim(), bodyHtml:html, html, blockId: el.getAttribute('data-block-id') || ('editor-block-' + idx) };
-    }).filter(Boolean);
+    /* 예전에는 rofan-block 만 모아 돌려줬다. 그래서 원고에 블록이 하나라도 있으면
+       블록 밖에 직접 쓴 문단이 EPUB·HTML·Markdown·미리보기에서 통째로 사라졌다
+       (TXT 에만 남아 있어 알아채기도 어려웠다).
+       블록은 블록대로 살리되, 문서 순서를 따라가며 블록 밖 내용도 함께 담는다. */
+    const blockSet = new Set(blocks);
+    const units = [];
+    let blockIndex = 0;
+    const skip = el => el.classList && (el.classList.contains('manual-chapter-separator') || el.closest('.manual-chapter-separator'));
+    const escapePlain = value => String(value).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    const walk = parent => {
+      Array.from(parent.childNodes).forEach(node => {
+        if(node.nodeType === Node.ELEMENT_NODE){
+          if(skip(node)) return;
+          if(blockSet.has(node)){
+            const html = node.outerHTML || '';
+            const raw = (node.innerText || node.textContent || '');
+            const text = raw.replace(/\s+/g, ' ').trim();
+            blockIndex += 1;
+            if(text) units.push({ text, body:raw.trim(), bodyHtml:html, html, blockId: node.getAttribute('data-block-id') || ('editor-block-' + (blockIndex - 1)) });
+            return;
+          }
+          if(node.querySelector && node.querySelector('.rofan-block,[data-owner][data-kind]')){ walk(node); return; }
+          const html = node.outerHTML || '';
+          const raw = (node.innerText || node.textContent || '');
+          const text = raw.replace(/\s+/g, ' ').trim();
+          if(text) units.push({ text, body:raw.trim(), bodyHtml:html, html });
+          return;
+        }
+        if(node.nodeType === Node.TEXT_NODE){
+          const raw = String(node.textContent || '');
+          const text = raw.replace(/\s+/g, ' ').trim();
+          if(text) units.push({ text, body:raw.trim(), bodyHtml:'<p>' + escapePlain(raw.trim()) + '</p>', html:'<p>' + escapePlain(raw.trim()) + '</p>' });
+        }
+      });
+    };
+    walk(epubEditEditor);
+    return units;
   }
   function editorUnits(){
     if(typeof epubEditEditor === 'undefined' || !epubEditEditor) return [];
@@ -7343,11 +8863,20 @@ requestAnimationFrame(syncActiveResultHeight);
     if(add){
       const { plan, units } = planAndUnits(false);
       normalizePlan(plan, units);
+      /* 끝 지점이 정해지지 않은 챕터는 '마지막일 때만' 문서 끝까지를 갖는다(chaptersFromPlan).
+         그래서 챕터를 추가하는 순간 직전 챕터가 빈 챕터로 변하고 본문이 통째로
+         새 챕터로 밀려났다 — 미리보기에 "Prologue · 빈 챕터 · 0자" 로 보이던 것.
+         직전 챕터의 끝을 문서 끝으로 고정해 본문을 제자리에 두고,
+         새 챕터를 빈 채로 둔다. 끝 지점을 앞으로 당기면 그때 뒤쪽이 새 챕터로 넘어간다. */
+      const last = plan.chapters[plan.chapters.length - 1];
+      if(last && (last.endPara === null || last.endPara === undefined) && units.length){
+        last.endPara = units.length - 1;
+      }
       plan.chapters.push(defaultChapter(plan.chapters.length));
       const newId = plan.chapters[plan.chapters.length - 1].id;
       savePlan(plan); setActiveId(newId);
       refreshAfterState(newId);
-      show('챕터를 맨 뒤에 추가했습니다.');
+      show('챕터를 맨 뒤에 추가했습니다. 앞 챕터의 끝 지점을 옮기면 뒤쪽 내용이 넘어옵니다.');
       return;
     }
     if(edit){ const id = edit.dataset.chapterEdit; setActiveId(id); renderRows(); renderEdit(id); updatePreview(); return; }
@@ -7499,7 +9028,6 @@ requestAnimationFrame(syncActiveResultHeight);
     try{ if(typeof window.__rofanFinalChapterRefresh === 'function') window.__rofanFinalChapterRefresh(); }catch(_){}
   };
 })();
-
 
 /* --- result find bar for classic/chat previews --- */
 (function(){
@@ -7664,7 +9192,129 @@ requestAnimationFrame(syncActiveResultHeight);
   setTimeout(() => { refresh("classic", false); refresh("chat", false); }, 0);
 })();
 
+
+
+window.__APP_BOOT_OK__ = true;
+</script>
+
+<script>
+(() => {
+  "use strict";
+  const UI_THEME_STORAGE_KEY = "ai-log-epub-ui-theme";
+  const UI_THEME_COLORS = { light: "#eef5f8", dark: "#121a20" };
+  function applyUiTheme(theme, persist = true) {
+    const normalizedTheme = theme === "dark" ? "dark" : "light";
+    const isLight = normalizedTheme === "light";
+    const root = document.documentElement;
+    root.dataset.theme = normalizedTheme;
+    root.classList.toggle("theme-light", isLight);
+    root.classList.toggle("theme-dark", !isLight);
+    root.style.colorScheme = normalizedTheme;
+    if (document.body) {
+      document.body.classList.toggle("theme-light", isLight);
+      document.body.classList.toggle("theme-dark", !isLight);
+    }
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = UI_THEME_COLORS[normalizedTheme];
+    const button = document.getElementById("themeToggleButton");
+    const icon = document.getElementById("themeToggleIcon");
+    if (button) {
+      const nextLabel = isLight ? "다크" : "라이트";
+      button.setAttribute("aria-label", `${nextLabel} 모드로 전환`);
+      button.title = `${nextLabel} 모드로 전환`;
+      if (icon) icon.textContent = isLight ? "☾" : "☀";
+    }
+    if (persist) {
+      try { localStorage.setItem(UI_THEME_STORAGE_KEY, normalizedTheme); } catch (_) {}
+    }
+  }
+  function initThemeToggle() {
+    let current = "light";
+    try { current = localStorage.getItem(UI_THEME_STORAGE_KEY) === "dark" ? "dark" : "light"; } catch (_) {}
+    applyUiTheme(current, false);
+    document.getElementById("themeToggleButton")?.addEventListener("click", () => {
+      applyUiTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initThemeToggle, { once: true });
+  else initThemeToggle();
+})();
+</script>
+<script>
+/* 진단 안전망 v2:
+   - ResizeObserver 소음은 무시한다 (진짜 오류를 가리던 원인)
+   - 억제는 같은 문구에만 건다
+   - 첫 오류는 파일·줄번호와 함께 화면 상단에 '고정' 배너로 남긴다 (스크린샷용)
+   - 3초 안에 앱 초기화 깃발이 안 서면 그 사실도 배너로 알린다 */
+(function(){
+  const seen = new Map();
+  let firstShown = false;
+  function banner(text){
+    if(firstShown) return;
+    firstShown = true;
+    try{
+      const d = document.createElement("div");
+      d.style.cssText = "position:fixed;left:8px;right:8px;top:8px;z-index:2147483647;"+
+        "background:#7a2e2e;color:#fff;font:12px/1.5 monospace;padding:10px 12px;"+
+        "border-radius:10px;white-space:pre-wrap;word-break:break-all";
+      d.textContent = text;
+      const x = document.createElement("button");
+      x.textContent = "닫기";
+      x.style.cssText = "margin-left:8px;border:0;border-radius:6px;padding:2px 8px";
+      x.onclick = () => d.remove();
+      d.appendChild(x);
+      (document.body || document.documentElement).appendChild(d);
+    }catch(_){ console.error(text); }
+  }
+  function surface(msg, detail){
+    const key = String(msg).slice(0, 60);
+    const now = Date.now();
+    if(seen.has(key) && now - seen.get(key) < 4000) return;
+    seen.set(key, now);
+    if(/ResizeObserver/i.test(String(msg))) return;
+    banner("첫 오류\n" + msg + (detail ? "\n" + detail : ""));
+    try{ if(typeof showToast === "function") showToast("오류: " + String(msg).slice(0, 100)); }catch(_){}
+  }
+  window.addEventListener("error", e => {
+    const m = (e && (e.message || (e.error && e.error.message))) || "알 수 없는 오류";
+    const where = e && e.filename ? (String(e.filename).split("/").pop() + ":" + e.lineno + ":" + e.colno) : "";
+    surface(String(m), where);
+  }, true);
+  window.addEventListener("unhandledrejection", e => {
+    const r = e && e.reason;
+    surface(String((r && r.message) || r || "비동기 오류"), r && r.stack ? String(r.stack).split("\n")[1] : "");
+  });
+  setTimeout(() => {
+    if(!window.__APP_BOOT_OK__){
+      banner("앱 초기화가 끝까지 돌지 못했습니다.\n위에 오류 배너가 없다면 이 문구를 그대로 전달해 주세요.");
+    }
+  }, 3000);
+})();
 </script>
 <script src="rofan-mobile-export.js"></script>
+<script src="./jszip.min.js"></script>
+<script src="./legacy_bridge_shim.js"></script>
+<script src="./native_bridge.js"></script>
+<script src="./rf_native_bridge_v38.js"></script>
+<script src="./export_integrity_v20.js"></script>
+<script src="./log_library_v6.js"></script>
+<script src="./log_library_tabs_v38.js"></script>
+<script src="./export_parity_v21.js"></script>
+<script src="./final_two_fixes_v22.js"></script>
+<script src="./rofan_stage2_checkpoint.js"></script>
+<script src="./rofan_navigation_v38.js"></script>
+<script src="./theme_v70.js"></script>
+<script src="./local_topbar_v70.js"></script>
+<script src="./speaker_color_picker_v79.js"></script>
+<script src="./theme_v79_overrides.js"></script>
+<script src="./blocks_white_v80.js"></script>
+<script src="./flat_white_v107.js"></script>
+<script src="./nav_jump_v130.js"></script>
+<script src="./tabs_merge_v134.js"></script>
+<script src="./dark_late_v159.js"></script>
+<script src="./review_polish_v150.js"></script>
+<script src="./extractor_font_v190.js"></script>
+<script src="./editor_fontsize_v241.js"></script>
+<script src="./shadcn_ui_v180.js"></script>
 </body>
 </html>
