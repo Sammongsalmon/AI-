@@ -1,0 +1,185 @@
+/* v150: review/option boards use the active palette in dark mode and remain foldable. */
+.reviewPanelFold{
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:var(--paper);
+  overflow:hidden;
+  box-shadow:var(--softShadow);
+}
+.reviewPanelFold[hidden]{display:none!important}
+.reviewPanelFold>summary{
+  list-style:none;
+  min-height:40px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 12px;
+  cursor:pointer;
+  color:var(--ink);
+  background:var(--paper);
+  border-bottom:1px solid transparent;
+  font-size:12px;
+  font-weight:700;
+}
+.reviewPanelFold>summary::-webkit-details-marker{display:none}
+.reviewPanelFold>summary::after{content:"⌄";color:var(--muted);transition:transform .16s ease}
+.reviewPanelFold[open]>summary{border-bottom-color:var(--line2)}
+.reviewPanelFold[open]>summary::after{transform:rotate(180deg)}
+.reviewPanelFold .reviewPanelInner{
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  background:transparent!important;
+  padding:12px!important;
+  margin:0!important;
+}
+
+/* Review role/kind distinction; dark mode derives from the same palette instead of white. */
+.reviewBlock[data-owner="user"],.containsRow[data-owner="user"]{
+  border-color:color-mix(in srgb,var(--accent) 30%,var(--line))!important;
+  background:color-mix(in srgb,var(--accentSoft) 48%,var(--paper))!important;
+}
+.reviewBlock[data-owner="character"],.containsRow[data-owner="character"]{
+  border-color:color-mix(in srgb,var(--green) 28%,var(--line))!important;
+  background:color-mix(in srgb,var(--paper2) 72%,var(--green) 8%)!important;
+}
+.reviewBlock[data-kind="scene"]{box-shadow:inset 3px 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}
+.reviewBlock[data-kind="normal"]{box-shadow:inset 3px 0 0 color-mix(in srgb,var(--green) 45%,transparent)}
+
+html[data-theme="dark"] #optionsBoard,
+html[data-theme="dark"] #reviewBoard,
+html[data-theme="dark"] #riskPanel,
+html[data-theme="dark"] .reviewPanelFold,
+html[data-theme="dark"] .reviewPanel,
+html[data-theme="dark"] .reviewBlock,
+html[data-theme="dark"] .reviewChoice,
+html[data-theme="dark"] .dupeCard,
+html[data-theme="dark"] .oocCard,
+html[data-theme="dark"] .containsKeywordGroup,
+html[data-theme="dark"] .containsRow,
+html[data-theme="dark"] .containsRows,
+html[data-theme="dark"] .nextPromptFold,
+html[data-theme="dark"] .foldReview,
+html[data-theme="dark"] .foldReview>summary,
+html[data-theme="dark"] .riskChip,
+html[data-theme="dark"] .pill,
+html[data-theme="dark"] .navIconBtn,
+html[data-theme="dark"] .emptyState,
+html[data-theme="dark"] .reviewSearchBar,
+html[data-theme="dark"] .dupeToolbar,
+html[data-theme="dark"] .candidateToolbar,
+html[data-theme="dark"] .inlineChoice label,
+html[data-theme="dark"] #optionsBoard details.foldBlock,
+html[data-theme="dark"] #optionsBoard .blockBody,
+html[data-theme="dark"] #optionsBoard .toggle,
+html[data-theme="dark"] #optionsBoard .control,
+html[data-theme="dark"] #optionsBoard .btn:not(.primary){
+  background:var(--paper)!important;
+  color:var(--ink)!important;
+  border-color:var(--line)!important;
+}
+html[data-theme="dark"] .reviewPanelFold>summary,
+html[data-theme="dark"] .containsRows,
+html[data-theme="dark"] .nextPromptFold .nextPreview,
+html[data-theme="dark"] .nextPromptFold .nextEmpty,
+html[data-theme="dark"] .emptyState,
+html[data-theme="dark"] #optionsBoard details.foldBlock>summary,
+html[data-theme="dark"] #optionsBoard details.foldBlock>summary::before{
+  background:var(--paper2)!important;
+  color:var(--sub)!important;
+  border-color:var(--line)!important;
+}
+html[data-theme="dark"] .reviewBlock[data-owner="user"],
+html[data-theme="dark"] .containsRow[data-owner="user"]{
+  background:color-mix(in srgb,var(--paper2) 82%,var(--accent) 18%)!important;
+}
+html[data-theme="dark"] .reviewBlock[data-owner="character"],
+html[data-theme="dark"] .containsRow[data-owner="character"]{
+  background:color-mix(in srgb,var(--paper2) 88%,var(--green) 12%)!important;
+}
+html[data-theme="dark"] .navIconBtn:hover,
+html[data-theme="dark"] .riskChip:hover{
+  background:var(--accentSoft)!important;
+}
+html[data-theme="dark"] .riskChip b{
+  background:var(--accentSoft)!important;
+  color:var(--accent)!important;
+}
+html[data-theme="dark"] #optionsBoard input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+html[data-theme="dark"] #optionsBoard select,
+html[data-theme="dark"] #optionsBoard textarea,
+html[data-theme="dark"] .reviewSearchBar input{
+  background:var(--inputBg)!important;
+  color:var(--ink)!important;
+  border-color:var(--line)!important;
+}
+
+/* v150 final dark-mode safety: no stale light text/backgrounds inside review/options. */
+html[data-theme="dark"] .tab:not(.active),
+html[data-theme="dark"] #reviewBoard .smallMuted,
+html[data-theme="dark"] #reviewBoard .reviewMeta,
+html[data-theme="dark"] #reviewBoard .resultFindStatus{
+  color:var(--sub)!important;
+}
+html[data-theme="dark"] #reviewBoard .reviewNav,
+html[data-theme="dark"] #reviewBoard .navButtons,
+html[data-theme="dark"] #riskPanel{
+  background:transparent!important;
+}
+
+/* v153: 남아 있던 흰 배경 — 특정 글자 포함 문단의 묶음 버튼, 입력·결과 보드 */
+html[data-theme="dark"] .miniChoiceBtn{background:#2b3238!important;color:#dfe7ec!important;border-color:#454f57!important}
+html[data-theme="dark"] .miniChoiceBtn.active{background:#39525e!important;border-color:#5b7683!important;color:#eaf3f7!important}
+html[data-theme="dark"] .miniChoiceBtn.warn.active{background:#5a3038!important;border-color:#8a4a52!important;color:#f2d7da!important}
+html[data-theme="dark"] .editorBox{background:#1b2126!important;border-color:#333d45!important}
+html[data-theme="dark"] .pastebox,
+html[data-theme="dark"] .richResultBox,
+html[data-theme="dark"] .editorBox textarea{background:#20262b!important;color:#e6edf1!important;border-color:#3a444c!important}
+html[data-theme="dark"] .aiJumpPad button{background:rgba(43,49,54,.94)!important;color:#e8edf0!important;border-color:#474d53!important}
+
+/* ================= v155: 남은 흰 배경 일괄 정리 =================
+   원칙: 다크에서는 카드·보드·입력면에 흰색이 남지 않게 하고,
+   입력/결과 보드는 카드 배경에 녹아들도록 투명으로 둔다. */
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .board,
+html[data-theme="dark"] .foldBlock,
+html[data-theme="dark"] .blockBody,
+html[data-theme="dark"] .epubToolStack,
+html[data-theme="dark"] .epubEditMain,
+html[data-theme="dark"] .epubEditGrid,
+html[data-theme="dark"] .optionRow,
+html[data-theme="dark"] .formatButtonRow,
+html[data-theme="dark"] .filePicker,
+html[data-theme="dark"] .prettyFile,
+html[data-theme="dark"] details,
+html[data-theme="dark"] summary{
+  background:#232a30!important;
+  color:var(--ink,#e6edf1)!important;
+  border-color:#3a444c!important;
+}
+/* 입력·결과 보드는 카드와 같은 톤으로 (요청: 회색 통일 또는 투명) */
+html[data-theme="dark"] .editorBox,
+html[data-theme="dark"] .editorGrid,
+html[data-theme="dark"] .editorLabel{
+  background:transparent!important;
+  border-color:#3a444c!important;
+}
+html[data-theme="dark"] .pastebox,
+html[data-theme="dark"] .richResultBox,
+html[data-theme="dark"] .epubRichEditor,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] input[type="text"],
+html[data-theme="dark"] input[type="number"],
+html[data-theme="dark"] input[type="search"],
+html[data-theme="dark"] select{
+  background:#20262b!important;
+  color:#e6edf1!important;
+  border-color:#3a444c!important;
+}
+html[data-theme="dark"] .hint,
+html[data-theme="dark"] .fileNameText{ color:#9fb0ba!important; background:transparent!important; }
+/* 스크롤 영역이 흰 띠로 남던 곳 */
+html[data-theme="dark"] .epubToolStack > *,
+html[data-theme="dark"] .blockBody > *{ background-color:transparent; }

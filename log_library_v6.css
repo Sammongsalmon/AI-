@@ -1,0 +1,301 @@
+/* Persistent editor sizing + native log library */
+.themeIconButton svg{width:16px;height:16px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.editorLabel.editorLabelWithSize{
+  display:flex!important;
+  justify-content:space-between!important;
+  align-items:center!important;
+  gap:6px!important;
+  min-width:0;
+}
+.editorLabelText{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  white-space:nowrap;
+  overflow:hidden;
+}
+.editorLabelText>span{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.editorLabelText>span:last-child{flex:0 1 auto;}
+.editorSizeControl{
+  flex:0 0 auto;
+  display:inline-grid;
+  grid-template-columns:24px 39px 24px;
+  align-items:center;
+  gap:3px;
+}
+.editorSizeBtn,.editorSizeValue{
+  height:24px;
+  min-height:24px;
+  padding:0;
+  display:grid;
+  place-items:center;
+  border:1px solid var(--line);
+  border-radius:7px;
+  background:var(--paper2);
+  color:var(--sub);
+  font:inherit;
+  font-size:11px;
+  line-height:1;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.editorSizeBtn{width:24px;font-size:15px;}
+.editorSizeValue{width:39px;font-size:9px;font-variant-numeric:tabular-nums;}
+.editorSizeBtn:active,.editorSizeValue:active{transform:translateY(1px);}
+.editorSizeBtn:focus-visible,.editorSizeValue:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+#inputText,#chatPaste,#outputTextPreview,#chatOutputTextPreview{
+  min-height:0!important;
+  resize:none!important;
+  overflow:auto!important;
+  box-sizing:border-box!important;
+  flex:0 0 auto!important;
+}
+.editorBox.resultBox{height:auto!important;min-height:0!important;align-self:start!important;}
+.editorBox.resultBox .richResultBox{min-height:0!important;}
+
+.logLibraryModal[hidden]{display:none!important;}
+.logLibraryModal{
+  position:fixed;
+  inset:0;
+  z-index:99990;
+  display:grid;
+  place-items:center;
+  /* [v355] position:fixed 는 body 의 padding-bottom 이 닿지 않는다. 시스템 내비게이션
+     바 자리를 제 몫으로 비워야 한다 — 안 그러면 대화상자 아래쪽이 바에 가린다. */
+  padding:14px;
+  /* [v362] 이 화면의 상단바(local_topbar)는 z-index 가 훨씬 높아 모달 위에 그려진다.
+     그 높이를 비우지 않으면 대화상자 머리가 바 뒤로 들어가 닫기 단추에 손이 닿지 않았다.
+     --ailog-topbar 가 없는 화면에서는 상태표시줄 자리만 비운다(예전과 같다). */
+  padding-top:calc(14px + var(--ailog-topbar, var(--ailog-top, 0px)));
+  padding-bottom:calc(14px + var(--ailog-bottom, 0px));
+  background:rgba(9,16,20,.54);
+  backdrop-filter:blur(7px);
+}
+.logLibraryDialog{
+  width:min(680px,100%);
+  /* [v362] 82vh 는 '화면 전체' 의 82% 여서 상단바·시스템 바 자리를 뺀 실제 높이와 다르다.
+     100% 는 모달의 안쪽(그 자리를 이미 뺀 높이)이라 어느 기기에서도 화면을 넘지 않는다. */
+  max-height:min(100%,820px);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:var(--paper);
+  color:var(--ink);
+  box-shadow:0 24px 80px rgba(0,0,0,.30);
+}
+.logLibraryHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:12px 13px;
+  border-bottom:1px solid var(--line2);
+}
+.logLibraryTitleWrap{min-width:0;display:grid;gap:2px;}
+.logLibraryTitle{font-size:14px;font-weight:700;white-space:nowrap;}
+.logLibraryPath{
+  max-width:520px;
+  color:var(--muted);
+  font-size:9px;
+  line-height:1.35;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.logLibraryHeadActions{display:flex;align-items:center;gap:5px;flex:0 0 auto;}
+.logLibraryIconBtn{
+  width:31px;
+  height:31px;
+  min-height:31px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:var(--paper2);
+  color:var(--ink);
+  cursor:pointer;
+}
+.logLibraryIconBtn svg{width:16px;height:16px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.logLibraryIconBtn:hover{border-color:var(--accent);}
+.logLibraryToolbar{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:9px 12px;
+  border-bottom:1px solid var(--line2);
+  background:var(--paper2);
+}
+.logLibraryImportBtn{
+  min-height:31px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:6px 10px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:var(--paper);
+  color:var(--ink);
+  font:inherit;
+  font-size:10.5px;
+  font-weight:650;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.logLibraryImportBtn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.logLibraryStatus{min-width:0;flex:1;color:var(--muted);font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;}
+.logLibraryList{
+  /* [v362] 대화상자 크기는 고정, 목록만 스크롤된다. flex-basis 를 0 으로 두지 않으면
+     내용만큼 늘어나려 해서 대화상자가 길쭉해지고 목록 안에서는 끌 수가 없었다.
+     min-height:0 이 없으면 flex 자식은 내용 높이 아래로 줄어들지 않는다. */
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  padding:9px;
+  display:grid;
+  align-content:start;
+  gap:7px;
+}
+.logLibraryEmpty{
+  min-height:160px;
+  display:grid;
+  place-items:center;
+  padding:20px;
+  color:var(--muted);
+  border:1px dashed var(--line);
+  border-radius:13px;
+  background:var(--paper2);
+  font-size:11px;
+  text-align:center;
+  line-height:1.6;
+}
+.logFileItem{
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:var(--paper2);
+  overflow:hidden;
+}
+.logFileMain{
+  min-height:49px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:8px;
+  padding:8px 9px;
+}
+.logFileInfo{min-width:0;display:grid;gap:3px;}
+.logFileName{font-size:11px;font-weight:680;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.logFileMeta{font-size:9px;color:var(--muted);white-space:nowrap;}
+.logFileActions{display:flex;align-items:center;gap:4px;}
+.logFileAction{
+  width:29px;
+  height:29px;
+  min-height:29px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:var(--paper);
+  color:var(--sub);
+  font:inherit;
+  cursor:pointer;
+}
+.logFileAction[data-action="preview"]{font-size:18px;font-weight:400;line-height:1;}
+.logFileAction svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
+.logFileAction:hover{border-color:var(--accent);color:var(--ink);}
+.logFileAction.danger:hover{border-color:var(--red);color:var(--red);}
+.logFilePreview{
+  border-top:1px solid var(--line2);
+  padding:9px;
+  background:var(--paper);
+}
+.logFilePreviewMeta{margin-bottom:6px;color:var(--muted);font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.logFilePreviewText{
+  max-height:210px;
+  overflow:auto;
+  margin:0;
+  padding:9px;
+  border:1px solid var(--line2);
+  border-radius:9px;
+  background:var(--inputBg);
+  color:var(--ink);
+  font-family:var(--app-ui-font),serif!important;
+  font-size:10.5px;
+  line-height:1.55;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.logRenameRow{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  gap:5px;
+  padding:0 9px 9px;
+}
+.logRenameInput{
+  width:100%;
+  min-width:0;
+  height:30px;
+  padding:5px 8px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:var(--inputBg);
+  color:var(--ink);
+  font:inherit;
+  font-size:10.5px;
+}
+.logRenameButton{min-width:45px;height:30px;padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font:inherit;font-size:10px;cursor:pointer;white-space:nowrap;}
+.logRenameButton.primary{background:var(--accent);border-color:var(--accent);color:#07110f;}
+.logLibraryFoot{padding:8px 12px;border-top:1px solid var(--line2);color:var(--muted);font-size:9px;line-height:1.45;background:var(--paper2);}
+.logLibraryBusy{pointer-events:none;opacity:.62;}
+
+@media(max-width:560px){
+  .editorLabelText>span:last-child{display:none;}
+  .editorSizeControl{grid-template-columns:23px 37px 23px;gap:2px;}
+  .editorSizeBtn{width:23px;height:23px;min-height:23px;}
+  .editorSizeValue{width:37px;height:23px;min-height:23px;font-size:8.7px;}
+  .logLibraryModal{padding:8px;padding-top:calc(8px + var(--ailog-topbar, var(--ailog-top, 0px)));padding-bottom:calc(8px + var(--ailog-bottom, 0px));align-items:end;}
+  .logLibraryDialog{width:100%;max-height:min(100%,820px);border-radius:17px 17px 10px 10px;}
+  .logLibraryHead{padding:10px;}
+  .logLibraryPath{max-width:210px;}
+  .logLibraryToolbar{padding:8px 9px;}
+  .logLibraryList{padding:7px;gap:6px;}
+  .logFileMain{padding:7px;gap:5px;}
+  .logFileActions{gap:3px;}
+  .logFileAction{width:27px;height:27px;min-height:27px;}
+  .logFileName{font-size:10.5px;}
+}
+
+/* v10: compact per-file encoding override */
+.logFileMetaRow{min-width:0;display:flex;align-items:center;gap:6px;overflow:hidden;}
+.logFileMeta{min-width:0;overflow:hidden;text-overflow:ellipsis;}
+.logEncodingSelect{
+  flex:0 0 auto;
+  width:76px;
+  height:22px;
+  min-height:22px;
+  padding:1px 18px 1px 6px;
+  border:1px solid var(--line);
+  border-radius:7px;
+  background:var(--paper);
+  color:var(--sub);
+  font:inherit;
+  font-size:8.5px;
+  line-height:1;
+  white-space:nowrap;
+}
+.logEncodingSelect:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+@media(max-width:560px){
+  .logEncodingSelect{width:70px;font-size:8px;padding-left:5px;}
+}
